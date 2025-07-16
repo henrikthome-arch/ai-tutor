@@ -1,36 +1,26 @@
-# 🚀 AI Tutor System - Complete Setup Guide
+# 🚀 AI Tutor System - OpenAI Assistant Setup
 
-## ✅ System Status: READY
+## ✅ System Status: READY FOR INTEGRATION
 
-Your AI tutor system is fully built and ready for final integration!
+Your AI tutor system is deployed and ready for OpenAI Assistant integration!
 
 **✅ Completed:**
 - ✅ Complete data structure with student profiles, progress tracking, and curriculum
 - ✅ Working Python MCP server ([`simple-server-fixed.py`](simple-server-fixed.py))
-- ✅ LocalTunnel successfully installed and working
+- ✅ Railway.app cloud deployment with public URL
 - ✅ Sample data for student "Emma Smith" with realistic profiles and session history
 
-**🎯 Next Steps:** OpenAI Assistant setup (15 minutes)
+**🎯 Next Steps:** OpenAI Assistant setup (10 minutes)
 
 ---
 
-## 🌐 Your Working Setup
+## 🌐 Your Cloud Setup
 
-### 1. Local Server (Running)
-```bash
-python simple-server-fixed.py
-```
-- **Local URL:** http://localhost:3000
-- **Health Check:** http://localhost:3000/health
-- **Status:** ✅ Running in Terminal 1
-
-### 2. Public Tunnel (Working)
-```bash
-lt --port 3000
-```
-- **Tool:** LocalTunnel (bypasses Sophos antivirus)
-- **URL:** Your LocalTunnel URL (e.g., `https://abc-123.loca.lt`)
-- **Status:** ✅ Successfully installed and working
+### 1. Railway Deployment (Live)
+- **Public URL:** Your Railway URL (e.g., `https://ai-tutor-production.up.railway.app`)
+- **Health Check:** `https://your-railway-url/health`
+- **Student Data:** `https://your-railway-url/mcp/get-student-context?student_id=emma_smith`
+- **Status:** ✅ Live on Railway.app
 
 ---
 
@@ -106,10 +96,10 @@ I've created [`ai_tutor_integration.py`](ai_tutor_integration.py) - a complete i
    set ASSISTANT_ID=asst_your-assistant-id
    ```
 
-3. **Update tunnel URL in the script:**
+3. **Update Railway URL in the script:**
    Edit [`ai_tutor_integration.py`](ai_tutor_integration.py) line 13:
    ```python
-   TUNNEL_URL = "https://your-localtunnel-url.loca.lt"  # Your actual URL
+   TUNNEL_URL = "https://your-railway-url.railway.app"  # Your Railway URL
    ```
 
 4. **Run the integration:**
@@ -120,7 +110,7 @@ I've created [`ai_tutor_integration.py`](ai_tutor_integration.py) - a complete i
 **How it works:**
 1. You chat with the script
 2. Script sends messages to OpenAI Assistant
-3. When Assistant calls functions, script calls your local server
+3. When Assistant calls functions, script calls your Railway server
 4. Results are sent back to Assistant
 5. You get the full AI response with student data
 
@@ -129,16 +119,16 @@ I've created [`ai_tutor_integration.py`](ai_tutor_integration.py) - a complete i
 ## 🧪 Test Your System
 
 ### Quick Health Check
-Visit your LocalTunnel URL + `/health`:
+Visit your Railway URL + `/health`:
 ```
-https://your-url.loca.lt/health
+https://your-railway-url.railway.app/health
 ```
 Should return: `{"status": "healthy", "server": "Python AI Tutor Server"}`
 
 ### Function Test
-Visit your LocalTunnel URL + `/mcp/get-student-context?student_id=emma_smith`:
+Visit your Railway URL + `/mcp/get-student-context?student_id=emma_smith`:
 ```
-https://your-url.loca.lt/mcp/get-student-context?student_id=emma_smith
+https://your-railway-url.railway.app/mcp/get-student-context?student_id=emma_smith
 ```
 Should return comprehensive student data including profile, progress, and curriculum.
 
@@ -154,8 +144,8 @@ Should return comprehensive student data including profile, progress, and curric
 │       ├── profile.json (Detailed learning profile)
 │       ├── progress.json (Subject-specific progress)
 │       └── sessions/ (Session transcripts and summaries)
-├── 🐍 simple-server-fixed.py (MCP server - RUNNING)
-├── 🌐 LocalTunnel (Public access - WORKING)
+├── 🐍 simple-server-fixed.py (MCP server - DEPLOYED)
+├── 🌐 Railway.app (Cloud hosting - LIVE)
 └── 📚 Documentation (This guide)
 ```
 
@@ -174,19 +164,16 @@ Should return comprehensive student data including profile, progress, and curric
 
 ## 🔄 Daily Usage
 
-1. **Start servers:**
-   ```bash
-   python simple-server-fixed.py  # Keep running
-   lt --port 3000                 # Keep running
-   ```
+1. **Your server is always running** on Railway.app (no local setup needed)
 
 2. **Chat with AI Tutor:**
    - Use OpenAI Assistant interface
    - Or integrate with voice platforms (VAPI, Superinterface)
+   - Run integration script: `python ai_tutor_integration.py`
 
 3. **Monitor progress:**
-   - Check updated progress files
-   - Review session summaries
+   - Check Railway.app dashboard for server stats
+   - Review session summaries in local data files
 
 ---
 
