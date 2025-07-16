@@ -1,0 +1,94 @@
+{
+  "school_type": "International School in Greece",
+  "curriculum_system": "Cambridge Primary + Greek National Requirements",
+  "grades": {
+    "1": {
+      "subjects": {
+        "english": {
+          "name": "English (Literacy)",
+          "core": true,
+          "applies_to": "All",
+          "knowledge_requirement": "Reading: Recognize all letters of the English alphabet and their sounds; begin blending sounds to read simple words and short sentences. Students enjoy listening to and reading simple stories, poems, and rhymes. Writing: Hold a pencil correctly and write basic words. Write simple sentences with correct use of capital letters and full stops (periods). Speaking/Listening: Follow basic instructions and engage in imaginative play to practice speaking; learn to take turns in conversation and listen to others in group activities."
+        },
+        "mathematics": {
+          "name": "Mathematics",
+          "core": true,
+          "applies_to": "All",
+          "knowledge_requirement": "Learn the foundation of the number system up to 20: count, read, and write numbers from 0 to 20. Count forwards and backwards, and begin skip counting by 2s and 10s. Understand basic addition and subtraction with single-digit numbers (e.g. using objects or fingers). Identify simple 2D shapes (circle, square, triangle, rectangle) and some 3D shapes. Begin to grasp measurement concepts by comparing lengths or weights and recognize clocks (learn to tell time to the hour). Solve very simple word problems with guidance, and start making estimations for quantities."
+        },
+        "science": {
+          "name": "Science",
+          "core": true,
+          "applies_to": "All",
+          "knowledge_requirement": "Begin exploring the environment and world through observation and curiosity. Distinguish living vs. non-living things and recognize that plants and animals are living beings that inhabit the environment. Identify basic parts of plants (leaf, root, stem) and animals (head, legs, etc.), and understand that humans are animals too. Explore the five senses by observing different materials (e.g. rough vs smooth, what they smell or sound like). Observe movement and forces: learn that pushing or pulling can move objects and change their speed or direction. Recognize different sound sources (e.g. identify loud vs soft sounds). Overall, Stage 1 science encourages curiosity about the immediate world around them."
+        },
+        "modern_greek_language": {
+          "name": "Modern Greek Language",
+          "core": true,
+          "applies_to": "Greek only",
+          "knowledge_requirement": "Greek national students begin formal Modern Greek literacy. By end of Grade 1, they should know the Greek alphabet (24 letters) and be able to read simple syllables and short words. They practice phonics in Greek, learning to connect letters with their sounds. Students can read and understand very short sentences or captions with familiar words (e.g. 'Η μαμά μού δίνει νερό.' – 'Mama gives me water.'). In writing, they learn to form Greek letters by hand and write their name and simple words. They begin writing short phrases or sentences with guidance. Oral language: students follow simple instructions in Greek and use basic everyday words and greetings. They can respond to simple questions about themselves (e.g. 'Πώς σε λένε;' – 'What is your name?'). The emphasis is on building foundational reading and writing skills in Greek, similar to how English literacy is approached, but in the Greek language and script."
+        },
+        "greek_orthodox_religious_ed": {
+          "name": "Greek Orthodox Religious Ed.",
+          "core": true,
+          "applies_to": "Greek only",
+          "knowledge_requirement": "Introduction to the Greek Orthodox faith at a basic level. Students learn to make the sign of the cross and are taught a few very simple common prayers or hymns (for example, the Lord's Prayer may be introduced by the end of early primary in a simplified form). They hear Bible stories suited for young children – such as the Creation story, Noah's Ark, the Nativity (birth of Jesus) – told in an engaging way. The focus is on God's love and care: they learn that God created the world and loves everyone. They also learn about Jesus as a loving figure and maybe a patron saint of children (like Saint Stylianos or Saint Nicholas) in very simple terms. Students are familiarized with church as a special place; they might visit a church or see pictures of icons. By the end of Grade 1, Greek students are expected to know a few basic religious symbols (the cross, icon of Jesus or Mary) and understand major holy days like Christmas and Easter at a simple level (e.g. 'Christmas is Jesus's birthday'). The aim is to instill an early sense of Greek Orthodox identity and respect for religious tradition."
+        },
+        "environmental_studies": {
+          "name": "Environmental Studies (Greek)",
+          "core": true,
+          "applies_to": "Greek only",
+          "knowledge_requirement": "Greek students in Grade 1 begin Μελέτη Περιβάλλοντος ('Study of the Environment'), exploring their immediate world. They learn about their family, school, and neighborhood as part of the social environment, as well as basic elements of the natural environment. For example, they discuss roles of family members, recognize community helpers (police officer, doctor), and learn simple rules (traffic light meanings, keeping classroom tidy). They also observe nature around them: identify common animals and plants in Greece, distinguish day vs. night and the weather of seasons. Emphasis is on observation and curiosity. By year's end, students can identify their home address, name the seasons and describe weather changes, and understand that plants/animals are part of their environment. They also practice good habits like cleanliness and teamwork. This subject builds general awareness of the world starting from the self outward."
+        }
+      }
+    },
+    "4": {
+      "subjects": {
+        "english": {
+          "name": "English (Literacy)",
+          "core": true,
+          "applies_to": "All",
+          "knowledge_requirement": "Reading: By Grade 4 (Cambridge Stage 4), students read confidently and begin developing personal reading preferences. They explore longer texts and various genres, both silently and aloud. They read chapter books independently, tackle factual texts (like simple science or history book chapters) and can summarize or identify the main idea and supporting details. They also practice reading with expression, especially through performing play scripts in class, which improves their speaking and interpretive skills. Writing: Writing becomes more refined and creative. Students are encouraged to use interesting and descriptive language – they learn about using strong verbs and vivid adjectives to add detail to their writing. They write multiple-paragraph compositions: stories with richer plots, descriptive essays about a person or place, and basic informational reports (like a short research paragraph about an animal or country). They learn punctuation like quotation marks for dialogue, and how to organize writing into paragraphs with a clear structure (topic sentence, supporting sentences). Grammar lessons cover more complex structures – for example, proper use of commas in complex sentences, distinction between plural and possessive forms (dogs vs. dog's), and possibly an introduction to present perfect vs. simple past differences in context. Speaking/Listening: Grade 4 students often engage in more formal speaking tasks. They might prepare a short presentation on a topic (e.g. 'My Hobby' or a book report) and deliver it to the class, practicing clear speech and eye contact. When reading plays or doing group discussions, they work on speaking loudly and clearly enough for others to hear. They also practice active listening skills: after listening to a peer's presentation, they should be able to ask a relevant question or recall key points. Literacy Analysis: By the end of Grade 4, in addition to basic comprehension, students start to discuss why characters might have acted a certain way or how an author creates an effect (e.g. 'This story made me feel excited because of the words the author used'). They might not use formal literary terms yet, but they recognize elements like setting, conflict, resolution. In summary, by the end of Grade 4, students are competent readers and writers with a growing vocabulary and the ability to use language effectively to inform or entertain. Their written work shows voice and better organization, and their oral communication is more poised and structured."
+        },
+        "mathematics": {
+          "name": "Mathematics",
+          "core": true,
+          "applies_to": "All",
+          "knowledge_requirement": "Master multiplication and division of whole numbers. Understand fractions and their relationship to decimals. Solve multi-step word problems. Identify basic geometric shapes and calculate their perimeter."
+        },
+        "science": {
+          "name": "Science",
+          "core": true,
+          "applies_to": "All",
+          "knowledge_requirement": "In Grade 4 science (Cambridge Stage 4), students delve deeper into each scientific discipline and refine their investigative skills. Scientific Inquiry: At this level, students are expected to pose questions and formulate simple hypotheses. They learn to design a fair test (e.g. when testing how light affects plant growth, keep all factors same except amount of light) and systematically record results – often presenting findings in charts or graphs. Importantly, they learn to identify patterns in the data and draw conclusions like 'The plant with more light grew taller'. Chemistry – States of Matter: A key new topic is understanding solids, liquids, and gases and how they can change state. Students learn the properties of each state and observe examples: water freezing/melting, water boiling into steam, etc. They also explore how some changes are reversible (melting/freezing water) and some are irreversible (burning paper, mixing ingredients and baking a cake). Physics – Electricity & Magnetism: Building on earlier introduction, Grade 4 covers simple electric circuits thoroughly. Students use wires, batteries, bulbs, and switches to make a circuit and learn terms like current, circuit, conductor, insulator. They experiment with series circuits (connecting two bulbs, understanding both need a closed circuit to light) and with switches (open = off). They identify materials that conduct electricity vs. those that don't. Magnetism is revisited with a bit more depth (the idea of magnetic field might be qualitatively mentioned), and sound is also revisited – perhaps discussing how sound travels (vibrations) and experimenting with making sound louder or softer, higher or lower. Physics – Light: They learn about how light travels in straight lines, how shadows form and change size, and basics of reflection (maybe using mirrors to bounce light) – though light might be emphasized more in some curricula in Grade 4 or Grade 5. Biology – Human Body: Grade 4 biology often introduces human anatomy basics. Students learn about the skeletal system, muscles, and perhaps organs. They might learn the names and functions of major bones (skull protects brain, ribcage protects heart and lungs, etc.) and muscles (heart is a muscle, muscles move bones). This ties into nutrition and health: understanding we need calcium for bones, exercise for muscles. They could also cover classification of living things at a simple level (grouping animals into mammals, birds, reptiles, etc., and plants into categories), to deepen understanding from earlier grades. Environment/Ecology: They might study ecosystems like pond life or forest, understanding food chains (producer, consumer, predator, prey relationships) – though food chains might also be Grade 5 content. By the end of Grade 4, students have a more analytical approach to science. They can conduct an experiment with multiple trials, present their findings in a simple chart or report, and base their conclusions on evidence. They have gained core knowledge: how the human body is structured, how electrical circuits work, and what matter is made of. This prepares them for upper primary where they'll study life cycles, chemistry of mixtures, more complex forces, and so on."
+        }
+      }
+    }
+  },
+  "learning_goals_by_subject": {
+    "mathematics": {
+      "grade_4": [
+        "Master multiplication and division of whole numbers",
+        "Understand fractions and their relationship to decimals", 
+        "Solve multi-step word problems",
+        "Identify basic geometric shapes and calculate their perimeter"
+      ]
+    },
+    "english": {
+      "grade_4": [
+        "Read and comprehend chapter books independently",
+        "Write multi-paragraph compositions with clear structure",
+        "Use advanced vocabulary and descriptive language",
+        "Give presentations with confidence and clarity"
+      ]
+    },
+    "science": {
+      "grade_4": [
+        "Understand states of matter and reversible vs irreversible changes",
+        "Build and analyze simple electrical circuits",
+        "Learn basic human anatomy and body systems",
+        "Conduct experiments with hypothesis and conclusion"
+      ]
+    }
+  }
+}
