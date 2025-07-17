@@ -1083,7 +1083,7 @@ def vapi_webhook():
         message = data.get('message', {})
         message_type = message.get('type')
         
-        log_webhook('conversation-update', f"VAPI webhook received: {message_type}",
+        log_webhook(message_type or 'unknown-event', f"VAPI webhook received: {message_type}",
                    ip_address=request.remote_addr,
                    call_id=message.get('call', {}).get('id') if isinstance(message, dict) else None,
                    payload_size=len(payload))
@@ -1091,6 +1091,8 @@ def vapi_webhook():
         
         if message_type == 'speech-update':
             handle_speech_update(message)
+        elif message_type == 'conversation-update':
+            handle_conversation_update(message)
         elif message_type == 'end-of-call-report':
             handle_end_of_call(message)
         elif message_type == 'status-update':
@@ -1120,6 +1122,20 @@ def handle_speech_update(message):
         print(f"🗣️  Final user speech in call {call_id}: {text}")
         # Store partial transcript for potential real-time analysis
         # This could be used for live feedback or progress tracking
+
+def handle_conversation_update(message):
+    """Handle conversation updates from VAPI during active calls"""
+    call_info = message.get('call', {})
+    call_id = call_info.get('id')
+    
+    # Log conversation updates for debugging
+    log_webhook('conversation-update', f"Conversation update for call {call_id}",
+               call_id=call_id,
+               update_type='conversation-update')
+    
+    print(f"💬 Conversation update for call {call_id}")
+    # These are real-time updates during the call - we don't need to process them for student creation
+    # Student creation happens in handle_end_of_call
 
 def handle_status_update(message):
     """Handle call status updates from VAPI"""
@@ -1210,8 +1226,14 @@ def handle_end_of_call(message):
                 print(f"⚠️  AI analysis failed: {e}")
         
     except Exception as e:
+        # Safely get call_id for error logging
+        try:
+            error_call_id = call_info.get('id') if 'call_info' in locals() and isinstance(call_info, dict) else None
+        except:
+            error_call_id = None
+            
         log_error('WEBHOOK', f"Error handling end of call: {str(e)}", e,
-                 call_id=call_info.get('id') if 'call_info' in locals() else None)
+                 call_id=error_call_id)
         print(f"❌ Error handling end of call: {e}")
 
 def save_vapi_session(call_id, student_id, phone, duration, user_transcript, assistant_transcript, full_message):
