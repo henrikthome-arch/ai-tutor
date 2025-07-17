@@ -26,7 +26,7 @@ sys.path.append('.')
 
 # Import PhoneMappingManager from session-enhanced-server.py
 import importlib.util
-spec = importlib.util.spec_from_file_location("session_enhanced_server", "./session-enhanced-server.py")
+spec = importlib.util.spec_from_file_location("session_enhanced_server", "session-enhanced-server.py")
 session_enhanced_server = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(session_enhanced_server)
 
@@ -184,7 +184,7 @@ def get_system_stats():
                     sessions_today += 1
     
     # Get server status
-    server_status = "Online" if os.path.exists('data') else "Offline"
+    server_status = "Online" if os.path.exists('../data') else "Offline"
     
     return {
         'total_students': len(students),
