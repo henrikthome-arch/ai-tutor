@@ -28,7 +28,7 @@ git push origin main  # Already done ✅
 ### 2. **Add MCP Tool in VAPI Dashboard**
 1. Go to **VAPI Dashboard → Tools → Create Tool → MCP**
 2. **Server URL**: `https://ai-tutor-ptnl.onrender.com/mcp`
-3. **Name**: `AI Tutor MCP Server`
+3. **Name**: `ai-tutor-mcp` (alphanumeric, underscores, hyphens only)
 4. **Save and Publish**
 
 VAPI will automatically discover our `get-student-context` tool from the `/mcp/tools` endpoint.
