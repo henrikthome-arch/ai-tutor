@@ -12,6 +12,15 @@ Caller → VAPI → LLM (with auto-discovered MCP tools) → Our MCP Server → 
 
 ### **What We Already Have:**
 - ✅ **MCP Server**: `session-enhanced-server.py` with `get-student-context` tool
+
+## 📞 **Test Phone Number Available**
+
+**VAPI Test Number**: `+1 (539) 589-2719`
+**SIP Address**: `sip:ai-tutor-by-henrik@sip.vapi.ai`
+**Assistant Name**: `Henrik Experiment - AI tutor`
+
+You can call this number or use the SIP address to test the AI tutor system once the MCP integration is complete.
+
 - ✅ **Phone Support**: Tool accepts `phone_number` parameter  
 - ✅ **Phone Mapping**: `PhoneMappingManager` for student lookup
 - ✅ **Test Results**: All phone scenarios working locally
