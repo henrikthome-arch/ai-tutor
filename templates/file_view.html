@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}{{ filename }} - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / 
+    <a href="{{ url_for('admin_files') }}">📁 Files</a>
+    {% for part in breadcrumb_parts %}
+        {% if not loop.last %}
+            / <a href="{{ url_for('admin_files', path=part.path) }}">{{ part.name }}</a>
+        {% else %}
+            / <span>{{ part.name }}</span>
+        {% endif %}
+    {% endfor %}
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1 style="color: #2c3e50;">{{ filename }}</h1>
+    <div style="display: flex; gap: 1rem; align-items: center;">
+        <a href="{{ url_for('admin_files', path=parent_path) }}" class="btn">
+            ⬅️ Back to Folder
+        </a>
+        <button class="btn" style="background: #f39c12;" onclick="alert('Download functionality coming soon!')">
+            💾 Download
+        </button>
+        <button class="btn" style="background: #e74c3c;" onclick="alert('Edit functionality coming in Phase 2!')">
+            ✏️ Edit
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2>📄 File Information</h2>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <span style="background: #e3f2fd; color: #1976d2; padding: 6px 12px; border-radius: 12px; font-size: 0.9rem;">
+                📄 {{ file_extension.upper() if file_extension else 'Unknown' }} File
+            </span>
+            <span style="color: #666; font-family: monospace; background: #f8f9fa; padding: 6px 12px; border-radius: 4px;">
+                {{ file_size }}
+            </span>
+        </div>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+        <div>
+            <label style="font-weight: 600; color: #666;">File Path</label>
+            <p style="margin: 5px 0; font-family: monospace; background: #f8f9fa; padding: 8px; border-radius: 4px; word-break: break-all;">
+                {{ file_path }}
+            </p>
+        </div>
+        
+        <div>
+            <label style="font-weight: 600; color: #666;">Last Modified</label>
+            <p style="margin: 5px 0;">{{ last_modified }}</p>
+        </div>
+        
+        <div>
+            <label style="font-weight: 600; color: #666;">File Size</label>
+            <p style="margin: 5px 0;">{{ file_size }}</p>
+        </div>
+        
+        <div>
+            <label style="font-weight: 600; color: #666;">File Type</label>
+            <p style="margin: 5px 0;">{{ content_type or 'text/plain' }}</p>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2>📖 File Contents</h2>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            {% if is_json %}
+                <button class="btn" onclick="toggleJsonView()" id="jsonToggle">
+                    🔧 Toggle View
+                </button>
+            {% endif %}
+            <button class="btn" onclick="copyToClipboard()" style="background: #27ae60;">
+                📋 Copy
+            </button>
+        </div>
+    </div>
+    
+    {% if error %}
+        <div style="padding: 2rem; text-align: center; color: #e74c3c; background: #fdf2f2; border-radius: 4px;">
+            <div style="font-size: 2rem; margin-bottom: 1rem;">⚠️</div>
+            <h3>Cannot Display File</h3>
+            <p>{{ error }}</p>
+        </div>
+    {% elif is_binary %}
+        <div style="padding: 2rem; text-align: center; color: #666; background: #f8f9fa; border-radius: 4px;">
+            <div style="font-size: 2rem; margin-bottom: 1rem;">📁</div>
+            <h3>Binary File</h3>
+            <p>This file cannot be displayed as text. Use the download button to save it locally.</p>
+        </div>
+    {% else %}
+        {% if is_json %}
+            <div id="jsonRaw" style="display: none;">
+                <pre style="background: #f8f9fa; padding: 1rem; border-radius: 4px; overflow-x: auto; margin: 0; font-family: 'Courier New', monospace; line-height: 1.4;"><code>{{ content }}</code></pre>
+            </div>
+            <div id="jsonFormatted">
+                <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px; overflow-x: auto;">
+                    <pre id="jsonContent" style="margin: 0; font-family: 'Courier New', monospace; line-height: 1.4;">{{ formatted_content or content }}</pre>
+                </div>
+            </div>
+        {% else %}
+            <pre style="background: #f8f9fa; padding: 1rem; border-radius: 4px; overflow-x: auto; margin: 0; font-family: 'Courier New', monospace; line-height: 1.4; white-space: pre-wrap;"><code>{{ content }}</code></pre>
+        {% endif %}
+    {% endif %}
+</div>
+
+{% if is_student_file %}
+<div class="card">
+    <h2>👤 Related Student Information</h2>
+    <div style="display: flex; align-items: center; gap: 1rem;">
+        <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #3498db, #8e44ad); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
+            {{ student_info.name[0].upper() if student_info else '?' }}
+        </div>
+        <div>
+            {% if student_info %}
+                <strong>{{ student_info.name }}</strong>
+                <br>
+                <span style="color: #666;">Grade {{ student_info.grade }} • {{ student_info.age }} years old</span>
+            {% else %}
+                <span style="color: #e74c3c;">Student information not found</span>
+            {% endif %}
+        </div>
+        {% if student_info %}
+            <div style="margin-left: auto;">
+                <a href="{{ url_for('admin_student_detail', student_id=student_info.id) }}" class="btn">
+                    👁️ View Student Profile
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if is_session_file %}
+<div class="card">
+    <h2>📊 Session Analysis</h2>
+    {% if session_stats %}
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+            <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+                <div style="font-size: 1.5rem; color: #3498db; margin-bottom: 0.5rem;">{{ session_stats.duration }}</div>
+                <div style="font-weight: 600;">Duration (min)</div>
+            </div>
+            
+            <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+                <div style="font-size: 1.5rem; color: #27ae60; margin-bottom: 0.5rem;">{{ session_stats.messages }}</div>
+                <div style="font-weight: 600;">Messages</div>
+            </div>
+            
+            <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+                <div style="font-size: 1.5rem; color: #e67e22; margin-bottom: 0.5rem;">{{ session_stats.topics|length }}</div>
+                <div style="font-weight: 600;">Topics</div>
+            </div>
+            
+            <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+                <div style="font-size: 1.5rem; color: #9b59b6; margin-bottom: 0.5rem;">{{ session_stats.engagement }}%</div>
+                <div style="font-weight: 600;">Engagement</div>
+            </div>
+        </div>
+        
+        {% if session_stats.topics %}
+            <div style="margin-top: 1rem;">
+                <label style="font-weight: 600; color: #666;">Topics Covered:</label>
+                <div style="margin-top: 5px; display: flex; gap: 8px; flex-wrap: wrap;">
+                    {% for topic in session_stats.topics %}
+                        <span style="background: #e8f5e8; color: #2d5a3d; padding: 4px 8px; border-radius: 12px; font-size: 0.9rem;">
+                            {{ topic }}
+                        </span>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% else %}
+        <p style="color: #666; font-style: italic;">Session analysis not available for this file.</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<script>
+function toggleJsonView() {
+    const rawDiv = document.getElementById('jsonRaw');
+    const formattedDiv = document.getElementById('jsonFormatted');
+    const toggleBtn = document.getElementById('jsonToggle');
+    
+    if (rawDiv.style.display === 'none') {
+        rawDiv.style.display = 'block';
+        formattedDiv.style.display = 'none';
+        toggleBtn.textContent = '✨ Formatted View';
+    } else {
+        rawDiv.style.display = 'none';
+        formattedDiv.style.display = 'block';
+        toggleBtn.textContent = '🔧 Raw View';
+    }
+}
+
+function copyToClipboard() {
+    let textToCopy = '';
+    
+    {% if is_json %}
+        const jsonRaw = document.getElementById('jsonRaw');
+        if (jsonRaw.style.display !== 'none') {
+            textToCopy = document.querySelector('#jsonRaw code').textContent;
+        } else {
+            textToCopy = document.querySelector('#jsonContent').textContent;
+        }
+    {% else %}
+        textToCopy = document.querySelector('pre code').textContent;
+    {% endif %}
+    
+    navigator.clipboard.writeText(textToCopy).then(function() {
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = '✅ Copied!';
+        btn.style.background = '#27ae60';
+        
+        setTimeout(function() {
+            btn.textContent = originalText;
+            btn.style.background = '#27ae60';
+        }, 2000);
+    }).catch(function(err) {
+        alert('Failed to copy to clipboard: ' + err);
+    });
+}
+
+// Syntax highlighting for JSON
+document.addEventListener('DOMContentLoaded', function() {
+    {% if is_json %}
+        try {
+            const jsonContent = document.getElementById('jsonContent');
+            if (jsonContent) {
+                let json = jsonContent.textContent;
+                json = json.replace(/("[\w\-_]+")\s*:/g, '<span style="color: #e74c3c; font-weight: bold;">$1</span>:');
+                json = json.replace(/:\s*(".*?")/g, ': <span style="color: #27ae60;">$1</span>');
+                json = json.replace(/:\s*(\d+\.?\d*)/g, ': <span style="color: #3498db;">$1</span>');
+                json = json.replace(/:\s*(true|false|null)/g, ': <span style="color: #9b59b6; font-weight: bold;">$1</span>');
+                jsonContent.innerHTML = json;
+            }
+        } catch (e) {
+            console.log('JSON highlighting failed:', e);
+        }
+    {% endif %}
+});
+</script>
+{% endblock %}

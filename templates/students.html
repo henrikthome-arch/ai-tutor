@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Students - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / <span>👥 Students</span>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1 style="color: #2c3e50;">Student Management</h1>
+    <div style="display: flex; gap: 1rem;">
+        <button class="btn btn-success" onclick="alert('Add student functionality coming in Phase 2!')">
+            ➕ Add Student
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2>All Students ({{ students|length }})</h2>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <input type="text" 
+                   id="searchInput" 
+                   placeholder="🔍 Search students..." 
+                   style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; width: 250px;"
+                   onkeyup="filterStudents()">
+            <select id="gradeFilter" onchange="filterStudents()" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="">All Grades</option>
+                <option value="3">Grade 3</option>
+                <option value="4">Grade 4</option>
+                <option value="5">Grade 5</option>
+                <option value="6">Grade 6</option>
+            </select>
+        </div>
+    </div>
+    
+    {% if students %}
+        <div style="overflow-x: auto;">
+            <table class="table" id="studentsTable">
+                <thead>
+                    <tr>
+                        <th>👤 Name</th>
+                        <th>📚 Grade</th>
+                        <th>📱 Phone</th>
+                        <th>📈 Progress</th>
+                        <th>🕒 Last Session</th>
+                        <th>📊 Sessions</th>
+                        <th>⚡ Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in students %}
+                    <tr data-grade="{{ student.grade }}" data-name="{{ student.name.lower() }}">
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #3498db, #8e44ad); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
+                                    {{ student.name[0].upper() }}
+                                </div>
+                                <div>
+                                    <strong>{{ student.name }}</strong>
+                                    <br>
+                                    <span style="color: #666; font-size: 0.9rem;">ID: {{ student.id }}</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <span style="background: #e8f5e8; color: #2d5a3d; padding: 4px 8px; border-radius: 12px; font-size: 0.9rem;">
+                                Grade {{ student.grade }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if student.phone %}
+                                <span style="color: #27ae60;">📱 {{ student.phone }}</span>
+                            {% else %}
+                                <span style="color: #e74c3c;">❌ Not set</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="width: 60px; height: 8px; background: #ecf0f1; border-radius: 4px; overflow: hidden;">
+                                    <div style="width: {{ student.progress }}%; height: 100%; background: linear-gradient(90deg, #27ae60, #2ecc71); transition: width 0.3s ease;"></div>
+                                </div>
+                                <span style="font-size: 0.9rem; color: #666;">{{ student.progress }}%</span>
+                            </div>
+                        </td>
+                        <td>
+                            {% if student.last_session %}
+                                <span style="color: #666;">{{ student.last_session }}</span>
+                            {% else %}
+                                <span style="color: #e74c3c;">Never</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span style="background: #e3f2fd; color: #1976d2; padding: 4px 8px; border-radius: 12px; font-size: 0.9rem;">
+                                {{ student.session_count }}
+                            </span>
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <a href="{{ url_for('admin_student_detail', student_id=student.id) }}" 
+                                   class="btn" 
+                                   style="padding: 6px 12px; font-size: 0.9rem;"
+                                   title="View Details">
+                                    👁️ View
+                                </a>
+                                <button class="btn" 
+                                        style="padding: 6px 12px; font-size: 0.9rem; background: #f39c12;"
+                                        onclick="alert('Edit functionality coming in Phase 2!')"
+                                        title="Edit Student">
+                                    ✏️ Edit
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div style="text-align: center; padding: 3rem; color: #666;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">👥</div>
+            <h3>No Students Found</h3>
+            <p>Start by adding your first student to the system.</p>
+            <button class="btn btn-success" style="margin-top: 1rem;" onclick="alert('Add student functionality coming in Phase 2!')">
+                ➕ Add First Student
+            </button>
+        </div>
+    {% endif %}
+</div>
+
+{% if students %}
+<div class="card">
+    <h2>📊 Student Statistics</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <div style="font-size: 1.5rem; color: #3498db; margin-bottom: 0.5rem;">{{ students|length }}</div>
+            <div style="font-weight: 600;">Total Students</div>
+        </div>
+        
+        <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <div style="font-size: 1.5rem; color: #27ae60; margin-bottom: 0.5rem;">{{ active_students }}</div>
+            <div style="font-weight: 600;">Active Students</div>
+        </div>
+        
+        <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <div style="font-size: 1.5rem; color: #e67e22; margin-bottom: 0.5rem;">{{ avg_progress }}%</div>
+            <div style="font-weight: 600;">Average Progress</div>
+        </div>
+        
+        <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <div style="font-size: 1.5rem; color: #9b59b6; margin-bottom: 0.5rem;">{{ total_sessions }}</div>
+            <div style="font-weight: 600;">Total Sessions</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+function filterStudents() {
+    const searchInput = document.getElementById('searchInput').value.toLowerCase();
+    const gradeFilter = document.getElementById('gradeFilter').value;
+    const table = document.getElementById('studentsTable');
+    const rows = table.getElementsByTagName('tr');
+    
+    for (let i = 1; i < rows.length; i++) { // Skip header row
+        const row = rows[i];
+        const name = row.getAttribute('data-name');
+        const grade = row.getAttribute('data-grade');
+        
+        const nameMatch = name.includes(searchInput);
+        const gradeMatch = gradeFilter === '' || grade === gradeFilter;
+        
+        if (nameMatch && gradeMatch) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    }
+}
+
+// Add smooth hover effects
+document.addEventListener('DOMContentLoaded', function() {
+    const rows = document.querySelectorAll('#studentsTable tbody tr');
+    rows.forEach(row => {
+        row.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-2px)';
+            this.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+            this.style.transition = 'all 0.2s ease';
+        });
+        
+        row.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
+            this.style.boxShadow = 'none';
+        });
+    });
+});
+</script>
+{% endblock %}

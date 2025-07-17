@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}Files - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / <span>📁 Files</span>
+    {% if current_path != '' %}
+        / {% for part in breadcrumb_parts %}
+            {% if not loop.last %}
+                <a href="{{ url_for('admin_files', path=part.path) }}">{{ part.name }}</a> /
+            {% else %}
+                <span>{{ part.name }}</span>
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1 style="color: #2c3e50;">File Browser</h1>
+    <div style="display: flex; gap: 1rem; align-items: center;">
+        {% if current_path != '' %}
+            <a href="{{ url_for('admin_files', path=parent_path) }}" class="btn">
+                ⬅️ Back
+            </a>
+        {% endif %}
+        <span style="color: #666; font-family: monospace; background: #f8f9fa; padding: 6px 12px; border-radius: 4px;">
+            📁 {{ current_path or 'data/' }}
+        </span>
+    </div>
+</div>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2>Directory Contents</h2>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <input type="text" 
+                   id="searchInput" 
+                   placeholder="🔍 Search files..." 
+                   style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; width: 200px;"
+                   onkeyup="filterFiles()">
+            <select id="typeFilter" onchange="filterFiles()" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="">All Types</option>
+                <option value="folder">📁 Folders</option>
+                <option value="json">📄 JSON Files</option>
+                <option value="txt">📝 Text Files</option>
+                <option value="md">📋 Markdown</option>
+            </select>
+        </div>
+    </div>
+    
+    {% if items %}
+        <div style="overflow-x: auto;">
+            <table class="table" id="filesTable">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">📁</th>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Size</th>
+                        <th>Modified</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr data-type="{{ item.type }}" data-name="{{ item.name.lower() }}">
+                        <td style="text-align: center; font-size: 1.2rem;">
+                            {% if item.type == 'directory' %}
+                                📁
+                            {% elif item.name.endswith('.json') %}
+                                📄
+                            {% elif item.name.endswith('.txt') %}
+                                📝
+                            {% elif item.name.endswith('.md') %}
+                                📋
+                            {% elif item.name.endswith('.py') %}
+                                🐍
+                            {% elif item.name.endswith('.js') %}
+                                📜
+                            {% else %}
+                                📋
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.type == 'directory' %}
+                                <a href="{{ url_for('admin_files', path=(current_path + '/' + item.name) if current_path else item.name) }}" 
+                                   style="color: #3498db; text-decoration: none; font-weight: 500;">
+                                   {{ item.name }}
+                                </a>
+                            {% else %}
+                                <span style="font-family: monospace;">{{ item.name }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.type == 'directory' %}
+                                <span style="background: #e8f5e8; color: #2d5a3d; padding: 4px 8px; border-radius: 12px; font-size: 0.9rem;">
+                                    📁 Folder
+                                </span>
+                            {% else %}
+                                <span style="background: #e3f2fd; color: #1976d2; padding: 4px 8px; border-radius: 12px; font-size: 0.9rem;">
+                                    📄 {{ item.name.split('.')[-1].upper() if '.' in item.name else 'File' }}
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.type == 'directory' %}
+                                <span style="color: #666;">{{ item.count }} items</span>
+                            {% else %}
+                                <span style="color: #666; font-family: monospace;">{{ item.size }}</span>
+                            {% endif %}
+                        </td>
+                        <td style="color: #666; font-size: 0.9rem;">
+                            {{ item.modified }}
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                {% if item.type == 'directory' %}
+                                    <a href="{{ url_for('admin_files', path=(current_path + '/' + item.name) if current_path else item.name) }}" 
+                                       class="btn" 
+                                       style="padding: 4px 8px; font-size: 0.8rem;">
+                                        📂 Open
+                                    </a>
+                                {% else %}
+                                    <a href="{{ url_for('admin_file_view', path=(current_path + '/' + item.name) if current_path else item.name) }}" 
+                                       class="btn" 
+                                       style="padding: 4px 8px; font-size: 0.8rem;">
+                                        👁️ View
+                                    </a>
+                                {% endif %}
+                                
+                                <button class="btn" 
+                                        style="padding: 4px 8px; font-size: 0.8rem; background: #f39c12;"
+                                        onclick="alert('Download functionality coming soon!')"
+                                        title="Download">
+                                    💾 Download
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div style="text-align: center; padding: 3rem; color: #666;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">📁</div>
+            <h3>Empty Directory</h3>
+            <p>This directory contains no files or folders.</p>
+        </div>
+    {% endif %}
+</div>
+
+{% if current_path %}
+<div class="card">
+    <h2>📊 Directory Statistics</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+        <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <div style="font-size: 1.5rem; color: #3498db; margin-bottom: 0.5rem;">{{ stats.total_items }}</div>
+            <div style="font-weight: 600;">Total Items</div>
+        </div>
+        
+        <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <div style="font-size: 1.5rem; color: #27ae60; margin-bottom: 0.5rem;">{{ stats.folders }}</div>
+            <div style="font-weight: 600;">Folders</div>
+        </div>
+        
+        <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <div style="font-size: 1.5rem; color: #e67e22; margin-bottom: 0.5rem;">{{ stats.files }}</div>
+            <div style="font-weight: 600;">Files</div>
+        </div>
+        
+        <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <div style="font-size: 1.5rem; color: #9b59b6; margin-bottom: 0.5rem;">{{ stats.total_size }}</div>
+            <div style="font-weight: 600;">Total Size</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+function filterFiles() {
+    const searchInput = document.getElementById('searchInput').value.toLowerCase();
+    const typeFilter = document.getElementById('typeFilter').value;
+    const table = document.getElementById('filesTable');
+    const rows = table.getElementsByTagName('tr');
+    
+    for (let i = 1; i < rows.length; i++) { // Skip header row
+        const row = rows[i];
+        const name = row.getAttribute('data-name');
+        const type = row.getAttribute('data-type');
+        
+        const nameMatch = name.includes(searchInput);
+        let typeMatch = true;
+        
+        if (typeFilter === 'folder') {
+            typeMatch = type === 'directory';
+        } else if (typeFilter === 'json') {
+            typeMatch = name.endsWith('.json');
+        } else if (typeFilter === 'txt') {
+            typeMatch = name.endsWith('.txt');
+        } else if (typeFilter === 'md') {
+            typeMatch = name.endsWith('.md');
+        }
+        
+        if (nameMatch && typeMatch) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    }
+}
+
+// Add smooth hover effects
+document.addEventListener('DOMContentLoaded', function() {
+    const rows = document.querySelectorAll('#filesTable tbody tr');
+    rows.forEach(row => {
+        row.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-1px)';
+            this.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+            this.style.transition = 'all 0.2s ease';
+        });
+        
+        row.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
+            this.style.boxShadow = 'none';
+        });
+    });
+});
+</script>
+{% endblock %}

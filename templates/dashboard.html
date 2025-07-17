@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <span>📊 Dashboard</span>
+</div>
+
+<h1 style="margin-bottom: 2rem; color: #2c3e50;">Welcome to AI Tutor Admin</h1>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>{{ stats.total_students }}</h3>
+        <p>Total Students</p>
+    </div>
+    
+    <div class="stat-card">
+        <h3>{{ stats.total_sessions }}</h3>
+        <p>Total Sessions</p>
+    </div>
+    
+    <div class="stat-card">
+        <h3>{{ stats.phone_mappings }}</h3>
+        <p>Phone Mappings</p>
+    </div>
+    
+    <div class="stat-card">
+        <h3>{{ stats.recent_sessions }}</h3>
+        <p>Sessions Today</p>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+    <div class="card">
+        <h2>📚 Recent Activity</h2>
+        {% if recent_activity %}
+            <div style="max-height: 300px; overflow-y: auto;">
+                {% for activity in recent_activity %}
+                <div style="padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>{{ activity.student_name }}</strong>
+                        <br>
+                        <span style="color: #666; font-size: 0.9rem;">{{ activity.action }}</span>
+                    </div>
+                    <span style="color: #999; font-size: 0.8rem;">{{ activity.time }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p style="color: #666; font-style: italic;">No recent activity</p>
+        {% endif %}
+        
+        <div style="margin-top: 1rem; text-align: center;">
+            <a href="{{ url_for('admin_students') }}" class="btn">View All Students</a>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h2>🎯 Quick Actions</h2>
+        <div style="display: grid; gap: 1rem;">
+            <a href="{{ url_for('admin_students') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
+                👥 Manage Students
+            </a>
+            
+            <a href="{{ url_for('admin_files') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
+                📁 Browse Files
+            </a>
+            
+            <a href="{{ url_for('admin_system') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
+                ⚙️ System Settings
+            </a>
+            
+            <a href="{{ url_for('admin_files', path='sessions') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
+                📊 View Sessions
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>📱 Phone Mapping Status</h2>
+    {% if phone_mappings %}
+        <div style="max-height: 200px; overflow-y: auto;">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Phone Number</th>
+                        <th>Student</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for phone, student_id in phone_mappings.items() %}
+                    <tr>
+                        <td>{{ phone }}</td>
+                        <td>
+                            {% if students_info[student_id] %}
+                                <a href="{{ url_for('admin_student_detail', student_id=student_id) }}" 
+                                   style="color: #3498db; text-decoration: none;">
+                                   {{ students_info[student_id].name }}
+                                </a>
+                            {% else %}
+                                <span style="color: #e74c3c;">Student not found</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if students_info[student_id] %}
+                                <span style="color: #27ae60;">✓ Active</span>
+                            {% else %}
+                                <span style="color: #e74c3c;">⚠ Error</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p style="color: #666; font-style: italic;">No phone mappings configured</p>
+    {% endif %}
+    
+    <div style="margin-top: 1rem; text-align: center;">
+        <a href="{{ url_for('admin_system') }}" class="btn">Manage Phone Mappings</a>
+    </div>
+</div>
+
+<div class="card">
+    <h2>📈 System Health</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div style="padding: 1rem; background: #f8f9fa; border-radius: 4px; text-align: center;">
+            <div style="font-size: 1.5rem; color: #27ae60; margin-bottom: 0.5rem;">✓</div>
+            <div style="font-weight: 600;">MCP Server</div>
+            <div style="color: #666; font-size: 0.9rem;">Running</div>
+        </div>
+        
+        <div style="padding: 1rem; background: #f8f9fa; border-radius: 4px; text-align: center;">
+            <div style="font-size: 1.5rem; color: #27ae60; margin-bottom: 0.5rem;">✓</div>
+            <div style="font-weight: 600;">Data Directory</div>
+            <div style="color: #666; font-size: 0.9rem;">Accessible</div>
+        </div>
+        
+        <div style="padding: 1rem; background: #f8f9fa; border-radius: 4px; text-align: center;">
+            <div style="font-size: 1.5rem; color: #27ae60; margin-bottom: 0.5rem;">✓</div>
+            <div style="font-weight: 600;">Admin Panel</div>
+            <div style="color: #666; font-size: 0.9rem;">Online</div>
+        </div>
+    </div>
+</div>
+{% endblock %}

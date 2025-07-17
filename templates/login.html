@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Login - AI Tutor{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: center; align-items: center; min-height: 70vh;">
+    <div class="card" style="width: 100%; max-width: 400px;">
+        <div style="text-align: center; margin-bottom: 2rem;">
+            <h1 style="color: #2c3e50; margin-bottom: 0.5rem;">🤖 AI Tutor</h1>
+            <h2 style="color: #7f8c8d; font-weight: 300; font-size: 1.2rem;">Admin Dashboard</h2>
+        </div>
+
+        <form method="POST">
+            <div class="form-group">
+                <label for="password">Admin Password</label>
+                <input type="password" 
+                       id="password" 
+                       name="password" 
+                       required 
+                       placeholder="Enter admin password"
+                       autofocus>
+            </div>
+            
+            <button type="submit" class="btn" style="width: 100%; padding: 12px; font-size: 16px;">
+                🔓 Login
+            </button>
+        </form>
+        
+        <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #eee; text-align: center; color: #7f8c8d; font-size: 0.9rem;">
+            <p>🔒 Secure admin access for AI tutor system management</p>
+        </div>
+    </div>
+</div>
+
+<style>
+    body {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+    }
+    
+    .card {
+        box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        border: none;
+    }
+    
+    .form-group input {
+        border: 2px solid #e0e6ed;
+        transition: all 0.3s ease;
+    }
+    
+    .form-group input:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        transform: translateY(-2px);
+    }
+    
+    .btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        transition: all 0.3s ease;
+    }
+    
+    .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+</style>
+{% endblock %}
