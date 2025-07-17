@@ -60,12 +60,12 @@ python -c "import secrets; print(secrets.token_hex(32))"
 ### Step 4: Deploy to Render.com
 
 1. **Connect Repository**: Link your GitHub repository
-2. **Build Command**: `cd ai-tutor/backend && pip install -r requirements.txt`
+2. **Build Command**: `pip install -r requirements.txt`
 3. **Start Command**: `cd ai-tutor/backend && python admin-server.py`
 4. **Environment**: Set to Python 3.11+
 5. **Auto-Deploy**: Enable for automatic updates
 
-**⚠️ IMPORTANT**: The project is now organized in the `ai-tutor/` directory. Make sure the commands include the correct path.
+**⚠️ IMPORTANT**: The project uses a root-level `requirements.txt` for Render.com compatibility, but the Flask app runs from the `ai-tutor/backend/` directory.
 
 ### Step 5: Import Environment Variables
 
