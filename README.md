@@ -1,106 +1,64 @@
-# 🤖 AI Tutor System - LIVE & READY!
+# Git Repository - Multiple Projects
 
-## ✅ System Status: DEPLOYED & OPERATIONAL
+This repository contains multiple projects organized in separate directories:
 
-Your personalized AI tutoring system is **LIVE** on the internet!
+## 📁 ai-tutor/
 
-**🌐 Your Live URL:** https://ai-tutor-ptnl.onrender.com
+**AI-Powered Tutoring System for International School in Greece**
 
----
+A comprehensive AI tutoring system featuring:
+- Phone-based student identification via VAPI
+- AI session analysis with provider-agnostic architecture
+- Flask admin dashboard with authentication
+- Real-time webhook integration
+- Comprehensive session tracking and analytics
 
-## 🎯 Quick Test Your System
+**🚀 [View Complete Documentation →](ai-tutor/README.md)**
 
-**Health Check:** https://ai-tutor-ptnl.onrender.com/health  
-**Expected:** `{"status": "healthy", "server": "Python AI Tutor Server"}`
+**🌐 Live Production System**: `https://ai-tutor-ptnl.onrender.com`
 
-**Student Data:** https://ai-tutor-ptnl.onrender.com/mcp/get-student-context?student_id=emma_smith  
-**Expected:** Complete Emma Smith profile, progress, and curriculum data
-
----
-
-## 🚀 Next Step: OpenAI Assistant Setup
-
-Follow this guide to complete your AI tutor: [`OPENAI_ASSISTANT_SETUP.md`](OPENAI_ASSISTANT_SETUP.md)
-
-**What you'll do:**
-1. Create OpenAI Assistant (5 minutes)
-2. Configure function calling with your live URL
-3. Test end-to-end AI tutoring
-4. Optional: Add voice interface
-
----
-
-## 🎉 What You Have Built
-
-**A complete AI tutoring system with:**
-- ✅ **Live cloud server** at https://ai-tutor-ptnl.onrender.com
-- ✅ **Student profiles** with psychological assessments
-- ✅ **Progress tracking** with subject-specific recommendations  
-- ✅ **Cambridge Primary curriculum** alignment (Grades 1-6)
-- ✅ **Session history** with conversation logs and AI summaries
-- ✅ **GitHub repository** for version control and collaboration
-
----
-
-## 📁 Key System Components
-
-| Component | Description | Status |
-|-----------|-------------|---------|
-| **Live Server** | https://ai-tutor-ptnl.onrender.com | ✅ LIVE |
-| **Student Data** | [`data/students/emma_smith/`](data/students/emma_smith/) | ✅ Complete |
-| **Curriculum** | [`data/curriculum/`](data/curriculum/) | ✅ K-6 Mapped |
-| **Integration** | [`ai_tutor_integration.py`](ai_tutor_integration.py) | ✅ Ready |
-| **GitHub** | https://github.com/henrikthome-arch/ai-tutor | ✅ Synced |
-
----
-
-## 📚 Documentation
-
-- **🎯 NEXT:** [`OPENAI_ASSISTANT_SETUP.md`](OPENAI_ASSISTANT_SETUP.md) - Complete your AI tutor
-- **📖 Reference:** [`CURRENT_SETUP_GUIDE.md`](CURRENT_SETUP_GUIDE.md) - Detailed setup guide
-- **🗂️ Archive:** [`_ARCHIVE_README.md`](_ARCHIVE_README.md) - Solved issues (tunnels, etc.)
-
----
-
-## 🎓 Sample Student: Emma Smith
-
-Your system includes a complete sample student profile:
-
-- **Learning Style:** Visual learner with high curiosity
-- **Interests:** Space, animals, creative arts
-- **Current Level:** Grade 4 (age 9)
-- **Progress Tracking:** Mathematics, English, Science mapped to Cambridge Primary
-- **Session History:** Realistic conversation logs with AI analysis
-
-**Test Command:** "Tell me about Emma Smith's learning progress"
-
----
-
-## 🔗 System Architecture
-
-```
-🌐 Internet
-    ↓
-📱 User Interface (OpenAI Assistant, Voice, etc.)
-    ↓
-🔗 Function Calls
-    ↓
-☁️ https://ai-tutor-ptnl.onrender.com (Your Live Server)
-    ↓
-📊 Student Data + Curriculum (JSON files)
-    ↓
-🤖 Personalized AI Responses
+### Quick Start
+```bash
+cd ai-tutor
+# Follow setup instructions in ai-tutor/README.md
 ```
 
 ---
 
-## 🎯 Ready for Production
+## 🏗️ Repository Organization
 
-**Your AI tutor system is:**
-- ✅ **Live on the internet** with professional hosting
-- ✅ **Scalable** - add unlimited students by copying the data structure
-- ✅ **Extensible** - integrate with any chat or voice platform
-- ✅ **Curriculum-aligned** - complete Cambridge Primary mapping
-- ✅ **Professional** - hosted on Render.com with automatic deployments
+This repository follows a multi-project structure where each project lives in its own dedicated directory with:
 
-**Next:** Complete the OpenAI Assistant setup to start tutoring!
+- **Complete project isolation**: Each directory contains all files for that project
+- **Independent deployment**: Each project can be deployed separately
+- **Clear documentation**: Each project has its own README and documentation
+- **Organized structure**: Logical subdirectories (backend/, frontend/, data/, docs/, etc.)
+
+---
+
+## 📚 Project Documentation
+
+Each project directory contains comprehensive documentation:
+
+- `README.md` - Main project documentation
+- `docs/` - Detailed guides and technical documentation
+- Setup and deployment instructions
+- Architecture and design documentation
+- API references and usage examples
+
+---
+
+## 🔧 Development
+
+When working on a specific project:
+
+1. Navigate to the project directory: `cd project-name/`
+2. Follow the project-specific setup instructions
+3. Run the project from within its directory
+4. Refer to the project's documentation for details
+
+---
+
+## 📞 Support
+
+For project-specific support, refer to the documentation within each project directory.

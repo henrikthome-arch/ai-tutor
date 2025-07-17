@@ -60,16 +60,16 @@ python -c "import secrets; print(secrets.token_hex(32))"
 ### Step 4: Deploy to Render.com
 
 1. **Connect Repository**: Link your GitHub repository
-2. **Build Command**: `pip install -r requirements.txt`
-3. **Start Command**: `python admin-server.py`
+2. **Build Command**: `cd ai-tutor/backend && pip install -r requirements.txt`
+3. **Start Command**: `cd ai-tutor/backend && python admin-server.py`
 4. **Environment**: Set to Python 3.11+
 5. **Auto-Deploy**: Enable for automatic updates
 
-**⚠️ IMPORTANT**: Make sure the Start Command is set to `python admin-server.py` (NOT `python simple-server-fixed.py`)
+**⚠️ IMPORTANT**: The project is now organized in the `ai-tutor/` directory. Make sure the commands include the correct path.
 
 ### Step 5: Import Environment Variables
 
-Use the clean [`render-production.env`](render-production.env) file:
+Use the clean [`config/render-production.env`](../config/render-production.env) file:
 
 1. Copy all KEY=VALUE pairs from the file
 2. In Render.com dashboard → Environment tab
@@ -219,9 +219,9 @@ Complete end-to-end flow:
 
 ### Backup Strategy
 
-- **Student Data**: Regularly backup `data/` directory
+- **Student Data**: Regularly backup `ai-tutor/data/` directory
 - **Environment Config**: Keep secure copy of environment variables
-- **Prompt Templates**: Version control all prompt files in `ai_poc/prompts/`
+- **Prompt Templates**: Version control all prompt files in `ai-tutor/backend/ai_poc/prompts/`
 
 ---
 

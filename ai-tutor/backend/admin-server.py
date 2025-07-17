@@ -26,7 +26,7 @@ sys.path.append('.')
 
 # Import PhoneMappingManager from session-enhanced-server.py
 import importlib.util
-spec = importlib.util.spec_from_file_location("session_enhanced_server", "session-enhanced-server.py")
+spec = importlib.util.spec_from_file_location("session_enhanced_server", "./session-enhanced-server.py")
 session_enhanced_server = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(session_enhanced_server)
 
@@ -45,7 +45,9 @@ except ImportError as e:
     AI_POC_AVAILABLE = False
     print(f"⚠️  AI POC not available: {e}")
 
-app = Flask(__name__)
+app = Flask(__name__,
+            template_folder='../frontend/templates',
+            static_folder='../frontend/static')
 
 # Security Configuration with Environment Variables
 ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
@@ -82,7 +84,7 @@ def check_auth():
 def get_all_students():
     """Get list of all students from data directory"""
     students = []
-    students_dir = 'data/students'
+    students_dir = '../data/students'
     
     if not os.path.exists(students_dir):
         return students
@@ -125,7 +127,7 @@ def get_all_students():
 
 def get_student_data(student_id):
     """Get detailed student data"""
-    student_dir = f'data/students/{student_id}'
+    student_dir = f'../data/students/{student_id}'
     if not os.path.exists(student_dir):
         return None
     
@@ -175,7 +177,7 @@ def get_system_stats():
     sessions_today = 0
     
     for student in students:
-        sessions_dir = f'data/students/{student["id"]}/sessions'
+        sessions_dir = f'../data/students/{student["id"]}/sessions'
         if os.path.exists(sessions_dir):
             for session_file in os.listdir(sessions_dir):
                 if session_file.endswith('_session.json') and today in session_file:
@@ -271,11 +273,11 @@ def admin_files():
     if not check_auth():
         return redirect(url_for('admin_login'))
     
-    path = request.args.get('path', 'data')
+    path = request.args.get('path', '../data')
     
     # Security: ensure path is within data directory
-    if not path.startswith('data'):
-        path = 'data'
+    if not path.startswith('../data'):
+        path = '../data'
     
     files = []
     directories = []
@@ -310,7 +312,7 @@ def admin_files():
     
     # Build breadcrumb for navigation
     breadcrumb_parts = []
-    if path != 'data':
+    if path != '../data':
         path_parts = path.split('/')
         for i, part in enumerate(path_parts):
             breadcrumb_parts.append({
@@ -319,7 +321,7 @@ def admin_files():
             })
     
     # Calculate parent path for back button
-    parent_path = '/'.join(path.split('/')[:-1]) if '/' in path and path != 'data' else ''
+    parent_path = '/'.join(path.split('/')[:-1]) if '/' in path and path != '../data' else ''
     
     # Combine directories and files for unified display
     items = []
@@ -353,7 +355,7 @@ def admin_file_view():
         return redirect(url_for('admin_login'))
     
     file_path = request.args.get('path')
-    if not file_path or not file_path.startswith('data'):
+    if not file_path or not file_path.startswith('../data'):
         flash('Invalid file path', 'error')
         return redirect(url_for('admin_files'))
     
@@ -692,7 +694,7 @@ def save_vapi_session(call_id, student_id, phone, duration, user_transcript, ass
     """Save VAPI session data to student directory"""
     try:
         # Create student directory if it doesn't exist
-        student_dir = f'data/students/{student_id}'
+        student_dir = f'../data/students/{student_id}'
         sessions_dir = f'{student_dir}/sessions'
         os.makedirs(sessions_dir, exist_ok=True)
         
@@ -800,8 +802,8 @@ def trigger_ai_analysis_async(student_id, transcript, call_id):
 
 if __name__ == '__main__':
     # Create required directories
-    os.makedirs('templates', exist_ok=True)
-    os.makedirs('static', exist_ok=True)
+    os.makedirs('../frontend/templates', exist_ok=True)
+    os.makedirs('../frontend/static', exist_ok=True)
     
     # Get port from environment
     port = int(os.getenv('PORT', 5000))

@@ -116,7 +116,7 @@ class SessionTracker:
         session_id = session['session_id']
         
         # Create sessions directory if it doesn't exist
-        sessions_dir = f'data/students/{student_id}/sessions'
+        sessions_dir = f'../data/students/{student_id}/sessions'
         os.makedirs(sessions_dir, exist_ok=True)
         
         # Save session file
@@ -164,7 +164,7 @@ class SessionTracker:
 class ConfigManager:
     """Manages configuration for session tracking and analysis"""
     
-    def __init__(self, config_path='session_config.yaml'):
+    def __init__(self, config_path='../scripts/session_config.yaml'):
         self.config_path = config_path
         self.config = self.load_config()
     
@@ -245,7 +245,7 @@ class SessionAnalyzer:
 class PhoneMappingManager:
     """Manages phone number to student ID mapping"""
     
-    def __init__(self, mapping_file='data/phone_mapping.json'):
+    def __init__(self, mapping_file='../data/phone_mapping.json'):
         self.mapping_file = mapping_file
         self.phone_mapping = self.load_phone_mapping()
     
@@ -415,9 +415,9 @@ class EnhancedTutorDataHandler(BaseHTTPRequestHandler):
         
         try:
             # Read student data (same as before)
-            profile_path = f'data/students/{student_id}/profile.json'
-            progress_path = f'data/students/{student_id}/progress.json'
-            curriculum_path = 'data/curriculum/international_school_greece.json'
+            profile_path = f'../data/students/{student_id}/profile.json'
+            progress_path = f'../data/students/{student_id}/progress.json'
+            curriculum_path = '../data/curriculum/international_school_greece.json'
             
             if not os.path.exists(profile_path):
                 self.send_error(404, f"Student profile not found: {student_id}")
@@ -428,7 +428,7 @@ class EnhancedTutorDataHandler(BaseHTTPRequestHandler):
             curriculum = self.read_json_file(curriculum_path)
             
             # Get recent sessions (enhanced)
-            sessions_dir = f'data/students/{student_id}/sessions'
+            sessions_dir = f'../data/students/{student_id}/sessions'
             recent_sessions = []
             if os.path.exists(sessions_dir):
                 session_files = [f for f in os.listdir(sessions_dir) if f.endswith('_session.json')]
@@ -712,9 +712,9 @@ def run_enhanced_server(port=3000):
         print("=" * 60)
         
         # Check data directory
-        if os.path.exists('data'):
+        if os.path.exists('../data'):
             print("✓ Data directory found")
-            if os.path.exists('data/students/emma_smith'):
+            if os.path.exists('../data/students/emma_smith'):
                 print("✓ Sample student data found")
         else:
             print("✗ Data directory not found")
