@@ -635,6 +635,64 @@ def edit_student(student_id):
                          student_id=student_id,
                          phone=phone)
 
+@app.route('/admin/students/<student_id>/delete', methods=['POST'])
+def delete_student(student_id):
+    """Delete a student and all associated data"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        import shutil
+        
+        # Check if student exists
+        student_dir = f'../data/students/{student_id}'
+        if not os.path.exists(student_dir):
+            return jsonify({'error': 'Student not found'}), 404
+        
+        # Get student name for logging
+        student_name = 'Unknown'
+        profile_path = os.path.join(student_dir, 'profile.json')
+        if os.path.exists(profile_path):
+            try:
+                with open(profile_path, 'r', encoding='utf-8') as f:
+                    profile = json.load(f)
+                student_name = profile.get('name', 'Unknown')
+            except:
+                pass
+        
+        # Remove phone mapping for this student
+        phone_to_remove = None
+        for phone_num, sid in list(phone_manager.phone_mapping.items()):
+            if sid == student_id:
+                phone_to_remove = phone_num
+                del phone_manager.phone_mapping[phone_num]
+                break
+        
+        if phone_to_remove:
+            phone_manager.save_mappings()
+        
+        # Remove the entire student directory
+        shutil.rmtree(student_dir)
+        
+        log_admin_action('delete_student', session.get('admin_username', 'unknown'),
+                        student_id=student_id,
+                        student_name=student_name,
+                        phone_removed=phone_to_remove,
+                        ip_address=request.remote_addr)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Student {student_name} deleted successfully',
+            'student_id': student_id,
+            'redirect': url_for('admin_students')
+        })
+        
+    except Exception as e:
+        log_error('ADMIN', f'Error deleting student {student_id}', e,
+                 student_id=student_id,
+                 admin_user=session.get('admin_username', 'unknown'))
+        return jsonify({'error': f'Failed to delete student: {str(e)}'}), 500
+
 # All Sessions Overview Route
 @app.route('/admin/sessions')
 def admin_all_sessions():
