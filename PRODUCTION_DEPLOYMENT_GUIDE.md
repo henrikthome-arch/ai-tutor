@@ -65,6 +65,8 @@ python -c "import secrets; print(secrets.token_hex(32))"
 4. **Environment**: Set to Python 3.11+
 5. **Auto-Deploy**: Enable for automatic updates
 
+**⚠️ IMPORTANT**: Make sure the Start Command is set to `python admin-server.py` (NOT `python simple-server-fixed.py`)
+
 ### Step 5: Import Environment Variables
 
 Use the clean [`render-production.env`](render-production.env) file:

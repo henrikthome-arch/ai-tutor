@@ -7,6 +7,7 @@ Flask web interface for managing students, sessions, and system data
 import os
 import json
 import hashlib
+import hmac
 from datetime import datetime, timedelta
 from flask import Flask, render_template, session, redirect, request, flash, url_for, jsonify
 import secrets
@@ -51,6 +52,9 @@ ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')  # Default for development only
 FLASK_SECRET_KEY = os.getenv('FLASK_SECRET_KEY', secrets.token_hex(32))
 FLASK_ENV = os.getenv('FLASK_ENV', 'development')
+
+# VAPI Configuration
+VAPI_SECRET = os.getenv('VAPI_SECRET', 'your_vapi_secret_here')
 
 # Set secure secret key
 app.secret_key = FLASK_SECRET_KEY
@@ -187,6 +191,12 @@ def get_system_stats():
         'server_status': server_status,
         'phone_mappings': len(phone_manager.phone_mapping)
     }
+
+# Root route for health checks
+@app.route('/')
+def index():
+    """Root route for health checks and redirects"""
+    return redirect(url_for('admin_dashboard'))
 
 # Authentication routes
 @app.route('/admin/login', methods=['GET', 'POST'])
@@ -554,6 +564,239 @@ def api_ai_stats():
         return jsonify({'error': 'AI POC not available'}), 503
     
     return jsonify(session_processor.get_processing_stats())
+
+# VAPI Webhook Routes
+def verify_vapi_signature(payload_body, signature):
+    """Verify VAPI webhook signature using HMAC"""
+    if VAPI_SECRET == 'your_vapi_secret_here':
+        # Skip verification in development if secret not set
+        return True
+    
+    expected_signature = hmac.new(
+        VAPI_SECRET.encode('utf-8'),
+        payload_body.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    
+    return hmac.compare_digest(signature, expected_signature)
+
+@app.route('/vapi/webhook', methods=['POST'])
+def vapi_webhook():
+    """Handle VAPI webhook events for transcripts and call data"""
+    try:
+        # Get raw payload for signature verification
+        payload = request.get_data(as_text=True)
+        signature = request.headers.get('X-Vapi-Signature', '')
+        
+        # Verify signature
+        if not verify_vapi_signature(payload, signature):
+            print(f"🚨 VAPI webhook signature verification failed")
+            return jsonify({'error': 'Invalid signature'}), 401
+        
+        # Parse the webhook data
+        data = request.get_json()
+        message = data.get('message', {})
+        message_type = message.get('type')
+        
+        print(f"📞 VAPI webhook received: {message_type}")
+        
+        if message_type == 'speech-update':
+            handle_speech_update(message)
+        elif message_type == 'end-of-call-report':
+            handle_end_of_call(message)
+        elif message_type == 'status-update':
+            handle_status_update(message)
+        else:
+            print(f"📝 Unhandled VAPI event: {message_type}")
+        
+        return jsonify({'status': 'ok'}), 200
+        
+    except Exception as e:
+        print(f"❌ VAPI webhook error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+def handle_speech_update(message):
+    """Handle real-time speech updates from VAPI"""
+    call_info = message.get('call', {})
+    call_id = call_info.get('id')
+    speaker = message.get('speaker')  # 'user' or 'assistant'
+    text = message.get('text')
+    is_final = message.get('final', False)
+    
+    if is_final and speaker == 'user':
+        print(f"🗣️  Final user speech in call {call_id}: {text}")
+        # Store partial transcript for potential real-time analysis
+        # This could be used for live feedback or progress tracking
+
+def handle_status_update(message):
+    """Handle call status updates from VAPI"""
+    call_info = message.get('call', {})
+    call_id = call_info.get('id')
+    status = message.get('status')
+    
+    print(f"📊 Call {call_id} status: {status}")
+
+def handle_end_of_call(message):
+    """Handle complete call transcript from VAPI and trigger AI analysis"""
+    try:
+        call_info = message.get('call', {})
+        call_id = call_info.get('id')
+        assistant_id = call_info.get('assistantId')
+        customer_phone = call_info.get('customer', {}).get('number')
+        duration = message.get('durationSeconds', 0)
+        
+        # Get transcript
+        transcript_data = message.get('transcript', {})
+        user_transcript = transcript_data.get('user', '')
+        assistant_transcript = transcript_data.get('assistant', '')
+        
+        print(f"📝 End of call {call_id}: {duration}s duration")
+        print(f"📞 Phone: {customer_phone}")
+        print(f"📄 User transcript: {len(user_transcript)} chars")
+        print(f"🤖 Assistant transcript: {len(assistant_transcript)} chars")
+        
+        # Find student by phone number
+        student_id = None
+        if customer_phone:
+            # Clean phone number (remove country codes, formatting)
+            clean_phone = customer_phone.replace('+', '').replace('-', '').replace(' ', '')
+            if clean_phone.startswith('1') and len(clean_phone) == 11:
+                clean_phone = clean_phone[1:]  # Remove US country code
+            
+            # Look up student
+            for phone, sid in phone_manager.phone_mapping.items():
+                if phone.replace('-', '').replace(' ', '') == clean_phone:
+                    student_id = sid
+                    break
+        
+        if not student_id:
+            print(f"⚠️  No student found for phone: {customer_phone}")
+            # Create unknown student record
+            student_id = f"unknown_{clean_phone}" if customer_phone else f"unknown_{call_id}"
+        
+        # Save the session data
+        save_vapi_session(call_id, student_id, customer_phone, duration,
+                         user_transcript, assistant_transcript, message)
+        
+        # Trigger AI analysis if we have a valid student and transcript
+        if student_id and user_transcript and AI_POC_AVAILABLE:
+            try:
+                trigger_ai_analysis_async(student_id, user_transcript, call_id)
+            except Exception as e:
+                print(f"⚠️  AI analysis failed: {e}")
+        
+    except Exception as e:
+        print(f"❌ Error handling end of call: {e}")
+
+def save_vapi_session(call_id, student_id, phone, duration, user_transcript, assistant_transcript, full_message):
+    """Save VAPI session data to student directory"""
+    try:
+        # Create student directory if it doesn't exist
+        student_dir = f'data/students/{student_id}'
+        sessions_dir = f'{student_dir}/sessions'
+        os.makedirs(sessions_dir, exist_ok=True)
+        
+        # Generate session filename with timestamp
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        session_file = f'{sessions_dir}/{timestamp}_vapi_session.json'
+        transcript_file = f'{sessions_dir}/{timestamp}_vapi_transcript.txt'
+        
+        # Create session data
+        session_data = {
+            'call_id': call_id,
+            'student_id': student_id,
+            'phone_number': phone,
+            'start_time': datetime.now().isoformat(),
+            'duration_seconds': duration,
+            'session_type': 'vapi_call',
+            'transcript_file': f'{timestamp}_vapi_transcript.txt',
+            'user_transcript_length': len(user_transcript),
+            'assistant_transcript_length': len(assistant_transcript),
+            'vapi_data': full_message  # Store complete VAPI response
+        }
+        
+        # Save session metadata
+        with open(session_file, 'w', encoding='utf-8') as f:
+            json.dump(session_data, f, indent=2, ensure_ascii=False)
+        
+        # Save combined transcript
+        combined_transcript = f"=== VAPI Call Transcript ===\n"
+        combined_transcript += f"Call ID: {call_id}\n"
+        combined_transcript += f"Duration: {duration} seconds\n"
+        combined_transcript += f"Phone: {phone}\n"
+        combined_transcript += f"Timestamp: {datetime.now().isoformat()}\n\n"
+        combined_transcript += f"=== User Transcript ===\n{user_transcript}\n\n"
+        combined_transcript += f"=== Assistant Transcript ===\n{assistant_transcript}\n"
+        
+        with open(transcript_file, 'w', encoding='utf-8') as f:
+            f.write(combined_transcript)
+        
+        print(f"💾 Saved VAPI session: {session_file}")
+        
+    except Exception as e:
+        print(f"❌ Error saving VAPI session: {e}")
+
+def trigger_ai_analysis_async(student_id, transcript, call_id):
+    """Trigger AI analysis for VAPI transcript (async)"""
+    if not AI_POC_AVAILABLE:
+        return
+    
+    try:
+        # Get student context
+        student_data = get_student_data(student_id)
+        student_context = {}
+        
+        if student_data and student_data.get('profile'):
+            profile = student_data['profile']
+            student_context = {
+                'name': profile.get('name', 'Unknown'),
+                'age': profile.get('age', 'Unknown'),
+                'grade': profile.get('grade', 'Unknown'),
+                'curriculum': profile.get('curriculum', 'Unknown'),
+                'primary_interests': profile.get('interests', 'Unknown'),
+                'learning_style': profile.get('learning_style', 'Unknown'),
+                'motivational_triggers': profile.get('motivational_triggers', 'Unknown')
+            }
+        else:
+            student_context = {
+                'name': student_id,
+                'age': 'Unknown',
+                'grade': 'Unknown',
+                'curriculum': 'Unknown',
+                'primary_interests': 'Unknown',
+                'learning_style': 'Unknown',
+                'motivational_triggers': 'Unknown'
+            }
+        
+        # Run async analysis in background
+        def run_analysis():
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                analysis, validation = loop.run_until_complete(
+                    session_processor.process_session_transcript(
+                        transcript=transcript,
+                        student_context=student_context,
+                        save_results=True,
+                        session_id=call_id
+                    )
+                )
+                
+                loop.close()
+                print(f"✅ AI analysis completed for call {call_id}")
+                
+            except Exception as e:
+                print(f"❌ AI analysis failed for call {call_id}: {e}")
+        
+        # Run in background thread to not block webhook response
+        import threading
+        thread = threading.Thread(target=run_analysis)
+        thread.daemon = True
+        thread.start()
+        
+    except Exception as e:
+        print(f"❌ Error triggering AI analysis: {e}")
 
 if __name__ == '__main__':
     # Create required directories
