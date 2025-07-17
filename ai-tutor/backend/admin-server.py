@@ -251,8 +251,8 @@ def admin_student_detail(student_id):
     if not check_auth():
         return redirect(url_for('admin_login'))
     
-    student = get_student_data(student_id)
-    if not student:
+    student_data = get_student_data(student_id)
+    if not student_data:
         flash(f'Student {student_id} not found', 'error')
         return redirect(url_for('admin_students'))
     
@@ -263,9 +263,40 @@ def admin_student_detail(student_id):
             phone = phone_num
             break
     
-    return render_template('student_detail.html', 
-                         student=student, 
-                         phone=phone)
+    # Extract data for template
+    profile = student_data.get('profile', {})
+    progress = student_data.get('progress', {})
+    sessions = student_data.get('sessions', [])
+    
+    # Create student object for template
+    student = {
+        'id': student_id,
+        'name': profile.get('name', 'Unknown'),
+        'age': profile.get('age', 'Unknown'),
+        'grade': profile.get('grade', 'Unknown'),
+        'phone': phone,
+        'interests': profile.get('interests', []),
+        'learning_preferences': profile.get('learning_preferences', [])
+    }
+    
+    # Process sessions for recent sessions display
+    recent_sessions = []
+    for session in sessions[:5]:  # Last 5 sessions
+        recent_sessions.append({
+            'date': session.get('start_time', '').split('T')[0] if session.get('start_time') else 'Unknown',
+            'duration': session.get('duration_minutes', session.get('duration_seconds', 0) // 60 if session.get('duration_seconds') else 'Unknown'),
+            'topics': session.get('topics_covered', ['General']),
+            'engagement': session.get('engagement_score', 75),
+            'file': session.get('transcript_file', '')
+        })
+    
+    return render_template('student_detail.html',
+                         student=student,
+                         phone=phone,
+                         progress=progress,
+                         recent_sessions=recent_sessions,
+                         session_count=len(sessions),
+                         last_session=recent_sessions[0]['date'] if recent_sessions else None)
 
 # File browser routes
 @app.route('/admin/files')
@@ -411,6 +442,273 @@ def admin_system():
                          mcp_port=3001,
                          vapi_status=False,
                          system_events=[])
+
+# Phone Mapping Management
+@app.route('/admin/phone-mappings/remove', methods=['POST'])
+def remove_phone_mapping():
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    phone_number = request.form.get('phone_number')
+    if not phone_number:
+        return jsonify({'error': 'Phone number is required'}), 400
+    
+    if phone_number in phone_manager.phone_mapping:
+        del phone_manager.phone_mapping[phone_number]
+        phone_manager.save_mappings()
+        flash(f'Phone mapping for {phone_number} removed successfully', 'success')
+        return jsonify({'success': True, 'message': 'Phone mapping removed'})
+    else:
+        return jsonify({'error': 'Phone mapping not found'}), 404
+
+@app.route('/admin/phone-mappings/add', methods=['POST'])
+def add_phone_mapping():
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    phone_number = request.form.get('phone_number')
+    student_id = request.form.get('student_id')
+    
+    if not phone_number or not student_id:
+        return jsonify({'error': 'Phone number and student ID are required'}), 400
+    
+    # Check if student exists
+    if not os.path.exists(f'../data/students/{student_id}'):
+        return jsonify({'error': 'Student not found'}), 404
+    
+    phone_manager.phone_mapping[phone_number] = student_id
+    phone_manager.save_mappings()
+    flash(f'Phone mapping added: {phone_number} → {student_id}', 'success')
+    return jsonify({'success': True, 'message': 'Phone mapping added'})
+
+# Student CRUD Operations
+@app.route('/admin/students/add', methods=['GET', 'POST'])
+def add_student():
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    if request.method == 'POST':
+        # Get form data
+        name = request.form.get('name')
+        age = request.form.get('age')
+        grade = request.form.get('grade')
+        phone = request.form.get('phone')
+        interests = request.form.get('interests', '').split(',')
+        interests = [i.strip() for i in interests if i.strip()]
+        
+        if not name or not age or not grade:
+            flash('Name, age, and grade are required', 'error')
+            return render_template('add_student.html')
+        
+        # Generate student ID
+        student_id = name.lower().replace(' ', '_').replace('.', '')
+        counter = 1
+        base_id = student_id
+        while os.path.exists(f'../data/students/{student_id}'):
+            student_id = f"{base_id}_{counter}"
+            counter += 1
+        
+        # Create student directory
+        student_dir = f'../data/students/{student_id}'
+        os.makedirs(student_dir, exist_ok=True)
+        os.makedirs(f'{student_dir}/sessions', exist_ok=True)
+        
+        # Create profile
+        profile = {
+            'name': name,
+            'age': int(age),
+            'grade': int(grade),
+            'interests': interests,
+            'learning_preferences': [],
+            'curriculum': 'International School Greece',
+            'created_date': datetime.now().isoformat()
+        }
+        
+        with open(f'{student_dir}/profile.json', 'w', encoding='utf-8') as f:
+            json.dump(profile, f, indent=2, ensure_ascii=False)
+        
+        # Create initial progress
+        progress = {
+            'overall_progress': 0,
+            'subjects': {},
+            'goals': [],
+            'streak_days': 0,
+            'last_updated': datetime.now().isoformat()
+        }
+        
+        with open(f'{student_dir}/progress.json', 'w', encoding='utf-8') as f:
+            json.dump(progress, f, indent=2, ensure_ascii=False)
+        
+        # Add phone mapping if provided
+        if phone:
+            phone_manager.phone_mapping[phone] = student_id
+            phone_manager.save_mappings()
+        
+        flash(f'Student {name} added successfully!', 'success')
+        return redirect(url_for('admin_student_detail', student_id=student_id))
+    
+    return render_template('add_student.html')
+
+@app.route('/admin/students/<student_id>/edit', methods=['GET', 'POST'])
+def edit_student(student_id):
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    student_data = get_student_data(student_id)
+    if not student_data:
+        flash(f'Student {student_id} not found', 'error')
+        return redirect(url_for('admin_students'))
+    
+    if request.method == 'POST':
+        # Get form data
+        name = request.form.get('name')
+        age = request.form.get('age')
+        grade = request.form.get('grade')
+        phone = request.form.get('phone')
+        interests = request.form.get('interests', '').split(',')
+        interests = [i.strip() for i in interests if i.strip()]
+        
+        if not name or not age or not grade:
+            flash('Name, age, and grade are required', 'error')
+            return render_template('edit_student.html', student=student_data, student_id=student_id)
+        
+        # Update profile
+        profile = student_data.get('profile', {})
+        profile.update({
+            'name': name,
+            'age': int(age),
+            'grade': int(grade),
+            'interests': interests,
+            'last_updated': datetime.now().isoformat()
+        })
+        
+        profile_path = f'../data/students/{student_id}/profile.json'
+        with open(profile_path, 'w', encoding='utf-8') as f:
+            json.dump(profile, f, indent=2, ensure_ascii=False)
+        
+        # Update phone mapping
+        # Remove old phone mapping for this student
+        old_phone = None
+        for phone_num, sid in list(phone_manager.phone_mapping.items()):
+            if sid == student_id:
+                old_phone = phone_num
+                del phone_manager.phone_mapping[phone_num]
+                break
+        
+        # Add new phone mapping
+        if phone:
+            phone_manager.phone_mapping[phone] = student_id
+        
+        phone_manager.save_mappings()
+        
+        flash(f'Student {name} updated successfully!', 'success')
+        return redirect(url_for('admin_student_detail', student_id=student_id))
+    
+    # Get current phone
+    phone = None
+    for phone_num, sid in phone_manager.phone_mapping.items():
+        if sid == student_id:
+            phone = phone_num
+            break
+    
+    return render_template('edit_student.html',
+                         student=student_data.get('profile', {}),
+                         student_id=student_id,
+                         phone=phone)
+
+# Session and Assessment Viewer
+@app.route('/admin/students/<student_id>/sessions')
+def view_student_sessions(student_id):
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    student_data = get_student_data(student_id)
+    if not student_data:
+        flash(f'Student {student_id} not found', 'error')
+        return redirect(url_for('admin_students'))
+    
+    sessions_dir = f'../data/students/{student_id}/sessions'
+    sessions = []
+    
+    if os.path.exists(sessions_dir):
+        for file in os.listdir(sessions_dir):
+            if file.endswith('_session.json') or file.endswith('_summary.json'):
+                file_path = os.path.join(sessions_dir, file)
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    
+                    # Check if there's a corresponding transcript
+                    transcript_file = file.replace('_session.json', '_transcript.txt').replace('_summary.json', '_transcript.txt')
+                    transcript_path = os.path.join(sessions_dir, transcript_file)
+                    has_transcript = os.path.exists(transcript_path)
+                    
+                    # Check if there's a corresponding AI analysis
+                    analysis_file = file.replace('_session.json', '_ai_analysis.json').replace('_summary.json', '_ai_analysis.json')
+                    analysis_path = os.path.join(sessions_dir, analysis_file)
+                    has_analysis = os.path.exists(analysis_path)
+                    
+                    sessions.append({
+                        'file': file,
+                        'date': data.get('start_time', '').split('T')[0] if data.get('start_time') else 'Unknown',
+                        'time': data.get('start_time', '').split('T')[1][:8] if data.get('start_time') and 'T' in data.get('start_time', '') else '',
+                        'duration': data.get('duration_minutes', data.get('duration_seconds', 0) // 60 if data.get('duration_seconds') else 'Unknown'),
+                        'type': 'VAPI Call' if 'vapi' in file else 'Regular Session',
+                        'has_transcript': has_transcript,
+                        'has_analysis': has_analysis,
+                        'data': data
+                    })
+                except Exception as e:
+                    print(f"Error loading session file {file}: {e}")
+    
+    # Sort by date (newest first)
+    sessions.sort(key=lambda x: x['date'], reverse=True)
+    
+    return render_template('session_list.html',
+                         student=student_data.get('profile', {}),
+                         student_id=student_id,
+                         sessions=sessions)
+
+@app.route('/admin/sessions/<student_id>/<session_file>')
+def view_session_detail(student_id, session_file):
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    session_path = f'../data/students/{student_id}/sessions/{session_file}'
+    if not os.path.exists(session_path):
+        flash('Session file not found', 'error')
+        return redirect(url_for('view_student_sessions', student_id=student_id))
+    
+    try:
+        with open(session_path, 'r', encoding='utf-8') as f:
+            session_data = json.load(f)
+        
+        # Load transcript if available
+        transcript_file = session_file.replace('_session.json', '_transcript.txt').replace('_summary.json', '_transcript.txt')
+        transcript_path = f'../data/students/{student_id}/sessions/{transcript_file}'
+        transcript = None
+        if os.path.exists(transcript_path):
+            with open(transcript_path, 'r', encoding='utf-8') as f:
+                transcript = f.read()
+        
+        # Load AI analysis if available
+        analysis_file = session_file.replace('_session.json', '_ai_analysis.json').replace('_summary.json', '_ai_analysis.json')
+        analysis_path = f'../data/students/{student_id}/sessions/{analysis_file}'
+        analysis = None
+        if os.path.exists(analysis_path):
+            with open(analysis_path, 'r', encoding='utf-8') as f:
+                analysis = json.load(f)
+        
+        return render_template('session_detail.html',
+                             student_id=student_id,
+                             session_file=session_file,
+                             session_data=session_data,
+                             transcript=transcript,
+                             analysis=analysis)
+        
+    except Exception as e:
+        flash(f'Error loading session: {e}', 'error')
+        return redirect(url_for('view_student_sessions', student_id=student_id))
 
 # AI Post-Processing Routes (POC)
 @app.route('/admin/ai-analysis')

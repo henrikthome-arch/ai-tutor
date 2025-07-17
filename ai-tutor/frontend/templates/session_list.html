@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}{{ student.name }} Sessions - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / 
+    <a href="{{ url_for('admin_students') }}">👥 Students</a> / 
+    <a href="{{ url_for('admin_student_detail', student_id=student_id) }}">{{ student.name }}</a> /
+    <span>🕒 Sessions</span>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1 style="color: #2c3e50;">{{ student.name }} - Session History</h1>
+    <a href="{{ url_for('admin_student_detail', student_id=student_id) }}" class="btn" style="background: #95a5a6;">
+        ← Back to Student
+    </a>
+</div>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2>All Sessions ({{ sessions|length }})</h2>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+            <select id="typeFilter" onchange="filterSessions()" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="">All Session Types</option>
+                <option value="VAPI Call">VAPI Calls</option>
+                <option value="Regular Session">Regular Sessions</option>
+            </select>
+            <input type="text" 
+                   id="searchInput" 
+                   placeholder="🔍 Search sessions..." 
+                   style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; width: 200px;"
+                   onkeyup="filterSessions()">
+        </div>
+    </div>
+    
+    {% if sessions %}
+        <div style="overflow-x: auto;">
+            <table class="table" id="sessionsTable">
+                <thead>
+                    <tr>
+                        <th>📅 Date & Time</th>
+                        <th>📞 Type</th>
+                        <th>⏱️ Duration</th>
+                        <th>📄 Transcript</th>
+                        <th>🤖 AI Analysis</th>
+                        <th>⚡ Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for session in sessions %}
+                    <tr data-type="{{ session.type }}" data-date="{{ session.date }}">
+                        <td>
+                            <div>
+                                <strong>{{ session.date }}</strong>
+                                {% if session.time %}
+                                    <br>
+                                    <span style="color: #666; font-size: 0.9rem;">{{ session.time }}</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <span style="background: {% if session.type == 'VAPI Call' %}#e3f2fd{% else %}#f3e5f5{% endif %}; 
+                                         color: {% if session.type == 'VAPI Call' %}#1976d2{% else %}#7b1fa2{% endif %}; 
+                                         padding: 4px 8px; border-radius: 12px; font-size: 0.9rem;">
+                                {% if session.type == 'VAPI Call' %}📞 {{ session.type }}{% else %}📚 {{ session.type }}{% endif %}
+                            </span>
+                        </td>
+                        <td>
+                            {% if session.duration != 'Unknown' %}
+                                <span style="color: #666;">{{ session.duration }} min</span>
+                            {% else %}
+                                <span style="color: #e74c3c;">Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if session.has_transcript %}
+                                <span style="color: #27ae60;">✅ Available</span>
+                            {% else %}
+                                <span style="color: #e74c3c;">❌ Not found</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if session.has_analysis %}
+                                <span style="color: #27ae60;">🤖 Complete</span>
+                            {% else %}
+                                <span style="color: #f39c12;">⏳ Pending</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <a href="{{ url_for('view_session_detail', student_id=student_id, session_file=session.file) }}" 
+                                   class="btn" 
+                                   style="padding: 6px 12px; font-size: 0.9rem;"
+                                   title="View Session Details">
+                                    👁️ View
+                                </a>
+                                {% if session.has_transcript %}
+                                <a href="{{ url_for('admin_file_view', path='../data/students/' + student_id + '/sessions/' + session.file.replace('_session.json', '_transcript.txt').replace('_summary.json', '_transcript.txt')) }}" 
+                                   class="btn" 
+                                   style="padding: 6px 12px; font-size: 0.9rem; background: #3498db;"
+                                   title="View Transcript">
+                                    📄 Transcript
+                                </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div style="text-align: center; padding: 3rem; color: #666;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">🕒</div>
+            <h3>No Sessions Found</h3>
+            <p>{{ student.name }} hasn't had any tutoring sessions yet.</p>
+            <p style="color: #666; font-size: 0.9rem;">Sessions will appear here after VAPI calls or manual session uploads.</p>
+        </div>
+    {% endif %}
+</div>
+
+{% if sessions %}
+<div class="card">
+    <h2>📊 Session Statistics</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <div style="font-size: 1.5rem; color: #3498db; margin-bottom: 0.5rem;">{{ sessions|length }}</div>
+            <div style="font-weight: 600;">Total Sessions</div>
+        </div>
+        
+        <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <div style="font-size: 1.5rem; color: #27ae60; margin-bottom: 0.5rem;">
+                {{ sessions|selectattr('type', 'equalto', 'VAPI Call')|list|length }}
+            </div>
+            <div style="font-weight: 600;">VAPI Calls</div>
+        </div>
+        
+        <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <div style="font-size: 1.5rem; color: #e67e22; margin-bottom: 0.5rem;">
+                {{ sessions|selectattr('has_analysis', 'equalto', true)|list|length }}
+            </div>
+            <div style="font-weight: 600;">Analyzed Sessions</div>
+        </div>
+        
+        <div style="text-align: center; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+            <div style="font-size: 1.5rem; color: #9b59b6; margin-bottom: 0.5rem;">
+                {{ sessions|selectattr('has_transcript', 'equalto', true)|list|length }}
+            </div>
+            <div style="font-weight: 600;">With Transcripts</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+function filterSessions() {
+    const searchInput = document.getElementById('searchInput').value.toLowerCase();
+    const typeFilter = document.getElementById('typeFilter').value;
+    const table = document.getElementById('sessionsTable');
+    const rows = table.getElementsByTagName('tr');
+    
+    for (let i = 1; i < rows.length; i++) { // Skip header row
+        const row = rows[i];
+        const type = row.getAttribute('data-type');
+        const date = row.getAttribute('data-date');
+        
+        const searchMatch = date.toLowerCase().includes(searchInput) || type.toLowerCase().includes(searchInput);
+        const typeMatch = typeFilter === '' || type === typeFilter;
+        
+        if (searchMatch && typeMatch) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    }
+}
+
+// Add smooth hover effects
+document.addEventListener('DOMContentLoaded', function() {
+    const rows = document.querySelectorAll('#sessionsTable tbody tr');
+    rows.forEach(row => {
+        row.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-2px)';
+            this.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+            this.style.transition = 'all 0.2s ease';
+        });
+        
+        row.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
+            this.style.boxShadow = 'none';
+        });
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ student.name }} - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / 
+    <a href="{{ url_for('admin_students') }}">👥 Students</a> / 
+    <a href="{{ url_for('admin_student_detail', student_id=student_id) }}">{{ student.name }}</a> /
+    <span>✏️ Edit</span>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1 style="color: #2c3e50;">Edit {{ student.name }}</h1>
+    <a href="{{ url_for('admin_student_detail', student_id=student_id) }}" class="btn" style="background: #95a5a6;">
+        ← Back to Student
+    </a>
+</div>
+
+<div class="card" style="max-width: 600px; margin: 0 auto;">
+    <form method="POST" style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <div>
+            <label for="name" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                Student Name *
+            </label>
+            <input type="text" 
+                   id="name" 
+                   name="name" 
+                   value="{{ student.name }}"
+                   required 
+                   placeholder="Enter student's full name"
+                   style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <label for="age" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                    Age *
+                </label>
+                <input type="number" 
+                       id="age" 
+                       name="age" 
+                       value="{{ student.age }}"
+                       required 
+                       min="5" 
+                       max="18" 
+                       placeholder="Age"
+                       style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+            </div>
+            
+            <div>
+                <label for="grade" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                    Grade Level *
+                </label>
+                <select id="grade" 
+                        name="grade" 
+                        required 
+                        style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                    <option value="">Select Grade</option>
+                    {% for grade_num in range(3, 13) %}
+                    <option value="{{ grade_num }}" {% if student.grade == grade_num %}selected{% endif %}>
+                        Grade {{ grade_num }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        
+        <div>
+            <label for="phone" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                Phone Number (Optional)
+            </label>
+            <input type="tel" 
+                   id="phone" 
+                   name="phone" 
+                   value="{{ phone or '' }}"
+                   placeholder="e.g., +30-123-456-7890"
+                   style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+            <small style="color: #666; font-size: 0.9rem;">
+                Phone number for VAPI call identification (optional)
+            </small>
+        </div>
+        
+        <div>
+            <label for="interests" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                Interests (Optional)
+            </label>
+            <input type="text" 
+                   id="interests" 
+                   name="interests" 
+                   value="{{ student.interests|join(', ') if student.interests else '' }}"
+                   placeholder="e.g., Math, Science, Art (comma-separated)"
+                   style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+            <small style="color: #666; font-size: 0.9rem;">
+                Separate multiple interests with commas
+            </small>
+        </div>
+        
+        <div style="border-top: 1px solid #eee; padding-top: 1.5rem;">
+            <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px; margin-bottom: 1rem;">
+                <h4 style="margin: 0 0 0.5rem 0; color: #666;">Student ID</h4>
+                <code style="background: #e9ecef; padding: 4px 8px; border-radius: 4px;">{{ student_id }}</code>
+                <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem; color: #666;">
+                    Student ID cannot be changed after creation
+                </p>
+            </div>
+        </div>
+        
+        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+            <a href="{{ url_for('admin_student_detail', student_id=student_id) }}" 
+               class="btn" 
+               style="background: #95a5a6; text-decoration: none;">
+                Cancel
+            </a>
+            <button type="submit" class="btn" style="background: #f39c12;">
+                💾 Save Changes
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+// Phone number formatting
+document.getElementById('phone').addEventListener('input', function() {
+    let value = this.value.replace(/\D/g, '');
+    if (value.length >= 10) {
+        if (value.startsWith('30')) {
+            // Greek number format
+            this.value = '+30-' + value.substring(2, 5) + '-' + value.substring(5, 8) + '-' + value.substring(8, 12);
+        } else {
+            // General format
+            this.value = value.substring(0, 3) + '-' + value.substring(3, 6) + '-' + value.substring(6, 10);
+        }
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}Session Details - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / 
+    <a href="{{ url_for('admin_students') }}">👥 Students</a> / 
+    <a href="{{ url_for('admin_student_detail', student_id=student_id) }}">Student</a> /
+    <a href="{{ url_for('view_student_sessions', student_id=student_id) }}">🕒 Sessions</a> /
+    <span>📄 {{ session_file }}</span>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1 style="color: #2c3e50;">Session Details</h1>
+    <a href="{{ url_for('view_student_sessions', student_id=student_id) }}" class="btn" style="background: #95a5a6;">
+        ← Back to Sessions
+    </a>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 300px; gap: 2rem; margin-bottom: 2rem;">
+    <div class="card">
+        <h2>📊 Session Information</h2>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <label style="font-weight: 600; color: #666;">Session File</label>
+                <p style="margin: 5px 0 15px 0; font-family: monospace; background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                    {{ session_file }}
+                </p>
+            </div>
+            
+            <div>
+                <label style="font-weight: 600; color: #666;">Session Type</label>
+                <p style="margin: 5px 0 15px 0;">
+                    <span style="background: {% if 'vapi' in session_file %}#e3f2fd{% else %}#f3e5f5{% endif %}; 
+                                 color: {% if 'vapi' in session_file %}#1976d2{% else %}#7b1fa2{% endif %}; 
+                                 padding: 6px 12px; border-radius: 12px;">
+                        {% if 'vapi' in session_file %}📞 VAPI Call{% else %}📚 Regular Session{% endif %}
+                    </span>
+                </p>
+            </div>
+            
+            {% if session_data.start_time %}
+            <div>
+                <label style="font-weight: 600; color: #666;">Start Time</label>
+                <p style="margin: 5px 0 15px 0;">{{ session_data.start_time.split('T')[0] }} {{ session_data.start_time.split('T')[1][:8] if 'T' in session_data.start_time else '' }}</p>
+            </div>
+            {% endif %}
+            
+            {% if session_data.duration_seconds or session_data.duration_minutes %}
+            <div>
+                <label style="font-weight: 600; color: #666;">Duration</label>
+                <p style="margin: 5px 0 15px 0;">
+                    {% if session_data.duration_minutes %}
+                        {{ session_data.duration_minutes }} minutes
+                    {% elif session_data.duration_seconds %}
+                        {{ session_data.duration_seconds // 60 }} minutes
+                    {% endif %}
+                </p>
+            </div>
+            {% endif %}
+            
+            {% if session_data.call_id %}
+            <div style="grid-column: 1 / -1;">
+                <label style="font-weight: 600; color: #666;">VAPI Call ID</label>
+                <p style="margin: 5px 0 15px 0; font-family: monospace; background: #f8f9fa; padding: 8px; border-radius: 4px;">
+                    {{ session_data.call_id }}
+                </p>
+            </div>
+            {% endif %}
+            
+            {% if session_data.phone_number %}
+            <div>
+                <label style="font-weight: 600; color: #666;">Phone Number</label>
+                <p style="margin: 5px 0 15px 0;">📱 {{ session_data.phone_number }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <div class="card">
+            <h3 style="margin-bottom: 1rem;">📋 Quick Actions</h3>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                {% if transcript %}
+                <button class="btn" onclick="scrollToTranscript()" style="background: #3498db;">
+                    📄 View Transcript
+                </button>
+                {% endif %}
+                
+                {% if analysis %}
+                <button class="btn" onclick="scrollToAnalysis()" style="background: #e67e22;">
+                    🤖 View AI Analysis
+                </button>
+                {% endif %}
+                
+                <button class="btn" onclick="downloadSessionData()" style="background: #27ae60;">
+                    📥 Download Data
+                </button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3 style="margin-bottom: 1rem;">📊 Data Summary</h3>
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <div style="display: flex; justify-content: space-between;">
+                    <span>Has Transcript:</span>
+                    <strong style="color: {% if transcript %}#27ae60{% else %}#e74c3c{% endif %};">
+                        {% if transcript %}✅ Yes{% else %}❌ No{% endif %}
+                    </strong>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span>AI Analysis:</span>
+                    <strong style="color: {% if analysis %}#27ae60{% else %}#e74c3c{% endif %};">
+                        {% if analysis %}✅ Complete{% else %}❌ Missing{% endif %}
+                    </strong>
+                </div>
+                {% if transcript %}
+                <div style="display: flex; justify-content: space-between;">
+                    <span>Transcript Size:</span>
+                    <strong>{{ transcript|length }} chars</strong>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if transcript %}
+<div class="card" id="transcript-section">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2>📄 Session Transcript</h2>
+        <button class="btn" onclick="copyTranscript()" style="background: #9b59b6;">
+            📋 Copy Transcript
+        </button>
+    </div>
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 4px; border-left: 4px solid #3498db;">
+        <pre id="transcript-content" style="white-space: pre-wrap; margin: 0; font-family: 'Courier New', monospace; line-height: 1.6;">{{ transcript }}</pre>
+    </div>
+</div>
+{% endif %}
+
+{% if analysis %}
+<div class="card" id="analysis-section">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2>🤖 AI Analysis Results</h2>
+        <button class="btn" onclick="copyAnalysis()" style="background: #e67e22;">
+            📋 Copy Analysis
+        </button>
+    </div>
+    
+    {% if analysis.learning_assessment %}
+    <div style="margin-bottom: 1.5rem;">
+        <h3 style="color: #2c3e50; margin-bottom: 1rem;">📚 Learning Assessment</h3>
+        <div style="background: #f0f9f0; padding: 1rem; border-radius: 4px; border-left: 4px solid #27ae60;">
+            <pre style="white-space: pre-wrap; margin: 0; line-height: 1.6;">{{ analysis.learning_assessment }}</pre>
+        </div>
+    </div>
+    {% endif %}
+    
+    {% if analysis.engagement_analysis %}
+    <div style="margin-bottom: 1.5rem;">
+        <h3 style="color: #2c3e50; margin-bottom: 1rem;">🎯 Engagement Analysis</h3>
+        <div style="background: #f9f0ff; padding: 1rem; border-radius: 4px; border-left: 4px solid #9b59b6;">
+            <pre style="white-space: pre-wrap; margin: 0; line-height: 1.6;">{{ analysis.engagement_analysis }}</pre>
+        </div>
+    </div>
+    {% endif %}
+    
+    {% if analysis.recommendations %}
+    <div style="margin-bottom: 1.5rem;">
+        <h3 style="color: #2c3e50; margin-bottom: 1rem;">💡 Recommendations</h3>
+        <div style="background: #fff9f0; padding: 1rem; border-radius: 4px; border-left: 4px solid #f39c12;">
+            <pre style="white-space: pre-wrap; margin: 0; line-height: 1.6;">{{ analysis.recommendations }}</pre>
+        </div>
+    </div>
+    {% endif %}
+    
+    {% if analysis.session_summary %}
+    <div style="margin-bottom: 1.5rem;">
+        <h3 style="color: #2c3e50; margin-bottom: 1rem;">📋 Session Summary</h3>
+        <div style="background: #f0f8ff; padding: 1rem; border-radius: 4px; border-left: 4px solid #3498db;">
+            <pre style="white-space: pre-wrap; margin: 0; line-height: 1.6;">{{ analysis.session_summary }}</pre>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>🔧 Raw Session Data</h2>
+    <details style="margin-top: 1rem;">
+        <summary style="cursor: pointer; font-weight: 600; padding: 8px 0;">
+            📊 Show Raw JSON Data
+        </summary>
+        <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px; margin-top: 1rem;">
+            <pre style="white-space: pre-wrap; margin: 0; font-family: 'Courier New', monospace; font-size: 0.9rem; line-height: 1.4;">{{ session_data | tojson(indent=2) }}</pre>
+        </div>
+    </details>
+</div>
+
+<script>
+function scrollToTranscript() {
+    document.getElementById('transcript-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+function scrollToAnalysis() {
+    document.getElementById('analysis-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+function copyTranscript() {
+    const content = document.getElementById('transcript-content').textContent;
+    navigator.clipboard.writeText(content).then(() => {
+        alert('Transcript copied to clipboard!');
+    });
+}
+
+function copyAnalysis() {
+    const analysisSection = document.getElementById('analysis-section');
+    const content = analysisSection.textContent;
+    navigator.clipboard.writeText(content).then(() => {
+        alert('Analysis copied to clipboard!');
+    });
+}
+
+function downloadSessionData() {
+    const data = {{ session_data | tojson }};
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '{{ session_file }}';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+</script>
+{% endblock %}

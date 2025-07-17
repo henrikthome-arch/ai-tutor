@@ -43,9 +43,9 @@
                                 {% endif %}
                             </td>
                             <td>
-                                <button class="btn btn-danger" 
+                                <button class="btn btn-danger"
                                         style="padding: 4px 8px; font-size: 0.8rem;"
-                                        onclick="alert('Remove mapping functionality coming in Phase 2!')">
+                                        onclick="removePhoneMapping('{{ phone }}')">
                                     🗑️ Remove
                                 </button>
                             </td>
@@ -63,7 +63,7 @@
         {% endif %}
         
         <div style="margin-top: 1rem; text-align: center;">
-            <button class="btn btn-success" onclick="alert('Add mapping functionality coming in Phase 2!')">
+            <button class="btn btn-success" onclick="addPhoneMapping()">
                 ➕ Add Phone Mapping
             </button>
         </div>
@@ -242,4 +242,59 @@
         </div>
     {% endif %}
 </div>
+
+<script>
+async function removePhoneMapping(phoneNumber) {
+    if (!confirm(`Are you sure you want to remove the phone mapping for ${phoneNumber}?`)) {
+        return;
+    }
+    
+    try {
+        const formData = new FormData();
+        formData.append('phone_number', phoneNumber);
+        
+        const response = await fetch('/admin/phone-mappings/remove', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (response.ok) {
+            location.reload(); // Refresh the page to show changes
+        } else {
+            const error = await response.json();
+            alert(`Error: ${error.error || 'Failed to remove phone mapping'}`);
+        }
+    } catch (error) {
+        alert(`Error: ${error.message}`);
+    }
+}
+
+async function addPhoneMapping() {
+    const phoneNumber = prompt('Enter phone number (e.g., +30-123-456-7890):');
+    if (!phoneNumber) return;
+    
+    const studentId = prompt('Enter student ID:');
+    if (!studentId) return;
+    
+    try {
+        const formData = new FormData();
+        formData.append('phone_number', phoneNumber);
+        formData.append('student_id', studentId);
+        
+        const response = await fetch('/admin/phone-mappings/add', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (response.ok) {
+            location.reload(); // Refresh the page to show changes
+        } else {
+            const error = await response.json();
+            alert(`Error: ${error.error || 'Failed to add phone mapping'}`);
+        }
+    } catch (error) {
+        alert(`Error: ${error.message}`);
+    }
+}
+</script>
 {% endblock %}

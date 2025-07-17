@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Add Student - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / 
+    <a href="{{ url_for('admin_students') }}">👥 Students</a> / 
+    <span>➕ Add Student</span>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1 style="color: #2c3e50;">Add New Student</h1>
+    <a href="{{ url_for('admin_students') }}" class="btn" style="background: #95a5a6;">
+        ← Back to Students
+    </a>
+</div>
+
+<div class="card" style="max-width: 600px; margin: 0 auto;">
+    <form method="POST" style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <div>
+            <label for="name" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                Student Name *
+            </label>
+            <input type="text" 
+                   id="name" 
+                   name="name" 
+                   required 
+                   placeholder="Enter student's full name"
+                   style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <label for="age" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                    Age *
+                </label>
+                <input type="number" 
+                       id="age" 
+                       name="age" 
+                       required 
+                       min="5" 
+                       max="18" 
+                       placeholder="Age"
+                       style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+            </div>
+            
+            <div>
+                <label for="grade" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                    Grade Level *
+                </label>
+                <select id="grade" 
+                        name="grade" 
+                        required 
+                        style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                    <option value="">Select Grade</option>
+                    <option value="3">Grade 3</option>
+                    <option value="4">Grade 4</option>
+                    <option value="5">Grade 5</option>
+                    <option value="6">Grade 6</option>
+                    <option value="7">Grade 7</option>
+                    <option value="8">Grade 8</option>
+                    <option value="9">Grade 9</option>
+                    <option value="10">Grade 10</option>
+                    <option value="11">Grade 11</option>
+                    <option value="12">Grade 12</option>
+                </select>
+            </div>
+        </div>
+        
+        <div>
+            <label for="phone" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                Phone Number (Optional)
+            </label>
+            <input type="tel" 
+                   id="phone" 
+                   name="phone" 
+                   placeholder="e.g., +30-123-456-7890"
+                   style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+            <small style="color: #666; font-size: 0.9rem;">
+                Phone number for VAPI call identification (optional)
+            </small>
+        </div>
+        
+        <div>
+            <label for="interests" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                Interests (Optional)
+            </label>
+            <input type="text" 
+                   id="interests" 
+                   name="interests" 
+                   placeholder="e.g., Math, Science, Art (comma-separated)"
+                   style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+            <small style="color: #666; font-size: 0.9rem;">
+                Separate multiple interests with commas
+            </small>
+        </div>
+        
+        <div style="border-top: 1px solid #eee; padding-top: 1.5rem; display: flex; gap: 1rem; justify-content: flex-end;">
+            <a href="{{ url_for('admin_students') }}" 
+               class="btn" 
+               style="background: #95a5a6; text-decoration: none;">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-success">
+                ➕ Add Student
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+// Auto-generate student ID preview
+document.getElementById('name').addEventListener('input', function() {
+    const name = this.value.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const preview = document.getElementById('id-preview');
+    if (preview) {
+        preview.textContent = name || 'student_id_preview';
+    }
+});
+
+// Phone number formatting
+document.getElementById('phone').addEventListener('input', function() {
+    let value = this.value.replace(/\D/g, '');
+    if (value.length >= 10) {
+        if (value.startsWith('30')) {
+            // Greek number format
+            this.value = '+30-' + value.substring(2, 5) + '-' + value.substring(5, 8) + '-' + value.substring(8, 12);
+        } else {
+            // General format
+            this.value = value.substring(0, 3) + '-' + value.substring(3, 6) + '-' + value.substring(6, 10);
+        }
+    }
+});
+</script>
+{% endblock %}
