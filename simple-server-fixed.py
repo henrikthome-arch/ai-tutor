@@ -28,6 +28,15 @@ class TutorDataHandler(BaseHTTPRequestHandler):
                 self.send_json_response({'status': 'healthy', 'server': 'Python AI Tutor Server'})
             elif parsed_path.path == '/mcp/tools':
                 self.send_tools_manifest()
+            elif parsed_path.path == '/mcp/get-student-context':
+                # Handle GET with query parameters
+                from urllib.parse import parse_qs
+                query_params = parse_qs(parsed_path.query)
+                student_id = query_params.get('student_id', [None])[0]
+                if student_id:
+                    self.handle_get_student_context({'student_id': student_id})
+                else:
+                    self.send_error(400, "student_id parameter is required")
             else:
                 self.send_error(404, "Endpoint not found")
         except Exception as e:
