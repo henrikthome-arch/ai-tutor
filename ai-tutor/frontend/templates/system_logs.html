@@ -121,11 +121,16 @@
                     </td>
                     <td>
                         {% if log.data %}
-                        <button onclick="toggleData('{{ loop.index }}')" class="btn-sm" style="font-size: 12px; padding: 4px 8px;">
-                            📋 Data
-                        </button>
+                        <div style="display: flex; gap: 4px; flex-direction: column;">
+                            <button onclick="toggleData('{{ loop.index }}')" class="btn-sm" style="font-size: 12px; padding: 4px 8px;">
+                                📋 Data
+                            </button>
+                            <button onclick="copyLogData('{{ loop.index }}')" class="btn-sm" style="font-size: 12px; padding: 4px 8px; background: #28a745;">
+                                📋 Copy
+                            </button>
+                        </div>
                         <div id="data-{{ loop.index }}" class="log-data" style="display: none; margin-top: 0.5rem;">
-                            <pre style="background: #f8f9fa; padding: 0.5rem; border-radius: 4px; font-size: 11px; max-height: 200px; overflow-y: auto;">{{ log.data | tojson(indent=2) }}</pre>
+                            <pre id="data-content-{{ loop.index }}" style="background: #f8f9fa; padding: 0.5rem; border-radius: 4px; font-size: 11px; max-height: 200px; overflow-y: auto;">{{ log.data | tojson(indent=2) }}</pre>
                         </div>
                         {% else %}
                         <span style="color: #999;">—</span>
@@ -257,6 +262,35 @@ function toggleData(index) {
         dataDiv.style.display = 'block';
     } else {
         dataDiv.style.display = 'none';
+    }
+}
+
+function copyLogData(index) {
+    const dataContent = document.getElementById('data-content-' + index);
+    if (dataContent) {
+        try {
+            const text = dataContent.textContent || dataContent.innerText || '';
+            navigator.clipboard.writeText(text).then(function() {
+                // Visual feedback
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = '✅ Copied!';
+                button.style.background = '#28a745';
+                
+                setTimeout(function() {
+                    button.textContent = originalText;
+                    button.style.background = '#28a745';
+                }, 2000);
+            }).catch(function(err) {
+                console.error('Failed to copy to clipboard: ', err);
+                alert('Failed to copy to clipboard: ' + err.message);
+            });
+        } catch (err) {
+            console.error('Failed to copy to clipboard: ', err);
+            alert('Failed to copy to clipboard: ' + err.message);
+        }
+    } else {
+        alert('No data content found to copy');
     }
 }
 
