@@ -1019,8 +1019,7 @@ def verify_vapi_signature(payload_body, signature, headers_info):
                    ip_address=request.remote_addr,
                    signature_provided=bool(signature),
                    payload_size=len(payload_body),
-                   headers_info=headers_info,
-                   level='WARNING')
+                   headers_info=headers_info)
         return True
     
     # If no signature provided, allow but log warning (VAPI may not be configured to send signatures)
@@ -1029,8 +1028,7 @@ def verify_vapi_signature(payload_body, signature, headers_info):
                    ip_address=request.remote_addr,
                    signature_provided=False,
                    payload_size=len(payload_body),
-                   headers_info=headers_info,
-                   level='WARNING')
+                   headers_info=headers_info)
         return True
     
     try:
@@ -1076,12 +1074,18 @@ def vapi_webhook():
         
         # Parse the webhook data
         data = request.get_json()
+        if not data:
+            log_webhook('INVALID_PAYLOAD', 'VAPI webhook received empty or invalid payload',
+                       ip_address=request.remote_addr,
+                       payload_size=len(payload))
+            return jsonify({'error': 'Invalid payload'}), 400
+        
         message = data.get('message', {})
         message_type = message.get('type')
         
-        log_webhook(message_type, f"VAPI webhook received: {message_type}",
+        log_webhook('conversation-update', f"VAPI webhook received: {message_type}",
                    ip_address=request.remote_addr,
-                   call_id=message.get('call', {}).get('id'),
+                   call_id=message.get('call', {}).get('id') if isinstance(message, dict) else None,
                    payload_size=len(payload))
         print(f"📞 VAPI webhook received: {message_type}")
         
@@ -1092,8 +1096,7 @@ def vapi_webhook():
         elif message_type == 'status-update':
             handle_status_update(message)
         else:
-            log_webhook('UNHANDLED_EVENT', f"Unhandled VAPI event: {message_type}",
-                       event_type=message_type)
+            log_webhook('UNHANDLED_EVENT', f"Unhandled VAPI event: {message_type}")
             print(f"📝 Unhandled VAPI event: {message_type}")
         
         return jsonify({'status': 'ok'}), 200
@@ -1129,6 +1132,17 @@ def handle_status_update(message):
 def handle_end_of_call(message):
     """Handle complete call transcript from VAPI and trigger AI analysis"""
     try:
+        # Handle case where message might be a string or dict
+        if isinstance(message, str):
+            log_error('WEBHOOK', f"handle_end_of_call received string instead of dict: {message}",
+                     ValueError("Expected dict, got string"))
+            return
+        
+        if not isinstance(message, dict):
+            log_error('WEBHOOK', f"handle_end_of_call received invalid type: {type(message)}",
+                     ValueError(f"Expected dict, got {type(message)}"))
+            return
+        
         call_info = message.get('call', {})
         call_id = call_info.get('id')
         assistant_id = call_info.get('assistantId')
