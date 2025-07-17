@@ -1080,8 +1080,18 @@ def vapi_webhook():
                        payload_size=len(payload))
             return jsonify({'error': 'Invalid payload'}), 400
         
+        # Debug logging to see the actual webhook structure
+        log_webhook('webhook-structure-debug', f"Webhook data keys: {list(data.keys()) if isinstance(data, dict) else 'not-dict'}",
+                   data_type=type(data).__name__,
+                   data_preview=str(data)[:500])
+        
         message = data.get('message', {})
         message_type = message.get('type')
+        
+        # More debug logging
+        log_webhook('message-structure-debug', f"Message type: {type(message).__name__}, message_type: {message_type}",
+                   message_keys=list(message.keys()) if isinstance(message, dict) else 'not-dict',
+                   message_preview=str(message)[:200])
         
         log_webhook(message_type or 'unknown-event', f"VAPI webhook received: {message_type}",
                    ip_address=request.remote_addr,
@@ -1094,6 +1104,10 @@ def vapi_webhook():
         elif message_type == 'conversation-update':
             handle_conversation_update(message)
         elif message_type == 'end-of-call-report':
+            # Debug logging to see what we're actually getting
+            log_webhook('end-of-call-debug', f"End-of-call message type: {type(message)}, content preview: {str(message)[:200]}",
+                       call_id=message.get('call', {}).get('id') if isinstance(message, dict) else 'unknown',
+                       message_type_received=type(message).__name__)
             handle_end_of_call(message)
         elif message_type == 'status-update':
             handle_status_update(message)
