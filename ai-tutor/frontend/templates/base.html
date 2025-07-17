@@ -255,9 +255,13 @@
                    class="{% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
                    📊 Dashboard
                 </a>
-                <a href="{{ url_for('admin_students') }}" 
+                <a href="{{ url_for('admin_students') }}"
                    class="{% if request.endpoint in ['admin_students', 'admin_student_detail'] %}active{% endif %}">
                    👥 Students
+                </a>
+                <a href="{{ url_for('admin_all_sessions') }}"
+                   class="{% if request.endpoint in ['admin_all_sessions', 'view_student_sessions', 'view_session_detail'] %}active{% endif %}">
+                   🕒 Sessions
                 </a>
                 <a href="{{ url_for('admin_files') }}"
                    class="{% if request.endpoint in ['admin_files', 'admin_file_view'] %}active{% endif %}">

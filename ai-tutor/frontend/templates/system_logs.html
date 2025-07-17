@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block title %}System Logs - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>📋 System Logs</h2>
+    <p>Comprehensive system activity monitoring and log management</p>
+    
+    <!-- Log Statistics -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>{{ log_stats.total_log_entries or 0 }}</h3>
+            <p>Total Log Entries</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ log_stats.total_log_files or 0 }}</h3>
+            <p>Log Files</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ ((log_stats.total_size_bytes or 0) / 1024) | round(1) }} KB</h3>
+            <p>Total Log Size</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ log_stats.oldest_log_date or 'N/A' }}</h3>
+            <p>Oldest Log</p>
+        </div>
+    </div>
+    
+    <!-- Filter Controls -->
+    <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+        <form method="GET" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+            <div>
+                <label for="days" style="margin-right: 0.5rem; font-weight: 500;">Last Days:</label>
+                <select name="days" id="days" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="1" {% if current_filters.days == 1 %}selected{% endif %}>Last 24 hours</option>
+                    <option value="3" {% if current_filters.days == 3 %}selected{% endif %}>Last 3 days</option>
+                    <option value="7" {% if current_filters.days == 7 %}selected{% endif %}>Last 7 days</option>
+                    <option value="14" {% if current_filters.days == 14 %}selected{% endif %}>Last 14 days</option>
+                    <option value="30" {% if current_filters.days == 30 %}selected{% endif %}>Last 30 days</option>
+                </select>
+            </div>
+            <div>
+                <label for="category" style="margin-right: 0.5rem; font-weight: 500;">Category:</label>
+                <select name="category" id="category" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="">All Categories</option>
+                    {% for cat in available_categories %}
+                    <option value="{{ cat }}" {% if current_filters.category == cat %}selected{% endif %}>{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="level" style="margin-right: 0.5rem; font-weight: 500;">Level:</label>
+                <select name="level" id="level" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="">All Levels</option>
+                    {% for lvl in available_levels %}
+                    <option value="{{ lvl }}" {% if current_filters.level == lvl %}selected{% endif %}>{{ lvl }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn">Apply Filters</button>
+            <button type="button" onclick="clearFilters()" class="btn" style="background: #95a5a6;">Clear</button>
+            <button type="button" onclick="manualCleanup()" class="btn btn-danger" style="margin-left: auto;">🧹 Cleanup Old Logs</button>
+        </form>
+    </div>
+    
+    <!-- Category & Level Statistics -->
+    {% if log_stats.categories or log_stats.levels %}
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+        <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">
+            <h4>Categories</h4>
+            {% for category, count in log_stats.categories.items() %}
+            <div style="display: flex; justify-content: space-between; margin: 0.25rem 0;">
+                <span class="category-{{ category.lower() }}">{{ category }}</span>
+                <span><strong>{{ count }}</strong></span>
+            </div>
+            {% endfor %}
+        </div>
+        <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">
+            <h4>Log Levels</h4>
+            {% for level, count in log_stats.levels.items() %}
+            <div style="display: flex; justify-content: space-between; margin: 0.25rem 0;">
+                <span class="level-{{ level.lower() }}">{{ level }}</span>
+                <span><strong>{{ count }}</strong></span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Logs Table -->
+    {% if logs %}
+    <div style="overflow-x: auto;">
+        <table class="table" id="logs-table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Level</th>
+                    <th>Category</th>
+                    <th>Message</th>
+                    <th>Data</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr class="log-row level-{{ log.level.lower() }}">
+                    <td>
+                        <div style="font-size: 0.9rem;">
+                            <strong>{{ log.date }}</strong><br>
+                            <span style="color: #666;">{{ log.time }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="log-level level-{{ log.level.lower() }}">{{ log.level }}</span>
+                    </td>
+                    <td>
+                        <span class="log-category category-{{ log.category.lower() }}">{{ log.category }}</span>
+                    </td>
+                    <td>
+                        <div class="log-message">{{ log.message }}</div>
+                    </td>
+                    <td>
+                        {% if log.data %}
+                        <button onclick="toggleData('{{ loop.index }}')" class="btn-sm" style="font-size: 12px; padding: 4px 8px;">
+                            📋 Data
+                        </button>
+                        <div id="data-{{ loop.index }}" class="log-data" style="display: none; margin-top: 0.5rem;">
+                            <pre style="background: #f8f9fa; padding: 0.5rem; border-radius: 4px; font-size: 11px; max-height: 200px; overflow-y: auto;">{{ log.data | tojson(indent=2) }}</pre>
+                        </div>
+                        {% else %}
+                        <span style="color: #999;">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <div style="margin-top: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 4px; text-align: center;">
+        <p><strong>Showing {{ logs|length }} log entries</strong></p>
+        <p style="color: #666; margin-top: 0.5rem;">
+            Filters: {{ current_filters.days }} days | 
+            {% if current_filters.category %}{{ current_filters.category }}{% else %}All categories{% endif %} | 
+            {% if current_filters.level %}{{ current_filters.level }}{% else %}All levels{% endif %}
+        </p>
+    </div>
+    
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: #666;">
+        <h3>No Logs Found</h3>
+        <p>No system logs match the current filters.</p>
+        <p>Try adjusting the time range or clearing filters.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Quick Actions -->
+<div class="card">
+    <h3>Log Management</h3>
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <a href="{{ url_for('admin_system') }}" class="btn">⚙️ System Settings</a>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn">📊 Dashboard</a>
+        <a href="{{ url_for('admin_files') }}" class="btn">📁 Browse Files</a>
+        <button onclick="refreshLogs()" class="btn">🔄 Refresh</button>
+    </div>
+</div>
+
+<style>
+/* Log Level Styling */
+.log-level {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.level-debug { background-color: #6c757d; color: white; }
+.level-info { background-color: #17a2b8; color: white; }
+.level-warning { background-color: #ffc107; color: #212529; }
+.level-error { background-color: #dc3545; color: white; }
+
+/* Category Styling */
+.log-category {
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.category-system { background-color: #e9ecef; color: #495057; }
+.category-webhook { background-color: #d4edda; color: #155724; }
+.category-ai_analysis { background-color: #cce5ff; color: #004085; }
+.category-admin { background-color: #fff3cd; color: #856404; }
+
+/* Log Message */
+.log-message {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+    max-width: 400px;
+    word-wrap: break-word;
+}
+
+/* Row highlighting based on level */
+.log-row.level-error {
+    background-color: #fff5f5;
+    border-left: 4px solid #dc3545;
+}
+
+.log-row.level-warning {
+    background-color: #fffbf0;
+    border-left: 4px solid #ffc107;
+}
+
+.btn-sm {
+    font-size: 12px;
+    padding: 4px 8px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.btn-sm:hover {
+    background: #545b62;
+}
+
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .table th,
+    .table td {
+        font-size: 12px;
+        padding: 6px;
+    }
+    
+    .table th:nth-child(5),
+    .table td:nth-child(5) {
+        display: none;
+    }
+    
+    .log-message {
+        max-width: 200px;
+    }
+}
+</style>
+
+<script>
+function toggleData(index) {
+    const dataDiv = document.getElementById('data-' + index);
+    if (dataDiv.style.display === 'none') {
+        dataDiv.style.display = 'block';
+    } else {
+        dataDiv.style.display = 'none';
+    }
+}
+
+function clearFilters() {
+    window.location.href = '{{ url_for("admin_system_logs") }}';
+}
+
+function refreshLogs() {
+    window.location.reload();
+}
+
+function manualCleanup() {
+    if (!confirm('Are you sure you want to cleanup old log files? This will permanently delete logs older than 30 days.')) {
+        return;
+    }
+    
+    fetch('{{ url_for("cleanup_system_logs") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Cleanup completed: ' + data.stats.deleted_files + ' files deleted (' + Math.round(data.stats.deleted_bytes / 1024) + ' KB freed)');
+            window.location.reload();
+        } else {
+            alert('Cleanup failed: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Cleanup failed: ' + error);
+    });
+}
+
+// Auto-refresh every 30 seconds if on INFO or higher levels
+if (window.location.search.includes('level=') || window.location.search === '') {
+    const pageLoadTime = Date.now();
+    setInterval(function() {
+        const currentTime = new Date().getTime();
+        
+        // Only auto-refresh if page has been open for more than 30 seconds
+        if (currentTime - pageLoadTime > 30000) {
+            // Add a small indicator that we're refreshing
+            document.title = '🔄 ' + document.title.replace('🔄 ', '');
+            window.location.reload();
+        }
+    }, 30000);
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('System Logs page loaded with {{ logs|length }} log entries');
+});
+</script>
+{% endblock %}

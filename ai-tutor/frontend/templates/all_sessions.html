@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}All Sessions - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>🕒 All Sessions Overview</h2>
+    <p>Comprehensive view of all student sessions across the platform</p>
+    
+    <!-- Session Statistics -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>{{ session_stats.total_sessions }}</h3>
+            <p>Total Sessions</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ session_stats.total_students }}</h3>
+            <p>Active Students</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ session_stats.vapi_sessions }}</h3>
+            <p>VAPI Calls</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ session_stats.with_analysis }}</h3>
+            <p>With AI Analysis</p>
+        </div>
+    </div>
+    
+    <!-- Filter Controls -->
+    <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+            <div>
+                <label for="search-input" style="margin-right: 0.5rem; font-weight: 500;">Search:</label>
+                <input type="text" id="search-input" placeholder="Student name, date, or type..." 
+                       style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; width: 200px;">
+            </div>
+            <div>
+                <label for="type-filter" style="margin-right: 0.5rem; font-weight: 500;">Type:</label>
+                <select id="type-filter" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="">All Types</option>
+                    <option value="VAPI Call">VAPI Calls</option>
+                    <option value="Regular Session">Regular Sessions</option>
+                </select>
+            </div>
+            <div>
+                <label for="analysis-filter" style="margin-right: 0.5rem; font-weight: 500;">Analysis:</label>
+                <select id="analysis-filter" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="">All Sessions</option>
+                    <option value="yes">With Analysis</option>
+                    <option value="no">Without Analysis</option>
+                </select>
+            </div>
+            <button onclick="clearFilters()" class="btn" style="margin-left: auto;">Clear Filters</button>
+        </div>
+    </div>
+    
+    <!-- Sessions Table -->
+    {% if sessions %}
+    <div style="overflow-x: auto;">
+        <table class="table" id="sessions-table">
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Grade</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Duration</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for session in sessions %}
+                <tr class="session-row" 
+                    data-student="{{ session.student_name|lower }}"
+                    data-type="{{ session.type }}"
+                    data-date="{{ session.date }}"
+                    data-analysis="{{ 'yes' if session.has_analysis else 'no' }}">
+                    <td>
+                        <strong>{{ session.student_name }}</strong><br>
+                        <small style="color: #666;">{{ session.student_id }}</small>
+                    </td>
+                    <td>{{ session.student_grade }}</td>
+                    <td>{{ session.date }}</td>
+                    <td>{{ session.time if session.time else 'N/A' }}</td>
+                    <td>
+                        {% if session.duration != 'Unknown' %}
+                            {{ session.duration }} min
+                        {% else %}
+                            Unknown
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {% if session.type == 'VAPI Call' %}badge-primary{% else %}badge-secondary{% endif %}">
+                            {{ session.type }}
+                        </span>
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            {% if session.has_transcript %}
+                                <span title="Has Transcript" style="color: #27ae60;">📄</span>
+                            {% endif %}
+                            {% if session.has_analysis %}
+                                <span title="Has AI Analysis" style="color: #3498db;">🤖</span>
+                            {% endif %}
+                            {% if not session.has_transcript and not session.has_analysis %}
+                                <span style="color: #95a5a6;">—</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <a href="{{ url_for('view_session_detail', student_id=session.student_id, session_file=session.file) }}" 
+                               class="btn btn-sm" style="font-size: 12px; padding: 5px 10px;">
+                                View
+                            </a>
+                            <a href="{{ url_for('admin_student_detail', student_id=session.student_id) }}" 
+                               class="btn btn-sm" style="font-size: 12px; padding: 5px 10px; background: #95a5a6;">
+                                Student
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <div style="margin-top: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 4px; text-align: center;">
+        <p><strong>Showing <span id="visible-count">{{ sessions|length }}</span> of {{ sessions|length }} sessions</strong></p>
+        <p style="color: #666; margin-top: 0.5rem;">
+            📄 = Has Transcript | 🤖 = Has AI Analysis
+        </p>
+    </div>
+    
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: #666;">
+        <h3>No Sessions Found</h3>
+        <p>No student sessions have been recorded yet.</p>
+        <p>Sessions will appear here after students complete tutoring calls or assessments.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Quick Actions -->
+<div class="card">
+    <h3>Quick Actions</h3>
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <a href="{{ url_for('admin_students') }}" class="btn">👥 Manage Students</a>
+        <a href="{{ url_for('ai_analysis_dashboard') }}" class="btn">🤖 AI Analysis Dashboard</a>
+        <a href="{{ url_for('admin_files') }}" class="btn">📁 Browse Files</a>
+        <a href="{{ url_for('admin_system') }}" class="btn">⚙️ System Settings</a>
+    </div>
+</div>
+
+<style>
+.badge {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: white;
+}
+
+.badge-primary {
+    background-color: #3498db;
+}
+
+.badge-secondary {
+    background-color: #95a5a6;
+}
+
+.btn-sm {
+    font-size: 12px;
+    padding: 5px 10px;
+}
+
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .table th,
+    .table td {
+        font-size: 14px;
+        padding: 8px;
+    }
+    
+    .table th:nth-child(2),
+    .table td:nth-child(2),
+    .table th:nth-child(4),
+    .table td:nth-child(4) {
+        display: none;
+    }
+}
+</style>
+
+<script>
+// Search and filter functionality
+function filterSessions() {
+    const searchValue = document.getElementById('search-input').value.toLowerCase();
+    const typeFilter = document.getElementById('type-filter').value;
+    const analysisFilter = document.getElementById('analysis-filter').value;
+    
+    const rows = document.querySelectorAll('.session-row');
+    let visibleCount = 0;
+    
+    rows.forEach(row => {
+        const studentName = row.dataset.student;
+        const sessionType = row.dataset.type;
+        const sessionDate = row.dataset.date;
+        const hasAnalysis = row.dataset.analysis;
+        
+        // Check search term
+        const matchesSearch = !searchValue || 
+            studentName.includes(searchValue) || 
+            sessionDate.includes(searchValue) || 
+            sessionType.toLowerCase().includes(searchValue);
+        
+        // Check type filter
+        const matchesType = !typeFilter || sessionType === typeFilter;
+        
+        // Check analysis filter
+        const matchesAnalysis = !analysisFilter || hasAnalysis === analysisFilter;
+        
+        const shouldShow = matchesSearch && matchesType && matchesAnalysis;
+        
+        if (shouldShow) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    
+    // Update visible count
+    document.getElementById('visible-count').textContent = visibleCount;
+}
+
+function clearFilters() {
+    document.getElementById('search-input').value = '';
+    document.getElementById('type-filter').value = '';
+    document.getElementById('analysis-filter').value = '';
+    filterSessions();
+}
+
+// Add event listeners
+document.getElementById('search-input').addEventListener('input', filterSessions);
+document.getElementById('type-filter').addEventListener('change', filterSessions);
+document.getElementById('analysis-filter').addEventListener('change', filterSessions);
+
+// Initialize table sorting (basic)
+document.addEventListener('DOMContentLoaded', function() {
+    // Add sorting functionality if needed
+    console.log('All Sessions page loaded with {{ sessions|length }} sessions');
+});
+</script>
+{% endblock %}

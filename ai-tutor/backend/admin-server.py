@@ -33,6 +33,9 @@ spec.loader.exec_module(session_enhanced_server)
 PhoneMappingManager = session_enhanced_server.PhoneMappingManager
 SessionTracker = session_enhanced_server.SessionTracker
 
+# Import System Logger
+from system_logger import system_logger, log_admin_action, log_webhook, log_ai_analysis, log_error, log_system
+
 # Import AI POC components
 try:
     from ai_poc.session_processor import session_processor
@@ -76,6 +79,13 @@ if FLASK_ENV == 'development':
 # Initialize managers
 phone_manager = PhoneMappingManager()
 session_tracker = SessionTracker()
+
+# Log system startup
+log_system("AI Tutor Admin Dashboard starting up",
+          flask_env=FLASK_ENV,
+          admin_username=ADMIN_USERNAME,
+          has_vapi_secret=VAPI_SECRET != 'your_vapi_secret_here',
+          ai_poc_available=AI_POC_AVAILABLE)
 
 def check_auth():
     """Check if user is authenticated"""
@@ -210,15 +220,24 @@ def admin_login():
         if password_hash == ADMIN_PASSWORD_HASH:
             session['admin_logged_in'] = True
             session['admin_username'] = 'admin'
+            log_admin_action('login', 'admin',
+                           ip_address=request.remote_addr,
+                           user_agent=request.headers.get('User-Agent', 'Unknown'))
             flash('Successfully logged in!', 'success')
             return redirect(url_for('admin_dashboard'))
         else:
+            log_admin_action('failed_login', 'admin',
+                           ip_address=request.remote_addr,
+                           user_agent=request.headers.get('User-Agent', 'Unknown'),
+                           level='WARNING')
             flash('Invalid username or password', 'error')
     
     return render_template('login.html')
 
 @app.route('/admin/logout')
 def admin_logout():
+    log_admin_action('logout', session.get('admin_username', 'unknown'),
+                    ip_address=request.remote_addr)
     session.clear()
     flash('Successfully logged out!', 'success')
     return redirect(url_for('admin_login'))
@@ -616,6 +635,74 @@ def edit_student(student_id):
                          student_id=student_id,
                          phone=phone)
 
+# All Sessions Overview Route
+@app.route('/admin/sessions')
+def admin_all_sessions():
+    """View all sessions across all students"""
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    # Get all students and their sessions
+    all_sessions = []
+    students = get_all_students()
+    
+    for student in students:
+        student_id = student['id']
+        sessions_dir = f'../data/students/{student_id}/sessions'
+        
+        if os.path.exists(sessions_dir):
+            for file in os.listdir(sessions_dir):
+                if file.endswith('_session.json') or file.endswith('_summary.json'):
+                    file_path = os.path.join(sessions_dir, file)
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        
+                        # Check if there's a corresponding transcript
+                        transcript_file = file.replace('_session.json', '_transcript.txt').replace('_summary.json', '_transcript.txt')
+                        transcript_path = os.path.join(sessions_dir, transcript_file)
+                        has_transcript = os.path.exists(transcript_path)
+                        
+                        # Check if there's a corresponding AI analysis
+                        analysis_file = file.replace('_session.json', '_ai_analysis.json').replace('_summary.json', '_ai_analysis.json')
+                        analysis_path = os.path.join(sessions_dir, analysis_file)
+                        has_analysis = os.path.exists(analysis_path)
+                        
+                        session_info = {
+                            'student_id': student_id,
+                            'student_name': student['name'],
+                            'student_grade': student['grade'],
+                            'file': file,
+                            'date': data.get('start_time', '').split('T')[0] if data.get('start_time') else 'Unknown',
+                            'time': data.get('start_time', '').split('T')[1][:8] if data.get('start_time') and 'T' in data.get('start_time', '') else '',
+                            'duration': data.get('duration_minutes', data.get('duration_seconds', 0) // 60 if data.get('duration_seconds') else 'Unknown'),
+                            'type': 'VAPI Call' if 'vapi' in file else 'Regular Session',
+                            'has_transcript': has_transcript,
+                            'has_analysis': has_analysis,
+                            'data': data
+                        }
+                        all_sessions.append(session_info)
+                        
+                    except Exception as e:
+                        print(f"Error loading session file {file} for student {student_id}: {e}")
+    
+    # Sort by date and time (newest first)
+    all_sessions.sort(key=lambda x: (x['date'], x['time']), reverse=True)
+    
+    # Calculate session statistics
+    session_stats = {
+        'total_sessions': len(all_sessions),
+        'vapi_sessions': len([s for s in all_sessions if s['type'] == 'VAPI Call']),
+        'regular_sessions': len([s for s in all_sessions if s['type'] == 'Regular Session']),
+        'with_transcripts': len([s for s in all_sessions if s['has_transcript']]),
+        'with_analysis': len([s for s in all_sessions if s['has_analysis']]),
+        'total_students': len(students)
+    }
+    
+    return render_template('all_sessions.html',
+                         sessions=all_sessions,
+                         session_stats=session_stats)
+
 # Session and Assessment Viewer
 @app.route('/admin/students/<student_id>/sessions')
 def view_student_sessions(student_id):
@@ -890,6 +977,10 @@ def vapi_webhook():
         
         # Verify signature
         if not verify_vapi_signature(payload, signature):
+            log_webhook('SECURITY_FAILURE', 'VAPI webhook signature verification failed',
+                       ip_address=request.remote_addr,
+                       signature_provided=bool(signature),
+                       payload_size=len(payload))
             print(f"🚨 VAPI webhook signature verification failed")
             return jsonify({'error': 'Invalid signature'}), 401
         
@@ -898,6 +989,10 @@ def vapi_webhook():
         message = data.get('message', {})
         message_type = message.get('type')
         
+        log_webhook(message_type, f"VAPI webhook received: {message_type}",
+                   ip_address=request.remote_addr,
+                   call_id=message.get('call', {}).get('id'),
+                   payload_size=len(payload))
         print(f"📞 VAPI webhook received: {message_type}")
         
         if message_type == 'speech-update':
@@ -907,11 +1002,16 @@ def vapi_webhook():
         elif message_type == 'status-update':
             handle_status_update(message)
         else:
+            log_webhook('UNHANDLED_EVENT', f"Unhandled VAPI event: {message_type}",
+                       event_type=message_type)
             print(f"📝 Unhandled VAPI event: {message_type}")
         
         return jsonify({'status': 'ok'}), 200
         
     except Exception as e:
+        log_error('WEBHOOK', f"VAPI webhook error: {str(e)}", e,
+                 ip_address=request.remote_addr,
+                 payload_size=len(payload) if 'payload' in locals() else 0)
         print(f"❌ VAPI webhook error: {e}")
         return jsonify({'error': str(e)}), 500
 
@@ -950,6 +1050,13 @@ def handle_end_of_call(message):
         user_transcript = transcript_data.get('user', '')
         assistant_transcript = transcript_data.get('assistant', '')
         
+        log_webhook('end-of-call-report', f"Processing end of call {call_id}",
+                   call_id=call_id,
+                   phone=customer_phone,
+                   duration_seconds=duration,
+                   user_transcript_length=len(user_transcript),
+                   assistant_transcript_length=len(assistant_transcript))
+        
         print(f"📝 End of call {call_id}: {duration}s duration")
         print(f"📞 Phone: {customer_phone}")
         print(f"📄 User transcript: {len(user_transcript)} chars")
@@ -970,9 +1077,19 @@ def handle_end_of_call(message):
                     break
         
         if not student_id:
+            log_webhook('student-not-found', f"No student found for phone: {customer_phone}",
+                       call_id=call_id,
+                       phone=customer_phone,
+                       clean_phone=clean_phone if customer_phone else None,
+                       level='WARNING')
             print(f"⚠️  No student found for phone: {customer_phone}")
             # Create unknown student record
             student_id = f"unknown_{clean_phone}" if customer_phone else f"unknown_{call_id}"
+        else:
+            log_webhook('student-identified', f"Student {student_id} identified for call {call_id}",
+                       call_id=call_id,
+                       student_id=student_id,
+                       phone=customer_phone)
         
         # Save the session data
         save_vapi_session(call_id, student_id, customer_phone, duration,
@@ -983,9 +1100,14 @@ def handle_end_of_call(message):
             try:
                 trigger_ai_analysis_async(student_id, user_transcript, call_id)
             except Exception as e:
+                log_error('WEBHOOK', f"AI analysis failed for call {call_id}", e,
+                         call_id=call_id,
+                         student_id=student_id)
                 print(f"⚠️  AI analysis failed: {e}")
         
     except Exception as e:
+        log_error('WEBHOOK', f"Error handling end of call: {str(e)}", e,
+                 call_id=call_info.get('id') if 'call_info' in locals() else None)
         print(f"❌ Error handling end of call: {e}")
 
 def save_vapi_session(call_id, student_id, phone, duration, user_transcript, assistant_transcript, full_message):
@@ -1039,9 +1161,18 @@ def save_vapi_session(call_id, student_id, phone, duration, user_transcript, ass
 def trigger_ai_analysis_async(student_id, transcript, call_id):
     """Trigger AI analysis for VAPI transcript (async)"""
     if not AI_POC_AVAILABLE:
+        log_ai_analysis("AI POC not available for analysis",
+                       call_id=call_id,
+                       student_id=student_id,
+                       level='WARNING')
         return
     
     try:
+        log_ai_analysis("Starting AI analysis for VAPI transcript",
+                       call_id=call_id,
+                       student_id=student_id,
+                       transcript_length=len(transcript))
+        
         # Get student context
         student_data = get_student_data(student_id)
         student_context = {}
@@ -1071,6 +1202,10 @@ def trigger_ai_analysis_async(student_id, transcript, call_id):
         # Run async analysis in background
         def run_analysis():
             try:
+                log_ai_analysis("Running AI analysis in background thread",
+                               call_id=call_id,
+                               student_id=student_id)
+                
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 
@@ -1084,9 +1219,17 @@ def trigger_ai_analysis_async(student_id, transcript, call_id):
                 )
                 
                 loop.close()
+                
+                log_ai_analysis("AI analysis completed successfully",
+                               call_id=call_id,
+                               student_id=student_id,
+                               analysis_summary=analysis.get('summary', 'No summary') if analysis else 'No analysis')
                 print(f"✅ AI analysis completed for call {call_id}")
                 
             except Exception as e:
+                log_error('AI_ANALYSIS', f"AI analysis failed for call {call_id}", e,
+                         call_id=call_id,
+                         student_id=student_id)
                 print(f"❌ AI analysis failed for call {call_id}: {e}")
         
         # Run in background thread to not block webhook response
@@ -1096,7 +1239,86 @@ def trigger_ai_analysis_async(student_id, transcript, call_id):
         thread.start()
         
     except Exception as e:
+        log_error('AI_ANALYSIS', f"Error triggering AI analysis for call {call_id}", e,
+                 call_id=call_id,
+                 student_id=student_id)
         print(f"❌ Error triggering AI analysis: {e}")
+
+# System Logs Routes
+@app.route('/admin/logs')
+def admin_system_logs():
+    """View system logs with filtering"""
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    # Get filter parameters
+    days = int(request.args.get('days', 7))
+    category = request.args.get('category', '')
+    level = request.args.get('level', '')
+    
+    # Get logs
+    logs = system_logger.get_logs(days=days, category=category, level=level)
+    
+    # Get log statistics
+    log_stats = system_logger.get_log_statistics()
+    
+    # Get available categories and levels for filtering
+    available_categories = list(log_stats.get('categories', {}).keys())
+    available_levels = list(log_stats.get('levels', {}).keys())
+    
+    log_admin_action('view_logs', session.get('admin_username', 'unknown'),
+                    days_filter=days,
+                    category_filter=category,
+                    level_filter=level,
+                    log_count=len(logs))
+    
+    return render_template('system_logs.html',
+                         logs=logs,
+                         log_stats=log_stats,
+                         available_categories=available_categories,
+                         available_levels=available_levels,
+                         current_filters={
+                             'days': days,
+                             'category': category,
+                             'level': level
+                         })
+
+@app.route('/admin/logs/cleanup', methods=['POST'])
+def cleanup_system_logs():
+    """Manually trigger log cleanup"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    log_admin_action('manual_log_cleanup', session.get('admin_username', 'unknown'))
+    
+    try:
+        cleanup_stats = system_logger.cleanup_old_logs()
+        flash(f"Log cleanup completed: {cleanup_stats['deleted_files']} files deleted", 'success')
+        return jsonify({'success': True, 'stats': cleanup_stats})
+    except Exception as e:
+        log_error('ADMIN', 'Manual log cleanup failed', e)
+        return jsonify({'error': str(e)}), 500
+
+# Periodic cleanup function
+import threading
+import time
+
+def periodic_log_cleanup():
+    """Run log cleanup every 24 hours"""
+    while True:
+        try:
+            time.sleep(24 * 60 * 60)  # Wait 24 hours
+            log_system("Running scheduled log cleanup")
+            cleanup_stats = system_logger.cleanup_old_logs()
+            log_system("Scheduled log cleanup completed", **cleanup_stats)
+        except Exception as e:
+            log_error('SYSTEM', 'Scheduled log cleanup failed', e)
+
+# Start cleanup thread in production
+if FLASK_ENV == 'production':
+    cleanup_thread = threading.Thread(target=periodic_log_cleanup, daemon=True)
+    cleanup_thread.start()
+    log_system("Started periodic log cleanup thread")
 
 if __name__ == '__main__':
     # Create required directories
@@ -1112,6 +1334,14 @@ if __name__ == '__main__':
     
     if ADMIN_PASSWORD == 'admin123':
         print("⚠️  CHANGE DEFAULT PASSWORD IN PRODUCTION!")
+    
+    # Run initial cleanup
+    try:
+        cleanup_stats = system_logger.cleanup_old_logs()
+        if cleanup_stats['deleted_files'] > 0:
+            print(f"🧹 Initial cleanup: {cleanup_stats['deleted_files']} old log files removed")
+    except Exception as e:
+        print(f"⚠️  Initial cleanup failed: {e}")
     
     # Production vs Development settings
     if FLASK_ENV == 'production':
