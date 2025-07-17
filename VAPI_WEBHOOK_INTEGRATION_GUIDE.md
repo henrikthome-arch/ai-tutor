@@ -27,7 +27,7 @@ Complete guide for integrating VAPI voice calls with AI post-processing system.
 
 1. Go to VAPI Dashboard → Assistants
 2. Select your assistant → Advanced tab
-3. Set **Server URL**: `https://your-domain.com/vapi/webhook`
+3. Set **Server URL**: `https://ai-tutor-ptnl.onrender.com/vapi/webhook`
 4. Set **Secret**: Generate a secure secret for HMAC verification
 
 **Option B: Account Level**
