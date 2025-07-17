@@ -8,23 +8,40 @@ import os
 import json
 import requests
 from openai import OpenAI
+from session_logger import SessionLogger
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    print("⚠️  python-dotenv not installed. Using system environment variables.")
+    print("   Install with: pip install python-dotenv")
 
 # Configuration
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')  # Set this in your environment
-ASSISTANT_ID = os.getenv('ASSISTANT_ID')      # Set this after creating your Assistant
-LOCAL_SERVER_URL = "http://localhost:3000"   # Your local server
-TUNNEL_URL = ""  # Set this to your LocalTunnel URL
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')  # Set this in .env file
+ASSISTANT_ID = os.getenv('ASSISTANT_ID')      # Set this in .env file
+LOCAL_SERVER_URL = "http://localhost:3000"   # Your local server (for development)
+CLOUD_SERVER_URL = "https://ai-tutor-ptnl.onrender.com"  # Your live cloud deployment
 
 class AITutorIntegration:
-    def __init__(self):
+    def __init__(self, student_id="emma_smith", enable_logging=True):
         if not OPENAI_API_KEY:
             raise ValueError("Please set OPENAI_API_KEY environment variable")
         
         self.client = OpenAI(api_key=OPENAI_API_KEY)
         self.assistant_id = ASSISTANT_ID
         
-        # Use tunnel URL if available, otherwise local
-        self.server_url = TUNNEL_URL if TUNNEL_URL else LOCAL_SERVER_URL
+        # Use cloud URL if available, otherwise local
+        self.server_url = CLOUD_SERVER_URL if CLOUD_SERVER_URL else LOCAL_SERVER_URL
+        
+        # Session logging
+        self.student_id = student_id
+        self.enable_logging = enable_logging
+        if enable_logging:
+            self.session_logger = SessionLogger(student_id, self.server_url)
+        else:
+            self.session_logger = None
         
     def get_student_context(self, student_id):
         """Call your local MCP server to get student context"""
@@ -49,6 +66,10 @@ class AITutorIntegration:
     
     def chat_with_assistant(self, message, thread_id=None):
         """Send a message to the Assistant and handle function calls"""
+        
+        # Log user message
+        if self.session_logger:
+            self.session_logger.log_message("user", message)
         
         # Create thread if not provided
         if not thread_id:
@@ -78,7 +99,13 @@ class AITutorIntegration:
             if run_status.status == 'completed':
                 # Get the latest message
                 messages = self.client.beta.threads.messages.list(thread_id=thread_id)
-                return messages.data[0].content[0].text.value, thread_id
+                response_text = messages.data[0].content[0].text.value
+                
+                # Log assistant response
+                if self.session_logger:
+                    self.session_logger.log_message("assistant", response_text)
+                
+                return response_text, thread_id
                 
             elif run_status.status == 'requires_action':
                 # Handle function calls
@@ -91,7 +118,12 @@ class AITutorIntegration:
                     
                     print(f"🔧 Calling function: {function_name} with {arguments}")
                     
-                    # Call your local server
+                    # Log function call
+                    if self.session_logger:
+                        self.session_logger.log_message("assistant", "Calling function to get student data",
+                                                       function_call=f"{function_name}({arguments})")
+                    
+                    # Call your cloud server
                     result = self.handle_function_call(function_name, arguments)
                     
                     tool_outputs.append({
@@ -128,13 +160,13 @@ def main():
     
     # Check environment variables
     if not OPENAI_API_KEY:
-        print("❌ Please set OPENAI_API_KEY environment variable")
-        print("   Example: set OPENAI_API_KEY=sk-your-key-here")
+        print("❌ Please set OPENAI_API_KEY in .env file")
+        print("   Edit .env file and add: OPENAI_API_KEY=sk-your-key-here")
         return
     
     if not ASSISTANT_ID:
-        print("❌ Please set ASSISTANT_ID environment variable")
-        print("   Example: set ASSISTANT_ID=asst_your-assistant-id")
+        print("❌ Please set ASSISTANT_ID in .env file")
+        print("   Edit .env file and add: ASSISTANT_ID=asst_your-assistant-id")
         return
     
     # Initialize integration
@@ -146,8 +178,9 @@ def main():
     
     # Test server connection
     if not integration.test_connection():
-        print("❌ Cannot connect to local server. Make sure it's running:")
-        print("   python simple-server-fixed.py")
+        print("❌ Cannot connect to cloud server")
+        print(f"   Check if {CLOUD_SERVER_URL} is working")
+        print("   Try: https://ai-tutor-ptnl.onrender.com/health")
         return
     
     print("🤖 AI Tutor Integration Ready!")
@@ -162,6 +195,12 @@ def main():
         
         if message.lower() in ['quit', 'exit', 'bye']:
             print("👋 Goodbye!")
+            
+            # Finalize session logging
+            if hasattr(integration, 'session_logger') and integration.session_logger:
+                print("\n🔄 Generating session summary...")
+                integration.session_logger.finalize_session()
+            
             break
         
         if not message:

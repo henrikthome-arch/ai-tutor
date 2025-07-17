@@ -1,0 +1,46 @@
+{
+  "session_id": "emma_smith_20250717_0418",
+  "student_id": "emma_smith",
+  "start_time": "2025-07-17T04:18:35.389820",
+  "last_activity": "2025-07-17T04:18:39.472116",
+  "end_time": "2025-07-17T04:18:43.587650",
+  "platform": "vapi",
+  "status": "completed",
+  "mcp_interactions": [
+    {
+      "timestamp": "2025-07-17T04:18:35.389820",
+      "function": "get-student-context",
+      "request_data": {
+        "student_id": "emma_smith"
+      },
+      "response_size_bytes": 21121,
+      "subjects_accessed": [
+        "general"
+      ]
+    },
+    {
+      "timestamp": "2025-07-17T04:18:39.472116",
+      "function": "get-student-context",
+      "request_data": {
+        "student_id": "emma_smith"
+      },
+      "response_size_bytes": 21121,
+      "subjects_accessed": [
+        "general"
+      ]
+    }
+  ],
+  "conversation": {
+    "transcript": "This is a test conversation via generic webhook.",
+    "source": "vapi",
+    "word_count": 8,
+    "duration_seconds": 0
+  },
+  "metadata": {},
+  "analysis": null,
+  "vapi_metadata": {
+    "call_id": "generic_test_456",
+    "cost": null,
+    "ended_reason": null
+  }
+}

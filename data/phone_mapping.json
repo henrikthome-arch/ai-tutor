@@ -1,0 +1,7 @@
+{
+  "phone_to_student": {
+    "+12345678901": "emma_smith",
+    "+19876543210": "jane_doe"
+  },
+  "last_updated": "2025-01-17T08:00:00Z"
+}

@@ -1,0 +1,78 @@
+# Session-Enhanced AI Tutor Server Configuration
+
+session_tracking:
+  # Session timeout in minutes - sessions are considered ended after this gap
+  timeout_minutes: 10
+  # Automatically save sessions to file system
+  auto_save: true
+
+webhooks:
+  vapi:
+    # Enable VAPI webhook integration
+    enabled: true
+    # Endpoint path for VAPI webhooks
+    endpoint: "/webhook/vapi/session-complete"
+    # Optional authentication token (set via environment variable)
+    auth_token: null
+  
+  generic:
+    # Generic webhook endpoint for other platforms
+    enabled: true
+    endpoint: "/webhook/session-data"
+
+analysis:
+  # Enable AI-powered session analysis
+  enabled: false
+  # OpenAI API key for analysis (set via environment variable: ANALYSIS_API_KEY)
+  openai_api_key: null
+  # When to trigger analysis
+  triggers:
+    - on_session_complete  # Analyze when session ends
+    # - on_request         # Analyze on manual request
+  
+  # Configurable prompts for different analysis types
+  prompts:
+    session_summary: |
+      Analyze this tutoring session data and provide a summary.
+      Include: learning objectives covered, student engagement, progress made, areas of difficulty.
+      
+      Session Data: {session_data}
+      Student Profile: {student_profile}
+    
+    progress_update: |
+      Based on this tutoring session, suggest updates to the student's progress tracking.
+      Focus on: skills demonstrated, areas that need more work, recommended next steps.
+      
+      Session Data: {session_data}
+      Current Progress: {current_progress}
+    
+    learning_insights: |
+      Identify learning patterns and insights from this session.
+      Consider: learning style effectiveness, engagement patterns, concept understanding.
+      
+      Session Data: {session_data}
+      Student Profile: {student_profile}
+
+# Student identification strategies for voice platforms
+student_identification:
+  # Try these methods in order to identify student from voice calls
+  strategies:
+    - metadata        # Look for student_id in platform metadata
+    - transcript      # Extract from conversation transcript
+    - phone_mapping   # Map phone numbers to student IDs
+    - default         # Use default student if none found
+  
+  # Phone number to student ID mapping
+  phone_mapping:
+    "+1234567890": "emma_smith"
+    "+0987654321": "jane_doe"
+  
+  # Default student ID if identification fails
+  default_student: "unknown_student"
+
+# Logging configuration
+logging:
+  level: INFO
+  format: "%(asctime)s - %(levelname)s - %(message)s"
+  # Log session events to separate file
+  session_log_file: "sessions.log"
