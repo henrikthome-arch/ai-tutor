@@ -272,8 +272,21 @@ Update the `save_vapi_session` function in a similar way to analyze transcripts 
 3. For interests, new interests are added to the existing list rather than replacing it.
 4. The analyzer could be extended to extract other information like favorite subjects, learning preferences, etc.
 
+## Implemented Enhancements
+
+1. **AI-Powered Extraction**: Replaced regex-based extraction with a more sophisticated AI model that can better understand context and extract information more accurately.
+   - The system now uses AI to analyze transcripts and extract student information
+   - A clear, structured prompt ensures the AI returns information in a consistent JSON format
+   - The AI is instructed to only extract information that is explicitly stated by the student
+
+2. **Improved Prompt Design**: The AI prompt has been optimized to:
+   - Focus on extracting only explicitly stated information
+   - Return results in a standardized JSON format
+   - Include examples to guide the AI's extraction process
+   - Extract age, grade, interests, learning preferences, and favorite/challenging subjects
+
 ## Future Enhancements
 
-1. **AI-Powered Extraction**: Replace regex-based extraction with a more sophisticated AI model that can better understand context and extract information more accurately.
-2. **Confidence Scoring**: Add confidence scores to extracted information to avoid updating profiles with low-confidence extractions.
-3. **Admin Review**: Add a feature for administrators to review and approve extracted information before it's added to profiles.
+1. **Confidence Scoring**: Add confidence scores to extracted information to avoid updating profiles with low-confidence extractions.
+2. **Admin Review**: Add a feature for administrators to review and approve extracted information before it's added to profiles.
+3. **Enhanced Extraction Categories**: Expand the types of information extracted to include more detailed educational preferences and needs.

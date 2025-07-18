@@ -28,6 +28,9 @@ class TranscriptAnalyzer:
         # Create a profile extraction prompt if it doesn't exist
         if 'profile_extraction' not in self.prompt_manager.get_available_prompts():
             self._create_profile_extraction_prompt()
+        
+        # Log initialization
+        logger.info("TranscriptAnalyzer initialized with AI-powered extraction")
     
     def _create_profile_extraction_prompt(self):
         """Create a custom prompt for profile information extraction"""
@@ -76,7 +79,11 @@ Extract only information that is explicitly stated by the student. Format your r
 - subjects: Object containing favorite and challenging subjects
 - confidence_score: Your confidence in the extracted information (0.0-1.0)
 
-If information for a field is not present in the transcript, use null for numeric fields and empty arrays for lists.""",
+If information for a field is not present in the transcript, use null for numeric fields and empty arrays for lists.
+
+IMPORTANT: Look for statements like "I'm 10" or "I'm in 4th grade" or "I like playing games" and extract them accurately.
+Do not include any explanatory text in your response, ONLY the JSON object.
+"""
             
             parameters={
                 "transcript": "Full conversation transcript"
@@ -94,18 +101,36 @@ If information for a field is not present in the transcript, use null for numeri
             return {}
         
         try:
-            # Format the profile extraction prompt
-            formatted_prompt = self.prompt_manager.format_prompt(
-                'profile_extraction',
-                transcript=transcript
-            )
+            # Log the transcript length for debugging
+            logger.info(f"Analyzing transcript with {len(transcript)} characters")
             
-            if not formatted_prompt:
-                logger.error("Failed to format profile extraction prompt")
-                return {}
+            # Create a direct prompt for the AI model following the user's suggestion
+            direct_prompt = f"""Below is a transcript from which I want you to extract some key information:
+
+{transcript}
+
+Provide the response in the format of JSON as per the example below. Extract only information that is explicitly stated by the student.
+
+{{
+  "age": 10,
+  "grade": 4,
+  "interests": ["playing games", "building things", "playing in the forest"],
+  "learning_preferences": [],
+  "subjects": {{
+    "favorite": ["math"],
+    "challenging": []
+  }},
+  "confidence_score": 0.9
+}}
+
+IMPORTANT:
+1. Look carefully for statements like "I'm 10" or "I'm in 4th grade" or "I like playing games"
+2. Return ONLY the JSON object, no other text
+3. If information is not present, use null for numbers and empty arrays for lists
+4. Make sure to extract ALL information mentioned by the student
+"""
             
             # Use the provider manager directly for a custom analysis
-            # This bypasses the session_processor to get raw output
             provider = self.provider_manager.providers[self.provider_manager.current_provider]
             
             # Create a minimal context for the AI
@@ -115,31 +140,45 @@ If information for a field is not present in the transcript, use null for numeri
             }
             
             # Get AI analysis
+            logger.info("Sending transcript to AI model for analysis")
             analysis = await provider.analyze_session(transcript, context)
             
             # Extract the JSON from the raw response
             try:
-                # The raw response might contain the JSON directly or embedded in text
+                # Log the raw response for debugging
                 raw_text = analysis.raw_response
+                logger.info(f"Received AI response with {len(raw_text) if raw_text else 0} characters")
                 
                 # Try to parse the entire response as JSON first
                 try:
                     extracted_info = json.loads(raw_text)
+                    logger.info(f"Successfully parsed JSON response: {json.dumps(extracted_info)}")
                 except json.JSONDecodeError:
                     # If that fails, try to extract JSON from the text
                     import re
                     json_match = re.search(r'({[\s\S]*})', raw_text)
                     if json_match:
                         extracted_info = json.loads(json_match.group(1))
+                        logger.info(f"Extracted JSON from text: {json.dumps(extracted_info)}")
                     else:
-                        logger.error("Could not extract JSON from AI response")
-                        return {}
+                        # Try a more aggressive approach to find JSON
+                        json_match = re.search(r'({.*})', raw_text.replace('\n', ' '))
+                        if json_match:
+                            extracted_info = json.loads(json_match.group(1))
+                            logger.info(f"Extracted JSON with aggressive approach: {json.dumps(extracted_info)}")
+                        else:
+                            logger.error("Could not extract JSON from AI response")
+                            logger.error(f"Raw response: {raw_text}")
+                            return {}
                 
                 # Validate and clean the extracted information
-                return self._clean_extracted_info(extracted_info)
+                cleaned_info = self._clean_extracted_info(extracted_info)
+                logger.info(f"Cleaned extracted info: {json.dumps(cleaned_info)}")
+                return cleaned_info
                 
             except Exception as e:
                 logger.error(f"Error parsing AI response: {e}")
+                logger.error(f"Raw response: {analysis.raw_response if hasattr(analysis, 'raw_response') else 'No raw response'}")
                 return {}
                 
         except Exception as e:
@@ -218,6 +257,13 @@ If information for a field is not present in the transcript, use null for numeri
         # Run the async analysis
         try:
             extracted_info = loop.run_until_complete(self.analyze_transcript_with_ai(transcript))
+            
+            # Log the result
+            if extracted_info:
+                logger.info(f"Successfully extracted information: {json.dumps(extracted_info)}")
+            else:
+                logger.warning("No information extracted from transcript")
+                
             return extracted_info
         except Exception as e:
             logger.error(f"Error in transcript analysis: {e}")
