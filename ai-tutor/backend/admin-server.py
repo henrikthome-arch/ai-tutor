@@ -1336,6 +1336,24 @@ def save_vapi_session(call_id, student_id, phone, duration, user_transcript, ass
         with open(transcript_file, 'w', encoding='utf-8') as f:
             f.write(combined_transcript)
         
+        # Analyze transcript and update student profile
+        if user_transcript:
+            try:
+                from transcript_analyzer import TranscriptAnalyzer
+                analyzer = TranscriptAnalyzer()
+                # Use only the user transcript for profile extraction
+                extracted_info = analyzer.analyze_transcript(user_transcript)
+                if extracted_info:
+                    analyzer.update_student_profile(student_id, extracted_info)
+                    log_webhook('profile-updated', f"Updated student profile from webhook session",
+                               call_id=call_id, student_id=student_id,
+                               extracted_info=extracted_info)
+                    print(f"👤 Updated profile for student {student_id} with extracted information")
+            except Exception as e:
+                log_error('TRANSCRIPT_ANALYSIS', f"Error analyzing webhook session transcript", e,
+                         call_id=call_id, student_id=student_id)
+                print(f"⚠️ Error analyzing webhook session transcript: {e}")
+        
         print(f"💾 Saved VAPI session: {session_file}")
         
     except Exception as e:
@@ -1450,7 +1468,7 @@ def create_student_from_call(phone: str, call_id: str) -> str:
     
     return student_id
 
-def save_api_driven_session(call_id: str, student_id: str, phone: str, 
+def save_api_driven_session(call_id: str, student_id: str, phone: str,
                            duration: int, transcript: str, call_data: Dict[Any, Any]):
     """Save VAPI session data using API-fetched data"""
     try:
@@ -1493,6 +1511,22 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
         if transcript:
             with open(transcript_file, 'w', encoding='utf-8') as f:
                 f.write(transcript)
+            
+            # NEW: Analyze transcript and update student profile
+            try:
+                from transcript_analyzer import TranscriptAnalyzer
+                analyzer = TranscriptAnalyzer()
+                extracted_info = analyzer.analyze_transcript(transcript)
+                if extracted_info:
+                    analyzer.update_student_profile(student_id, extracted_info)
+                    log_webhook('profile-updated', f"Updated student profile from transcript",
+                               call_id=call_id, student_id=student_id,
+                               extracted_info=extracted_info)
+                    print(f"👤 Updated profile for student {student_id} with extracted information")
+            except Exception as e:
+                log_error('TRANSCRIPT_ANALYSIS', f"Error analyzing transcript", e,
+                         call_id=call_id, student_id=student_id)
+                print(f"⚠️ Error analyzing transcript: {e}")
         
         print(f"💾 Saved API-driven session: {session_file}")
         log_webhook('session-saved', f"Saved session for call {call_id}",
@@ -1545,6 +1579,23 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
                          user_transcript, assistant_transcript, message)
         
         combined_transcript = user_transcript + "\n" + assistant_transcript
+        
+        # Analyze transcript and update student profile
+        if student_id and combined_transcript.strip():
+            try:
+                from transcript_analyzer import TranscriptAnalyzer
+                analyzer = TranscriptAnalyzer()
+                extracted_info = analyzer.analyze_transcript(combined_transcript)
+                if extracted_info:
+                    analyzer.update_student_profile(student_id, extracted_info)
+                    log_webhook('profile-updated', f"Updated student profile from webhook transcript",
+                               call_id=call_id, student_id=student_id,
+                               extracted_info=extracted_info)
+                    print(f"👤 Updated profile for student {student_id} with extracted information")
+            except Exception as e:
+                log_error('TRANSCRIPT_ANALYSIS', f"Error analyzing webhook transcript", e,
+                         call_id=call_id, student_id=student_id)
+                print(f"⚠️ Error analyzing webhook transcript: {e}")
         
         # Trigger AI analysis if we have transcript
         if student_id and combined_transcript.strip() and AI_POC_AVAILABLE:
