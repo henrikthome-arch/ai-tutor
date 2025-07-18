@@ -259,22 +259,34 @@ class PhoneMappingManager:
             try:
                 with open(self.mapping_file, 'r') as f:
                     data = json.load(f)
-                    # The mapping is the entire file content, not nested.
-                    # This was a bug. Correcting to load the entire dictionary.
-                    return data
+                    # Handle both flat and nested structures for backward compatibility
+                    if "phone_to_student" in data:
+                        # New nested structure
+                        return data["phone_to_student"]
+                    else:
+                        # Old flat structure or empty
+                        return data
             except Exception as e:
                 logger.error(f"Error loading phone mapping: {e}")
                 return {}
         return {}
     
     def save_phone_mapping(self):
-        """Save phone to student mapping"""
+        """Save phone to student mapping with proper structure"""
         try:
             os.makedirs(os.path.dirname(self.mapping_file), exist_ok=True)
-            # This was also a bug. Saving the mapping directly.
+            
+            # Create structured data with metadata
+            structured_data = {
+                "phone_to_student": self.phone_mapping,
+                "last_updated": datetime.utcnow().isoformat() + "Z"
+            }
+            
+            # Save with proper structure
             with open(self.mapping_file, 'w') as f:
-                json.dump(self.phone_mapping, f, indent=2)
-            logger.info(f"📞 Saved phone mapping to {self.mapping_file}")
+                json.dump(structured_data, f, indent=2)
+            
+            logger.info(f"📞 Saved phone mapping to {self.mapping_file} with {len(self.phone_mapping)} entries")
         except Exception as e:
             logger.error(f"Error saving phone mapping: {e}")
     
@@ -288,7 +300,14 @@ class PhoneMappingManager:
         # Look up in the freshly loaded mapping
         student_id = current_mapping.get(normalized_phone)
         
-        logger.info(f"📞 Phone lookup: {normalized_phone} → {student_id} (from fresh data)")
+        # Log all mappings for debugging
+        mapping_count = len(current_mapping) if current_mapping else 0
+        logger.info(f"📞 Phone lookup: {normalized_phone} → {student_id} (from fresh data with {mapping_count} mappings)")
+        
+        if mapping_count > 0 and not student_id:
+            # Log all available mappings for debugging
+            logger.info(f"📞 Available mappings: {list(current_mapping.keys())}")
+        
         return student_id
     
     def add_phone_mapping(self, phone_number, student_id):
