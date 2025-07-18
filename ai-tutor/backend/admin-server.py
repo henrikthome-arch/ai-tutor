@@ -1356,7 +1356,8 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
     
     # Look up existing student
     for phone, student_id in phone_manager.phone_mapping.items():
-        if normalize_phone_number(phone) == clean_phone:
+        # Compare normalized incoming number with the already-normalized key from the file
+        if phone == clean_phone:
             log_webhook('student-identified', f"Found student {student_id}",
                        call_id=call_id, student_id=student_id, phone=phone_number)
             return student_id
