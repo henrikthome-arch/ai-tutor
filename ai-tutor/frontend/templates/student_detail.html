@@ -248,15 +248,11 @@
         {% if progress.goals %}
             <div class="goal-list">
                 {% for goal in progress.goals %}
-                <div class="goal-item {% if goal.completed %}completed{% else %}pending{% endif %}">
+                <div class="goal-item pending">
                     <div class="goal-title">
-                        <span>{{ goal.title }}</span>
-                        <span>{% if goal.completed %}✅{% else %}🎯{% endif %}</span>
+                        <span>{{ goal }}</span>
+                        <span>🎯</span>
                     </div>
-                    <p class="goal-description">{{ goal.description }}</p>
-                    {% if goal.target_date %}
-                        <p class="goal-target-date">Target: {{ goal.target_date }}</p>
-                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
@@ -355,8 +351,8 @@
                             </span>
                         </td>
                         <td>
-                            <a href="{{ url_for('admin_file_view', path='students/' + student.id + '/sessions/' + session.file) }}" 
-                               class="btn" 
+                            <a href="{{ url_for('view_session_detail', student_id=student.id, session_file=session.file) }}"
+                               class="btn"
                                style="padding: 4px 8px; font-size: 0.8rem;">
                                 👁️ View
                             </a>

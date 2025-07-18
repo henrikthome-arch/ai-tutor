@@ -19,7 +19,7 @@
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
     <h1 style="color: #2c3e50;">File Browser</h1>
     <div style="display: flex; gap: 1rem; align-items: center;">
-        {% if current_path != '' %}
+        {% if parent_path != '' %}
             <a href="{{ url_for('admin_files', path=parent_path) }}" class="btn">
                 ⬅️ Back
             </a>

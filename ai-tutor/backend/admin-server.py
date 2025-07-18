@@ -281,10 +281,14 @@ def admin_dashboard():
     
     stats = get_system_stats()
     recent_students = get_all_students()[:5]  # Get 5 most recent
+    phone_mappings = dict(phone_manager.phone_mapping)
+    students_info = {s['id']: s for s in get_all_students()}
     
-    return render_template('dashboard.html', 
-                         stats=stats, 
-                         recent_students=recent_students)
+    return render_template('dashboard.html',
+                         stats=stats,
+                         recent_students=recent_students,
+                         phone_mappings=phone_mappings,
+                         students_info=students_info)
 
 # Student management routes
 @app.route('/admin/students')
@@ -554,7 +558,7 @@ def admin_system():
                          students_info=students_info,
                          system_stats=stats,
                          mcp_port=3001,
-                         vapi_status=False,
+                         vapi_status=vapi_client.is_configured(),
                          system_events=[])
 
 # Phone Mapping Management
@@ -1598,12 +1602,16 @@ def trigger_ai_analysis_async(student_id, transcript, call_id):
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 
+                # Construct the correct path for the analysis results
+                analysis_filename = f"ai_analysis_{call_id}.json"
+                analysis_path = os.path.join('../data/students', student_id, 'sessions', analysis_filename)
+
                 analysis, validation = loop.run_until_complete(
                     session_processor.process_session_transcript(
                         transcript=transcript,
                         student_context=student_context,
                         save_results=True,
-                        session_id=call_id
+                        session_file_path=analysis_path
                     )
                 )
                 
