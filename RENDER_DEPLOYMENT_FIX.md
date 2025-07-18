@@ -9,12 +9,12 @@ The most likely cause of this issue is that the `phone_mapping.json` file is bei
 1.  Go to your **Render Dashboard** and select your AI Tutor service.
 2.  Navigate to the **"Disks"** section in the sidebar.
 3.  **Verify** that you have a disk configured with the following settings:
-    *   **Mount Path:** `ai-tutor/data`
+    *   **Mount Path:** `/opt/render/project/src/ai-tutor/data` (must be an absolute path)
     *   **Size:** At least 1 GB (or your chosen size).
 4.  **If there is no disk configured**, this is the problem. You **must** create one:
     *   Click **"New Disk"**.
     *   Set the **Name** to something descriptive (e.g., `ai-tutor-data`).
-    *   Set the **Mount Path** to `ai-tutor/data`. **This must be exact.**
+    *   Set the **Mount Path** to `/opt/render/project/src/ai-tutor/data`. **This must be an absolute path.**
     *   Choose a size and click **"Create Disk"**.
 5.  After creating the disk, you **must trigger a new deploy** for the change to take effect.
 
