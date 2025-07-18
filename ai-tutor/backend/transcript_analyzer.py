@@ -65,7 +65,6 @@ You must provide extracted information in JSON format with these fields:
 }
 
 For each field, provide the exact information mentioned by the student. If the information is not present, use null for numeric fields and empty arrays for lists.""",
-            
             user_prompt_template="""Please extract student profile information from this conversation transcript.
 
 CONVERSATION TRANSCRIPT:
@@ -83,7 +82,8 @@ If information for a field is not present in the transcript, use null for numeri
 
 IMPORTANT: Look for statements like "I'm 10" or "I'm in 4th grade" or "I like playing games" and extract them accurately.
 Do not include any explanatory text in your response, ONLY the JSON object.
-"""
+""",
+            
             
             parameters={
                 "transcript": "Full conversation transcript"
@@ -130,8 +130,12 @@ IMPORTANT:
 4. Make sure to extract ALL information mentioned by the student
 """
             
+            # Log the prompt for debugging
+            logger.info(f"Using AI extraction prompt: {direct_prompt[:100]}...")
+            
             # Use the provider manager directly for a custom analysis
             provider = self.provider_manager.providers[self.provider_manager.current_provider]
+            logger.info(f"Using AI provider: {self.provider_manager.current_provider}")
             
             # Create a minimal context for the AI
             context = {
@@ -142,12 +146,14 @@ IMPORTANT:
             # Get AI analysis
             logger.info("Sending transcript to AI model for analysis")
             analysis = await provider.analyze_session(transcript, context)
+            logger.info(f"Received analysis response from provider")
             
             # Extract the JSON from the raw response
             try:
                 # Log the raw response for debugging
                 raw_text = analysis.raw_response
                 logger.info(f"Received AI response with {len(raw_text) if raw_text else 0} characters")
+                logger.info(f"Raw response preview: {raw_text[:200] if raw_text else 'None'}")
                 
                 # Try to parse the entire response as JSON first
                 try:
@@ -261,8 +267,13 @@ IMPORTANT:
             # Log the result
             if extracted_info:
                 logger.info(f"Successfully extracted information: {json.dumps(extracted_info)}")
+                # Log each extracted field for better debugging
+                for key, value in extracted_info.items():
+                    logger.info(f"Extracted {key}: {value}")
             else:
                 logger.warning("No information extracted from transcript")
+                # Log a sample of the transcript to help debug
+                logger.warning(f"Transcript sample: {transcript[:200]}...")
                 
             return extracted_info
         except Exception as e:
