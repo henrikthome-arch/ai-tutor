@@ -9,6 +9,7 @@ import json
 import hashlib
 import hmac
 from datetime import datetime, timedelta
+from typing import Dict, Any
 from flask import Flask, render_template, session, redirect, request, flash, url_for, jsonify
 import secrets
 
@@ -35,6 +36,9 @@ SessionTracker = session_enhanced_server.SessionTracker
 
 # Import System Logger
 from system_logger import system_logger, log_admin_action, log_webhook, log_ai_analysis, log_error, log_system
+
+# Import VAPI Client
+from vapi_client import vapi_client
 
 # Import AI POC components
 try:
@@ -1047,7 +1051,7 @@ def verify_vapi_signature(payload_body, signature, headers_info):
 
 @app.route('/vapi/webhook', methods=['POST'])
 def vapi_webhook():
-    """Handle VAPI webhook events for transcripts and call data"""
+    """Handle VAPI webhook events - simplified API-first approach"""
     try:
         # Get raw payload for signature verification
         payload = request.get_data(as_text=True)
@@ -1062,13 +1066,12 @@ def vapi_webhook():
             'all_header_names': list(request.headers.keys())
         }
         
-        # Verify signature (now more permissive)
+        # Verify signature
         if not verify_vapi_signature(payload, signature, headers_info):
             log_webhook('SECURITY_FAILURE', 'VAPI webhook signature verification failed',
                        ip_address=request.remote_addr,
                        signature_provided=bool(signature),
-                       payload_size=len(payload),
-                       headers_info=headers_info)
+                       payload_size=len(payload))
             print(f"🚨 VAPI webhook signature verification failed")
             return jsonify({'error': 'Invalid signature'}), 401
         
@@ -1080,18 +1083,8 @@ def vapi_webhook():
                        payload_size=len(payload))
             return jsonify({'error': 'Invalid payload'}), 400
         
-        # Debug logging to see the actual webhook structure
-        log_webhook('webhook-structure-debug', f"Webhook data keys: {list(data.keys()) if isinstance(data, dict) else 'not-dict'}",
-                   data_type=type(data).__name__,
-                   data_preview=str(data)[:500])
-        
         message = data.get('message', {})
         message_type = message.get('type')
-        
-        # More debug logging
-        log_webhook('message-structure-debug', f"Message type: {type(message).__name__}, message_type: {message_type}",
-                   message_keys=list(message.keys()) if isinstance(message, dict) else 'not-dict',
-                   message_preview=str(message)[:200])
         
         log_webhook(message_type or 'unknown-event', f"VAPI webhook received: {message_type}",
                    ip_address=request.remote_addr,
@@ -1099,21 +1092,15 @@ def vapi_webhook():
                    payload_size=len(payload))
         print(f"📞 VAPI webhook received: {message_type}")
         
-        if message_type == 'speech-update':
-            handle_speech_update(message)
-        elif message_type == 'conversation-update':
-            handle_conversation_update(message)
-        elif message_type == 'end-of-call-report':
-            # Debug logging to see what we're actually getting
-            log_webhook('end-of-call-debug', f"End-of-call message type: {type(message)}, content preview: {str(message)[:200]}",
-                       call_id=message.get('call', {}).get('id') if isinstance(message, dict) else 'unknown',
-                       message_type_received=type(message).__name__)
-            handle_end_of_call(message)
-        elif message_type == 'status-update':
-            handle_status_update(message)
+        # Only handle end-of-call-report - ignore all other events
+        if message_type == 'end-of-call-report':
+            handle_end_of_call_api_driven(message)
         else:
-            log_webhook('UNHANDLED_EVENT', f"Unhandled VAPI event: {message_type}")
-            print(f"📝 Unhandled VAPI event: {message_type}")
+            # Log but ignore other events
+            log_webhook('ignored-event', f"Ignored VAPI event: {message_type}",
+                       event_type=message_type,
+                       call_id=message.get('call', {}).get('id') if isinstance(message, dict) else None)
+            print(f"📝 Ignored VAPI event: {message_type}")
         
         return jsonify({'status': 'ok'}), 200
         
@@ -1124,135 +1111,307 @@ def vapi_webhook():
         print(f"❌ VAPI webhook error: {e}")
         return jsonify({'error': str(e)}), 500
 
-def handle_speech_update(message):
-    """Handle real-time speech updates from VAPI"""
-    call_info = message.get('call', {})
-    call_id = call_info.get('id')
-    speaker = message.get('speaker')  # 'user' or 'assistant'
-    text = message.get('text')
-    is_final = message.get('final', False)
-    
-    if is_final and speaker == 'user':
-        print(f"🗣️  Final user speech in call {call_id}: {text}")
-        # Store partial transcript for potential real-time analysis
-        # This could be used for live feedback or progress tracking
-
-def handle_conversation_update(message):
-    """Handle conversation updates from VAPI during active calls"""
-    call_info = message.get('call', {})
-    call_id = call_info.get('id')
-    
-    # Log conversation updates for debugging
-    log_webhook('conversation-update', f"Conversation update for call {call_id}",
-               call_id=call_id,
-               update_type='conversation-update')
-    
-    print(f"💬 Conversation update for call {call_id}")
-    # These are real-time updates during the call - we don't need to process them for student creation
-    # Student creation happens in handle_end_of_call
-
-def handle_status_update(message):
-    """Handle call status updates from VAPI"""
-    call_info = message.get('call', {})
-    call_id = call_info.get('id')
-    status = message.get('status')
-    
-    print(f"📊 Call {call_id} status: {status}")
-
-def handle_end_of_call(message):
-    """Handle complete call transcript from VAPI and trigger AI analysis"""
+def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
+    """Handle end-of-call using API-first approach"""
     try:
-        # Handle case where message might be a string or dict
-        if isinstance(message, str):
-            log_error('WEBHOOK', f"handle_end_of_call received string instead of dict: {message}",
-                     ValueError("Expected dict, got string"))
+        # Extract basic info from webhook
+        call_id = message.get('call', {}).get('id')
+        phone_number = message.get('phoneNumber')  # Direct from webhook
+        
+        if not call_id:
+            log_error('WEBHOOK', 'No call_id in end-of-call-report', ValueError())
             return
         
-        if not isinstance(message, dict):
-            log_error('WEBHOOK', f"handle_end_of_call received invalid type: {type(message)}",
-                     ValueError(f"Expected dict, got {type(message)}"))
+        log_webhook('end-of-call-report', f"Processing call {call_id} via API",
+                   call_id=call_id, phone=phone_number)
+        print(f"📞 Processing call {call_id} via API")
+        
+        # Check if VAPI client is configured
+        if not vapi_client.is_configured():
+            log_error('WEBHOOK', 'VAPI API client not configured - falling back to webhook data',
+                     ValueError('VAPI_API_KEY missing'),
+                     call_id=call_id)
+            # Fallback to webhook data processing
+            handle_end_of_call_webhook_fallback(message)
             return
         
-        call_info = message.get('call', {})
-        call_id = call_info.get('id')
-        assistant_id = call_info.get('assistantId')
-        customer_phone = call_info.get('customer', {}).get('number')
-        duration = message.get('durationSeconds', 0)
+        # Fetch complete call data from API
+        call_data = vapi_client.get_call_details(call_id)
         
-        # Get transcript
-        transcript_data = message.get('transcript', {})
-        user_transcript = transcript_data.get('user', '')
-        assistant_transcript = transcript_data.get('assistant', '')
+        if not call_data:
+            log_error('WEBHOOK', f'Failed to fetch call data for {call_id} - falling back to webhook',
+                     ValueError('API call failed'),
+                     call_id=call_id)
+            # Fallback to webhook data processing
+            handle_end_of_call_webhook_fallback(message)
+            return
         
-        log_webhook('end-of-call-report', f"Processing end of call {call_id}",
+        # Extract authoritative data from API response
+        metadata = vapi_client.extract_call_metadata(call_data)
+        transcript = vapi_client.get_call_transcript(call_id)
+        
+        customer_phone = metadata.get('customer_phone') or phone_number
+        duration = metadata.get('duration_seconds', 0)
+        
+        log_webhook('api-success', f"Successfully processed call {call_id} via API",
                    call_id=call_id,
                    phone=customer_phone,
                    duration_seconds=duration,
-                   user_transcript_length=len(user_transcript),
-                   assistant_transcript_length=len(assistant_transcript))
+                   transcript_length=len(transcript) if transcript else 0)
         
-        print(f"📝 End of call {call_id}: {duration}s duration")
+        print(f"📝 API data - Call {call_id}: {duration}s duration")
         print(f"📞 Phone: {customer_phone}")
-        print(f"📄 User transcript: {len(user_transcript)} chars")
-        print(f"🤖 Assistant transcript: {len(assistant_transcript)} chars")
+        print(f"📄 Transcript: {len(transcript) if transcript else 0} chars")
         
-        # Find student by phone number
-        student_id = None
-        if customer_phone:
-            # Clean phone number (remove country codes, formatting)
-            clean_phone = customer_phone.replace('+', '').replace('-', '').replace(' ', '')
-            if clean_phone.startswith('1') and len(clean_phone) == 11:
-                clean_phone = clean_phone[1:]  # Remove US country code
+        # Student identification and session saving
+        student_id = identify_or_create_student(customer_phone, call_id)
+        save_api_driven_session(call_id, student_id, customer_phone,
+                               duration, transcript, call_data)
+        
+        # Trigger AI analysis
+        if student_id and transcript and AI_POC_AVAILABLE:
+            trigger_ai_analysis_async(student_id, transcript, call_id)
             
-            # Look up student
-            for phone, sid in phone_manager.phone_mapping.items():
-                if phone.replace('-', '').replace(' ', '') == clean_phone:
-                    student_id = sid
-                    break
-        
-        if not student_id:
-            log_webhook('student-not-found', f"No student found for phone: {customer_phone}",
-                       call_id=call_id,
-                       phone=customer_phone,
-                       clean_phone=clean_phone if customer_phone else None,
-                       level='WARNING')
-            print(f"⚠️  No student found for phone: {customer_phone}")
-            # Create unknown student record
-            student_id = f"unknown_{clean_phone}" if customer_phone else f"unknown_{call_id}"
-        else:
-            log_webhook('student-identified', f"Student {student_id} identified for call {call_id}",
-                       call_id=call_id,
-                       student_id=student_id,
-                       phone=customer_phone)
-        
-        # Save the session data
-        save_vapi_session(call_id, student_id, customer_phone, duration,
-                         user_transcript, assistant_transcript, message)
-        
-        # Trigger AI analysis if we have a valid student and transcript
-        if student_id and user_transcript and AI_POC_AVAILABLE:
-            try:
-                trigger_ai_analysis_async(student_id, user_transcript, call_id)
-            except Exception as e:
-                log_error('WEBHOOK', f"AI analysis failed for call {call_id}", e,
-                         call_id=call_id,
-                         student_id=student_id)
-                print(f"⚠️  AI analysis failed: {e}")
-        
     except Exception as e:
-        # Safely get call_id for error logging
-        try:
-            error_call_id = call_info.get('id') if 'call_info' in locals() and isinstance(call_info, dict) else None
-        except:
-            error_call_id = None
-            
-        log_error('WEBHOOK', f"Error handling end of call: {str(e)}", e,
-                 call_id=error_call_id)
-        print(f"❌ Error handling end of call: {e}")
+        log_error('WEBHOOK', f"Error in API-driven end-of-call handler", e,
+                 call_id=call_id if 'call_id' in locals() else None)
+        print(f"❌ API-driven handler error: {e}")
 
 def save_vapi_session(call_id, student_id, phone, duration, user_transcript, assistant_transcript, full_message):
     """Save VAPI session data to student directory"""
     try:
+        # Create student directory if it doesn't exist
+        student_dir = f'../data/students/{student_id}'
+        sessions_dir = f'{student_dir}/sessions'
+        os.makedirs(sessions_dir, exist_ok=True)
+        
+        # Generate session filename with timestamp
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        session_file = f'{sessions_dir}/{timestamp}_vapi_session.json'
+        transcript_file = f'{sessions_dir}/{timestamp}_vapi_transcript.txt'
+        
+        # Create session data
+        session_data = {
+            'call_id': call_id,
+            'student_id': student_id,
+            'phone_number': phone,
+            'start_time': datetime.now().isoformat(),
+            'duration_seconds': duration,
+            'session_type': 'vapi_call',
+            'transcript_file': f'{timestamp}_vapi_transcript.txt',
+            'user_transcript_length': len(user_transcript),
+            'assistant_transcript_length': len(assistant_transcript),
+            'vapi_data': full_message  # Store complete VAPI response
+        }
+        
+        # Save session metadata
+        with open(session_file, 'w', encoding='utf-8') as f:
+            json.dump(session_data, f, indent=2, ensure_ascii=False)
+        
+        # Save combined transcript
+        combined_transcript = f"=== VAPI Call Transcript ===\n"
+        combined_transcript += f"Call ID: {call_id}\n"
+        combined_transcript += f"Duration: {duration} seconds\n"
+        combined_transcript += f"Phone: {phone}\n"
+        combined_transcript += f"Timestamp: {datetime.now().isoformat()}\n\n"
+        combined_transcript += f"=== User Transcript ===\n{user_transcript}\n\n"
+        combined_transcript += f"=== Assistant Transcript ===\n{assistant_transcript}\n"
+        
+        with open(transcript_file, 'w', encoding='utf-8') as f:
+            f.write(combined_transcript)
+        
+        print(f"💾 Saved VAPI session: {session_file}")
+        
+    except Exception as e:
+        print(f"❌ Error saving VAPI session: {e}")
+
+def normalize_phone_number(phone: str) -> str:
+    """Normalize phone number for consistent matching"""
+    if not phone:
+        return ""
+    
+    # Remove all non-digits
+    clean = ''.join(c for c in phone if c.isdigit())
+    
+    # Handle US numbers - remove country code if present
+    if clean.startswith('1') and len(clean) == 11:
+        clean = clean[1:]
+    
+    return clean
+
+def identify_or_create_student(phone_number: str, call_id: str) -> str:
+    """Identify existing student or create new one with better logic"""
+    if not phone_number:
+        return f"unknown_caller_{call_id}"
+    
+    # Clean and normalize phone number
+    clean_phone = normalize_phone_number(phone_number)
+    
+    # Look up existing student
+    for phone, student_id in phone_manager.phone_mapping.items():
+        if normalize_phone_number(phone) == clean_phone:
+            log_webhook('student-identified', f"Found student {student_id}",
+                       call_id=call_id, student_id=student_id, phone=phone_number)
+            return student_id
+    
+    # Create new student if not found
+    new_student_id = create_student_from_call(clean_phone, call_id)
+    log_webhook('student-created', f"Created new student {new_student_id}",
+               call_id=call_id, student_id=new_student_id, phone=phone_number)
+    
+    return new_student_id
+
+def create_student_from_call(phone: str, call_id: str) -> str:
+    """Create a new student from phone call data"""
+    student_id = f"student_{phone[-4:]}" if phone else f"unknown_{call_id[-6:]}"
+    
+    # Ensure unique ID
+    counter = 1
+    base_id = student_id
+    while os.path.exists(f'../data/students/{student_id}'):
+        student_id = f"{base_id}_{counter}"
+        counter += 1
+    
+    # Create student directories
+    student_dir = f'../data/students/{student_id}'
+    os.makedirs(f'{student_dir}/sessions', exist_ok=True)
+    
+    # Create basic profile
+    profile = {
+        'name': f"Student {phone[-4:]}" if phone else f"Unknown Caller",
+        'age': 'Unknown',
+        'grade': 'Unknown',
+        'phone_number': phone,
+        'created_from_call': call_id,
+        'created_date': datetime.now().isoformat(),
+        'interests': [],
+        'learning_preferences': [],
+        'curriculum': 'To be determined'
+    }
+    
+    with open(f'{student_dir}/profile.json', 'w', encoding='utf-8') as f:
+        json.dump(profile, f, indent=2, ensure_ascii=False)
+    
+    # Create initial progress
+    progress = {
+        'overall_progress': 0,
+        'subjects': {},
+        'goals': ['Complete initial assessment'],
+        'streak_days': 0,
+        'last_updated': datetime.now().isoformat()
+    }
+    
+    with open(f'{student_dir}/progress.json', 'w', encoding='utf-8') as f:
+        json.dump(progress, f, indent=2, ensure_ascii=False)
+    
+    # Add phone mapping
+    if phone:
+        phone_manager.phone_mapping[phone] = student_id
+        phone_manager.save_mappings()
+    
+    return student_id
+
+def save_api_driven_session(call_id: str, student_id: str, phone: str, 
+                           duration: int, transcript: str, call_data: Dict[Any, Any]):
+    """Save VAPI session data using API-fetched data"""
+    try:
+        # Create student directory if it doesn't exist
+        student_dir = f'../data/students/{student_id}'
+        sessions_dir = f'{student_dir}/sessions'
+        os.makedirs(sessions_dir, exist_ok=True)
+        
+        # Generate session filename with timestamp
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        session_file = f'{sessions_dir}/{timestamp}_vapi_session.json'
+        transcript_file = f'{sessions_dir}/{timestamp}_vapi_transcript.txt'
+        
+        # Create session data using API metadata
+        metadata = vapi_client.extract_call_metadata(call_data)
+        session_data = {
+            'call_id': call_id,
+            'student_id': student_id,
+            'phone_number': phone,
+            'start_time': metadata.get('created_at', datetime.now().isoformat()),
+            'duration_seconds': duration,
+            'session_type': 'vapi_call_api',
+            'transcript_file': f'{timestamp}_vapi_transcript.txt',
+            'transcript_length': len(transcript) if transcript else 0,
+            'data_source': 'vapi_api',
+            'call_status': metadata.get('status'),
+            'call_cost': metadata.get('cost', 0),
+            'has_recording': metadata.get('has_recording', False),
+            'recording_url': metadata.get('recording_url'),
+            'vapi_metadata': metadata,
+            'analysis_summary': metadata.get('analysis_summary', ''),
+            'analysis_data': metadata.get('analysis_structured_data', {})
+        }
+        
+        # Save session metadata
+        with open(session_file, 'w', encoding='utf-8') as f:
+            json.dump(session_data, f, indent=2, ensure_ascii=False)
+        
+        # Save transcript
+        if transcript:
+            with open(transcript_file, 'w', encoding='utf-8') as f:
+                f.write(transcript)
+        
+        print(f"💾 Saved API-driven session: {session_file}")
+        log_webhook('session-saved', f"Saved session for call {call_id}",
+                   call_id=call_id,
+                   student_id=student_id,
+                   session_file=session_file,
+                   transcript_length=len(transcript) if transcript else 0)
+        
+    except Exception as e:
+        log_error('WEBHOOK', f"Error saving API-driven session for call {call_id}", e,
+                 call_id=call_id, student_id=student_id)
+        print(f"❌ Error saving API-driven session: {e}")
+
+def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
+    """Fallback to webhook-based processing when API is unavailable"""
+    try:
+        log_webhook('webhook-fallback', "Using webhook fallback processing")
+        print("📱 Using webhook fallback processing")
+        
+        # Extract data from webhook message (old method)
+        call_info = message.get('call', {})
+        call_id = call_info.get('id')
+        customer_phone = call_info.get('customer', {}).get('number')
+        duration = message.get('durationSeconds', 0)
+        
+        # Get transcript from webhook
+        transcript_data = message.get('transcript', {})
+        user_transcript = transcript_data.get('user', '')
+        assistant_transcript = transcript_data.get('assistant', '')
+        
+        if customer_phone:
+            clean_phone = normalize_phone_number(customer_phone)
+            student_id = None
+            
+            # Look up existing student
+            for phone, sid in phone_manager.phone_mapping.items():
+                if normalize_phone_number(phone) == clean_phone:
+                    student_id = sid
+                    break
+            
+            if not student_id:
+                student_id = f"unknown_{clean_phone}" if customer_phone else f"unknown_{call_id}"
+        else:
+            student_id = f"unknown_{call_id}"
+        
+        # Save using old method
+        save_vapi_session(call_id, student_id, customer_phone, duration,
+                         user_transcript, assistant_transcript, message)
+        
+        # Trigger AI analysis if we have transcript
+        if student_id and user_transcript and AI_POC_AVAILABLE:
+            trigger_ai_analysis_async(student_id, user_transcript, call_id)
+            
+    except Exception as e:
+        log_error('WEBHOOK', f"Error in webhook fallback processing", e,
+                 call_id=call_id if 'call_id' in locals() else None)
+        print(f"❌ Webhook fallback error: {e}")
+
         # Create student directory if it doesn't exist
         student_dir = f'../data/students/{student_id}'
         sessions_dir = f'{student_dir}/sessions'
