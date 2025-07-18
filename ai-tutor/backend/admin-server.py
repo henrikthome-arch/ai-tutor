@@ -1341,6 +1341,9 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
     # Clean and normalize phone number
     clean_phone = normalize_phone_number(phone_number)
     
+    # Force reload of mapping to prevent stale cache issues
+    phone_manager.phone_mapping = phone_manager.load_phone_mapping()
+    
     # Look up existing student
     for phone, student_id in phone_manager.phone_mapping.items():
         if normalize_phone_number(phone) == clean_phone:
@@ -1620,7 +1623,7 @@ def trigger_ai_analysis_async(student_id, transcript, call_id):
                 log_ai_analysis("AI analysis completed successfully",
                                call_id=call_id,
                                student_id=student_id,
-                               analysis_summary=analysis.get('summary', 'No summary') if analysis else 'No analysis')
+                               analysis_summary=analysis.conceptual_understanding if analysis else 'No analysis')
                 print(f"✅ AI analysis completed for call {call_id}")
                 
             except Exception as e:
