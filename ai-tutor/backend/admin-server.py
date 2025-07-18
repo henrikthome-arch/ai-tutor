@@ -1209,8 +1209,10 @@ def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
     """Handle end-of-call using API-first approach"""
     try:
         # Extract basic info from webhook
+        call_id = None  # Initialize call_id for robust error logging
         call_id = message.get('call', {}).get('id')
         phone_number = message.get('phoneNumber')  # Direct from webhook
+        student_id = None  # Initialize student_id to prevent UnboundLocalError
         
         if not call_id:
             log_error('WEBHOOK', 'No call_id in end-of-call-report', ValueError())
@@ -1474,93 +1476,52 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
 
 def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
     """Fallback to webhook-based processing when API is unavailable"""
+    call_id = 'unknown' # Initialize call_id for robust error logging
     try:
         log_webhook('webhook-fallback', "Using webhook fallback processing")
         print("📱 Using webhook fallback processing")
-        
+
+        # Robustness: Ensure message is a dictionary
+        if not isinstance(message, dict):
+            log_error('WEBHOOK', 'Fallback received non-dict message', TypeError(f"Expected dict, got {type(message).__name__}"),
+                      message_type=type(message).__name__)
+            return
+
         # Extract data from webhook message (old method)
         call_info = message.get('call', {})
         call_id = call_info.get('id')
-        customer_phone = call_info.get('customer', {}).get('number')
+        customer_phone = call_info.get('customer', {}).get('number') or message.get('phoneNumber')
         duration = message.get('durationSeconds', 0)
         
         # Get transcript from webhook
         transcript_data = message.get('transcript', {})
-        user_transcript = transcript_data.get('user', '')
-        assistant_transcript = transcript_data.get('assistant', '')
-        
-        if customer_phone:
-            clean_phone = normalize_phone_number(customer_phone)
-            student_id = None
-            
-            # Look up existing student
-            for phone, sid in phone_manager.phone_mapping.items():
-                if normalize_phone_number(phone) == clean_phone:
-                    student_id = sid
-                    break
-            
-            if not student_id:
-                student_id = f"unknown_{clean_phone}" if customer_phone else f"unknown_{call_id}"
-        else:
-            student_id = f"unknown_{call_id}"
+        user_transcript = ""
+        assistant_transcript = ""
+
+        # Handle both string and dict transcript formats
+        if isinstance(transcript_data, dict):
+            user_transcript = transcript_data.get('user', '')
+            assistant_transcript = transcript_data.get('assistant', '')
+        elif isinstance(transcript_data, str):
+            user_transcript = transcript_data # Assume the whole string is the user's part
+
+        # Identify student, ensuring a valid student_id is always returned or created
+        student_id = identify_or_create_student(customer_phone, call_id)
         
         # Save using old method
         save_vapi_session(call_id, student_id, customer_phone, duration,
                          user_transcript, assistant_transcript, message)
         
+        combined_transcript = user_transcript + "\n" + assistant_transcript
+        
         # Trigger AI analysis if we have transcript
-        if student_id and user_transcript and AI_POC_AVAILABLE:
-            trigger_ai_analysis_async(student_id, user_transcript, call_id)
+        if student_id and combined_transcript.strip() and AI_POC_AVAILABLE:
+            trigger_ai_analysis_async(student_id, combined_transcript, call_id)
             
     except Exception as e:
         log_error('WEBHOOK', f"Error in webhook fallback processing", e,
-                 call_id=call_id if 'call_id' in locals() else None)
+                 call_id=call_id if 'call_id' in locals() else 'unknown')
         print(f"❌ Webhook fallback error: {e}")
-
-        # Create student directory if it doesn't exist
-        student_dir = f'../data/students/{student_id}'
-        sessions_dir = f'{student_dir}/sessions'
-        os.makedirs(sessions_dir, exist_ok=True)
-        
-        # Generate session filename with timestamp
-        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        session_file = f'{sessions_dir}/{timestamp}_vapi_session.json'
-        transcript_file = f'{sessions_dir}/{timestamp}_vapi_transcript.txt'
-        
-        # Create session data
-        session_data = {
-            'call_id': call_id,
-            'student_id': student_id,
-            'phone_number': phone,
-            'start_time': datetime.now().isoformat(),
-            'duration_seconds': duration,
-            'session_type': 'vapi_call',
-            'transcript_file': f'{timestamp}_vapi_transcript.txt',
-            'user_transcript_length': len(user_transcript),
-            'assistant_transcript_length': len(assistant_transcript),
-            'vapi_data': full_message  # Store complete VAPI response
-        }
-        
-        # Save session metadata
-        with open(session_file, 'w', encoding='utf-8') as f:
-            json.dump(session_data, f, indent=2, ensure_ascii=False)
-        
-        # Save combined transcript
-        combined_transcript = f"=== VAPI Call Transcript ===\n"
-        combined_transcript += f"Call ID: {call_id}\n"
-        combined_transcript += f"Duration: {duration} seconds\n"
-        combined_transcript += f"Phone: {phone}\n"
-        combined_transcript += f"Timestamp: {datetime.now().isoformat()}\n\n"
-        combined_transcript += f"=== User Transcript ===\n{user_transcript}\n\n"
-        combined_transcript += f"=== Assistant Transcript ===\n{assistant_transcript}\n"
-        
-        with open(transcript_file, 'w', encoding='utf-8') as f:
-            f.write(combined_transcript)
-        
-        print(f"💾 Saved VAPI session: {session_file}")
-        
-    except Exception as e:
-        print(f"❌ Error saving VAPI session: {e}")
 
 def trigger_ai_analysis_async(student_id, transcript, call_id):
     """Trigger AI analysis for VAPI transcript (async)"""

@@ -50,12 +50,14 @@ class VAPIClient:
                                     max_attempts=max_attempts)
                             raise e
                         
-                        wait_time = delay * (2 ** attempt)  # Exponential backoff
-                        log_webhook('api-retry', 
-                                  f"Retrying {func.__name__} after {wait_time}s",
-                                  attempt=attempt + 1,
-                                  max_attempts=max_attempts,
-                                  error=str(e))
+                        wait_time = delay * (2 ** attempt)
+                        log_webhook('api-retry',
+                                    f"Retrying {func.__name__} for call {kwargs.get('call_id', 'unknown')} in {wait_time:.2f}s due to: {e}",
+                                    attempt=attempt + 1,
+                                    max_attempts=max_attempts,
+                                    wait_time=wait_time,
+                                    error_type=type(e).__name__,
+                                    error_message=str(e))
                         time.sleep(wait_time)
                         
                 return None
