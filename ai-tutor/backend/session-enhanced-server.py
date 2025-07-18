@@ -246,7 +246,11 @@ class PhoneMappingManager:
     """Manages phone number to student ID mapping"""
     
     def __init__(self, mapping_file='../data/phone_mapping.json'):
-        self.mapping_file = mapping_file
+        # Production-ready pathing: make path absolute relative to this script file
+        # This will resolve any issues with the current working directory in deployment
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.mapping_file = os.path.join(script_dir, mapping_file)
+        
         self.phone_mapping = self.load_phone_mapping()
     
     def load_phone_mapping(self):
