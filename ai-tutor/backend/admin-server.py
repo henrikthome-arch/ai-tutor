@@ -1319,19 +1319,27 @@ def save_vapi_session(call_id, student_id, phone, duration, user_transcript, ass
     except Exception as e:
         print(f"❌ Error saving VAPI session: {e}")
 
-def normalize_phone_number(phone: str) -> str:
-    """Normalize phone number for consistent matching"""
-    if not phone:
+def normalize_phone_number(phone_number: str) -> str:
+    """Normalize phone number format to always include + and country code."""
+    if not phone_number:
         return ""
-    
+        
     # Remove all non-digits
-    clean = ''.join(c for c in phone if c.isdigit())
+    digits_only = ''.join(filter(str.isdigit, phone_number))
     
-    # Handle US numbers - remove country code if present
-    if clean.startswith('1') and len(clean) == 11:
-        clean = clean[1:]
-    
-    return clean
+    if not digits_only:
+        return ""
+
+    # Handle different formats to ensure a consistent `+<country_code><number>` format
+    if len(digits_only) == 10:
+        # Assumes a 10-digit number is a US number, adds +1
+        return f"+1{digits_only}"
+    elif len(digits_only) == 11 and digits_only.startswith('1'):
+        # Assumes an 11-digit number starting with 1 is a US number
+        return f"+{digits_only}"
+    else:
+        # For other numbers, just ensure it starts with a +
+        return f"+{digits_only}"
 
 def identify_or_create_student(phone_number: str, call_id: str) -> str:
     """Identify existing student or create new one with better logic"""
