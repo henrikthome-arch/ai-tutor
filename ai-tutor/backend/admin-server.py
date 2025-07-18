@@ -1265,8 +1265,12 @@ def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
                                duration, transcript, call_data)
         
         # Trigger AI analysis
-        if student_id and transcript and AI_POC_AVAILABLE:
+        # Trigger AI analysis only for calls longer than 30 seconds
+        if student_id and transcript and duration > 30 and AI_POC_AVAILABLE:
             trigger_ai_analysis_async(student_id, transcript, call_id)
+        elif transcript and duration <= 30:
+            log_ai_analysis("Skipping AI analysis for short call",
+                           call_id=call_id, student_id=student_id, duration_seconds=duration)
             
     except Exception as e:
         log_error('WEBHOOK', f"Error in API-driven end-of-call handler", e,
@@ -1410,9 +1414,9 @@ def create_student_from_call(phone: str, call_id: str) -> str:
         json.dump(progress, f, indent=2, ensure_ascii=False)
     
     # Add phone mapping
+    # Use the corrected manager method to prevent stale state
     if phone:
-        phone_manager.phone_mapping[phone] = student_id
-        phone_manager.save_phone_mapping()
+        phone_manager.add_phone_mapping(phone, student_id)
     
     return student_id
 

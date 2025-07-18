@@ -292,11 +292,20 @@ class PhoneMappingManager:
         return student_id
     
     def add_phone_mapping(self, phone_number, student_id):
-        """Add new phone to student mapping"""
+        """Add new phone to student mapping, ensuring data integrity."""
+        # CRITICAL FIX: Load the latest mapping from disk to avoid overwriting with a stale in-memory version.
+        current_mapping = self.load_phone_mapping()
+        
         normalized_phone = self.normalize_phone_number(phone_number)
-        self.phone_mapping[normalized_phone] = student_id
+        
+        # Add the new mapping to the freshly loaded data
+        current_mapping[normalized_phone] = student_id
+        
+        # Update the in-memory mapping and save the complete, updated version to disk
+        self.phone_mapping = current_mapping
         self.save_phone_mapping()
-        logger.info(f"📞 Mapped {normalized_phone} → {student_id}")
+        
+        logger.info(f"📞 Mapped {normalized_phone} → {student_id} (and saved full mapping)")
     
     def normalize_phone_number(self, phone_number):
         """Normalize phone number format"""
