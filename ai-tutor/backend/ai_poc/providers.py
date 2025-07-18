@@ -86,17 +86,85 @@ class MockOpenAIProvider(SimpleAIProvider):
             processing_time=processing_time,
             cost_estimate=self.estimate_cost(len(transcript)),
             timestamp=datetime.now(),
-            raw_response=json.dumps(analysis_text, indent=2)
+            raw_response=analysis_text.get('raw_response', json.dumps(analysis_text, indent=2))
         )
     
     def _generate_mock_analysis(self, transcript: str, student_context: Dict[str, Any]) -> Dict[str, str]:
-        """Generate mock educational analysis"""
+        """Generate mock educational analysis with profile extraction"""
         
         student_name = student_context.get('name', 'Student')
         subject = student_context.get('subject', 'General')
         age = student_context.get('age', 'Unknown')
         
-        # Simple keyword detection for more realistic responses
+        # Check if we have a custom prompt for profile extraction
+        if 'prompt' in student_context:
+            logger.info("Using custom prompt for profile extraction")
+            
+            # Extract student profile information from transcript
+            import re
+            import json
+            
+            # Extract age
+            age_match = re.search(r"I'?m\s+(\d+)", transcript)
+            extracted_age = int(age_match.group(1)) if age_match else None
+            
+            # Extract grade
+            grade_match = re.search(r"(?:I'?m in|I am in|in)\s+(?:the\s+)?(\d+)(?:st|nd|rd|th)?\s+grade", transcript)
+            grade_word_match = re.search(r"(?:I'?m in|I am in|in)\s+(?:the\s+)?(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth)\s+grade", transcript, re.IGNORECASE)
+            
+            extracted_grade = None
+            if grade_match:
+                extracted_grade = int(grade_match.group(1))
+            elif grade_word_match:
+                grade_words = {
+                    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+                    "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
+                    "eleventh": 11, "twelfth": 12
+                }
+                grade_word = grade_word_match.group(1).lower()
+                if grade_word in grade_words:
+                    extracted_grade = grade_words[grade_word]
+            
+            # Extract interests
+            interests = []
+            interest_matches = re.findall(r"I (?:like|love|enjoy) ([^.,!?]+)", transcript, re.IGNORECASE)
+            for match in interest_matches:
+                interests.append(match.strip())
+            
+            # Create profile JSON
+            profile_json = {
+                "age": extracted_age,
+                "grade": extracted_grade,
+                "interests": interests,
+                "learning_preferences": [],
+                "subjects": {
+                    "favorite": [],
+                    "challenging": []
+                },
+                "confidence_score": 0.9
+            }
+            
+            # Log the extracted profile
+            logger.info(f"Extracted profile: {json.dumps(profile_json)}")
+            
+            # Return standard analysis with raw JSON response
+            understanding = f"OpenAI Analysis: {student_name} demonstrated good conceptual grasp of the lesson material."
+            engagement = "Student showed consistent engagement throughout the tutoring session."
+            progress = "Steady learning progress observed. Student building confidence in the subject area."
+            recommendations = "Continue current approach. Consider introducing more challenging concepts gradually."
+            
+            # Set the raw response to the profile JSON
+            raw_response = json.dumps(profile_json)
+            
+            return {
+                'understanding': understanding,
+                'engagement': engagement,
+                'progress': progress,
+                'recommendations': recommendations,
+                'raw_response': raw_response
+            }
+        
+        # Standard analysis if no custom prompt
         transcript_lower = transcript.lower()
         
         if 'math' in subject.lower() or any(word in transcript_lower for word in ['equation', 'solve', 'number', 'calculate']):
@@ -160,15 +228,84 @@ class MockAnthropicProvider(SimpleAIProvider):
             processing_time=processing_time,
             cost_estimate=self.estimate_cost(len(transcript)),
             timestamp=datetime.now(),
-            raw_response=json.dumps(analysis_text, indent=2)
+            raw_response=analysis_text.get('raw_response', json.dumps(analysis_text, indent=2))
         )
     
     def _generate_mock_analysis(self, transcript: str, student_context: Dict[str, Any]) -> Dict[str, str]:
-        """Generate mock Claude analysis with different perspective"""
+        """Generate mock Claude analysis with profile extraction"""
         
         student_name = student_context.get('name', 'Student')
         subject = student_context.get('subject', 'General')
         
+        # Check if we have a custom prompt for profile extraction
+        if 'prompt' in student_context:
+            logger.info("Using custom prompt for profile extraction in Anthropic provider")
+            
+            # Extract student profile information from transcript
+            import re
+            import json
+            
+            # Extract age
+            age_match = re.search(r"I'?m\s+(\d+)", transcript)
+            extracted_age = int(age_match.group(1)) if age_match else None
+            
+            # Extract grade
+            grade_match = re.search(r"(?:I'?m in|I am in|in)\s+(?:the\s+)?(\d+)(?:st|nd|rd|th)?\s+grade", transcript)
+            grade_word_match = re.search(r"(?:I'?m in|I am in|in)\s+(?:the\s+)?(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth)\s+grade", transcript, re.IGNORECASE)
+            
+            extracted_grade = None
+            if grade_match:
+                extracted_grade = int(grade_match.group(1))
+            elif grade_word_match:
+                grade_words = {
+                    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+                    "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
+                    "eleventh": 11, "twelfth": 12
+                }
+                grade_word = grade_word_match.group(1).lower()
+                if grade_word in grade_words:
+                    extracted_grade = grade_words[grade_word]
+            
+            # Extract interests
+            interests = []
+            interest_matches = re.findall(r"I (?:like|love|enjoy) ([^.,!?]+)", transcript, re.IGNORECASE)
+            for match in interest_matches:
+                interests.append(match.strip())
+            
+            # Create profile JSON
+            profile_json = {
+                "age": extracted_age,
+                "grade": extracted_grade,
+                "interests": interests,
+                "learning_preferences": [],
+                "subjects": {
+                    "favorite": [],
+                    "challenging": []
+                },
+                "confidence_score": 0.9
+            }
+            
+            # Log the extracted profile
+            logger.info(f"Anthropic extracted profile: {json.dumps(profile_json)}")
+            
+            # Return standard analysis with raw JSON response
+            understanding = f"Claude Analysis: {student_name} shows thoughtful engagement with the learning material and demonstrates good critical thinking skills."
+            engagement = "Positive learning attitude - student actively participating and showing intellectual curiosity."
+            progress = "Steady academic growth with good foundation building. Student developing effective learning strategies."
+            recommendations = "Continue fostering critical thinking. Introduce more independent exploration opportunities."
+            
+            # Set the raw response to the profile JSON
+            raw_response = json.dumps(profile_json)
+            
+            return {
+                'understanding': understanding,
+                'engagement': engagement,
+                'progress': progress,
+                'recommendations': recommendations,
+                'raw_response': raw_response
+            }
+        
+        # Standard analysis if no custom prompt
         transcript_lower = transcript.lower()
         
         if 'math' in subject.lower() or any(word in transcript_lower for word in ['equation', 'solve', 'number']):
