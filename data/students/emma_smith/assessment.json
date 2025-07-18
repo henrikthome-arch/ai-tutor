@@ -1,0 +1,33 @@
+{
+  "student_id": "emma_smith",
+  "last_updated": "2025-01-15T12:00:00Z",
+  "subjects": {
+    "math": {
+      "overall_mastery": 0.75,
+      "last_assessed": "2025-01-14T18:30:00Z",
+      "strengths": [
+        "Basic Algebra",
+        "Fractions"
+      ],
+      "weaknesses": [
+        "Word Problems",
+        "Geometry"
+      ],
+      "knowledge_gaps": [
+        "Did not understand the concept of perimeter for complex shapes."
+      ]
+    },
+    "reading_comprehension": {
+      "overall_mastery": 0.88,
+      "last_assessed": "2025-01-10T16:00:00Z",
+      "strengths": [
+        "Identifying main ideas",
+        "Vocabulary"
+      ],
+      "weaknesses": [
+        "Making inferences"
+      ],
+      "knowledge_gaps": []
+    }
+  }
+}

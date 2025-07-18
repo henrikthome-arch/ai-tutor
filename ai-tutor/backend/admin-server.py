@@ -10,7 +10,7 @@ import hashlib
 import hmac
 from datetime import datetime, timedelta
 from typing import Dict, Any
-from flask import Flask, render_template, session, redirect, request, flash, url_for, jsonify
+from flask import Flask, render_template, session, redirect, request, flash, url_for, jsonify, send_file
 import secrets
 
 # Load environment variables
@@ -149,6 +149,7 @@ def get_student_data(student_id):
         'id': student_id,
         'profile': None,
         'progress': None,
+        'assessment': None,
         'sessions': []
     }
     
@@ -163,6 +164,12 @@ def get_student_data(student_id):
     if os.path.exists(progress_path):
         with open(progress_path, 'r', encoding='utf-8') as f:
             student_data['progress'] = json.load(f)
+
+    # Load assessment
+    assessment_path = os.path.join(student_dir, 'assessment.json')
+    if os.path.exists(assessment_path):
+        with open(assessment_path, 'r', encoding='utf-8') as f:
+            student_data['assessment'] = json.load(f)
     
     # Load sessions
     sessions_dir = os.path.join(student_dir, 'sessions')
@@ -207,6 +214,23 @@ def get_system_stats():
         'server_status': server_status,
         'phone_mappings': len(phone_manager.phone_mapping)
     }
+
+def get_all_schools():
+    """Get list of all schools from data file"""
+    schools_file = 'data/schools/school_data.json'
+    if not os.path.exists(schools_file):
+        return []
+    
+    with open(schools_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    return data.get('schools', [])
+
+def save_all_schools(schools_data):
+    """Save all schools to the data file"""
+    schools_file = 'data/schools/school_data.json'
+    with open(schools_file, 'w', encoding='utf-8') as f:
+        json.dump({'schools': schools_data}, f, indent=2, ensure_ascii=False)
 
 # Root route for health checks
 @app.route('/')
@@ -289,6 +313,7 @@ def admin_student_detail(student_id):
     # Extract data for template
     profile = student_data.get('profile', {})
     progress = student_data.get('progress', {})
+    assessment = student_data.get('assessment', {})
     sessions = student_data.get('sessions', [])
     
     # Create student object for template
@@ -320,6 +345,70 @@ def admin_student_detail(student_id):
                          recent_sessions=recent_sessions,
                          session_count=len(sessions),
                          last_session=recent_sessions[0]['date'] if recent_sessions else None)
+
+# School management routes
+@app.route('/admin/schools')
+def admin_schools():
+   if not check_auth():
+       return redirect(url_for('admin_login'))
+   
+   schools = get_all_schools()
+   return render_template('schools.html', schools=schools)
+
+@app.route('/admin/schools/add', methods=['GET', 'POST'])
+def add_school():
+   if not check_auth():
+       return redirect(url_for('admin_login'))
+   
+   if request.method == 'POST':
+       schools = get_all_schools()
+       new_school = {
+           "school_id": request.form['school_id'],
+           "name": request.form['name'],
+           "location": request.form['location'],
+           "background": request.form['background'],
+           "curriculum_type": request.form['curriculum_type']
+       }
+       schools.append(new_school)
+       save_all_schools(schools)
+       flash('School added successfully!', 'success')
+       return redirect(url_for('admin_schools'))
+       
+   return render_template('add_school.html')
+
+@app.route('/admin/schools/edit/<school_id>', methods=['GET', 'POST'])
+def edit_school(school_id):
+   if not check_auth():
+       return redirect(url_for('admin_login'))
+
+   schools = get_all_schools()
+   school = next((s for s in schools if s['school_id'] == school_id), None)
+
+   if not school:
+       flash('School not found!', 'error')
+       return redirect(url_for('admin_schools'))
+
+   if request.method == 'POST':
+       school['name'] = request.form['name']
+       school['location'] = request.form['location']
+       school['background'] = request.form['background']
+       school['curriculum_type'] = request.form['curriculum_type']
+       save_all_schools(schools)
+       flash('School updated successfully!', 'success')
+       return redirect(url_for('admin_schools'))
+
+   return render_template('edit_school.html', school=school)
+
+@app.route('/admin/schools/delete/<school_id>', methods=['POST'])
+def delete_school(school_id):
+   if not check_auth():
+       return redirect(url_for('admin_login'))
+       
+   schools = get_all_schools()
+   schools = [s for s in schools if s['school_id'] != school_id]
+   save_all_schools(schools)
+   flash('School deleted successfully!', 'success')
+   return redirect(url_for('admin_schools'))
 
 # File browser routes
 @app.route('/admin/files')
@@ -478,7 +567,7 @@ def remove_phone_mapping():
     
     if phone_number in phone_manager.phone_mapping:
         del phone_manager.phone_mapping[phone_number]
-        phone_manager.save_mappings()
+        phone_manager.save_phone_mapping()
         flash(f'Phone mapping for {phone_number} removed successfully', 'success')
         return jsonify({'success': True, 'message': 'Phone mapping removed'})
     else:
@@ -500,7 +589,7 @@ def add_phone_mapping():
         return jsonify({'error': 'Student not found'}), 404
     
     phone_manager.phone_mapping[phone_number] = student_id
-    phone_manager.save_mappings()
+    phone_manager.save_phone_mapping()
     flash(f'Phone mapping added: {phone_number} → {student_id}', 'success')
     return jsonify({'success': True, 'message': 'Phone mapping added'})
 
@@ -565,7 +654,7 @@ def add_student():
         # Add phone mapping if provided
         if phone:
             phone_manager.phone_mapping[phone] = student_id
-            phone_manager.save_mappings()
+            phone_manager.save_phone_mapping()
         
         flash(f'Student {name} added successfully!', 'success')
         return redirect(url_for('admin_student_detail', student_id=student_id))
@@ -622,7 +711,7 @@ def edit_student(student_id):
         if phone:
             phone_manager.phone_mapping[phone] = student_id
         
-        phone_manager.save_mappings()
+        phone_manager.save_phone_mapping()
         
         flash(f'Student {name} updated successfully!', 'success')
         return redirect(url_for('admin_student_detail', student_id=student_id))
@@ -673,7 +762,7 @@ def delete_student(student_id):
                 break
         
         if phone_to_remove:
-            phone_manager.save_mappings()
+            phone_manager.save_phone_mapping()
         
         # Remove the entire student directory
         shutil.rmtree(student_dir)
@@ -1098,7 +1187,6 @@ def vapi_webhook():
         else:
             # Log but ignore other events
             log_webhook('ignored-event', f"Ignored VAPI event: {message_type}",
-                       event_type=message_type,
                        call_id=message.get('call', {}).get('id') if isinstance(message, dict) else None)
             print(f"📝 Ignored VAPI event: {message_type}")
         
@@ -1307,7 +1395,7 @@ def create_student_from_call(phone: str, call_id: str) -> str:
     # Add phone mapping
     if phone:
         phone_manager.phone_mapping[phone] = student_id
-        phone_manager.save_mappings()
+        phone_manager.save_phone_mapping()
     
     return student_id
 
@@ -1581,6 +1669,34 @@ def admin_system_logs():
                              'category': category,
                              'level': level
                          })
+
+@app.route('/admin/logs/download/<log_file>')
+def download_log_file(log_file):
+    """Download a specific log file"""
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    # Security: Ensure the file is within the logs directory
+    log_path = os.path.join(system_logger.log_dir, log_file)
+    if not os.path.exists(log_path) or not log_path.startswith(system_logger.log_dir):
+        flash('Log file not found or access denied', 'error')
+        return redirect(url_for('admin_system_logs'))
+
+    return send_file(log_path, as_attachment=True)
+
+@app.route('/admin/logs/download/<log_file>')
+def download_log_file(log_file):
+    """Download a specific log file"""
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    # Security: Ensure the file is within the logs directory
+    log_path = os.path.join(system_logger.log_dir, log_file)
+    if not os.path.exists(log_path) or not log_path.startswith(os.path.abspath(system_logger.log_dir)):
+        flash('Log file not found or access denied', 'error')
+        return redirect(url_for('admin_system_logs'))
+
+    return send_file(log_path, as_attachment=True)
 
 @app.route('/admin/logs/cleanup', methods=['POST'])
 def cleanup_system_logs():

@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+
+{% block title %}Add School{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mt-4">Add New School</h1>
+    <p>Create a new school record in the system.</p>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="fas fa-plus mr-1"></i>
+            New School Details
+        </div>
+        <div class="card-body">
+            <form action="{{ url_for('add_school') }}" method="post">
+                <div class="form-group">
+                    <label for="school_id">School ID</label>
+                    <input type="text" class="form-control" id="school_id" name="school_id" required>
+                </div>
+                <div class="form-group">
+                    <label for="name">School Name</label>
+                    <input type="text" class="form-control" id="name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="location">Location</label>
+                    <input type="text" class="form-control" id="location" name="location" required>
+                </div>
+                <div class="form-group">
+                    <label for="background">Background</label>
+                    <textarea class="form-control" id="background" name="background" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="curriculum_type">Curriculum Type</label>
+                    <select class="form-control" id="curriculum_type" name="curriculum_type">
+                        <option value="international">International</option>
+                        <option value="local">Local</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Add School</button>
+                <a href="{{ url_for('admin_schools') }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

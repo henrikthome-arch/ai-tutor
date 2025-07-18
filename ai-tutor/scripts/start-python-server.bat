@@ -21,6 +21,6 @@ echo.
 echo Press Ctrl+C to stop the server
 echo.
 
-python simple-server.py
+python ../backend/session-enhanced-server.py
 
 pause

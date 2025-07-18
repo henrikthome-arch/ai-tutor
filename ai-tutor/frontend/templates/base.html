@@ -267,13 +267,17 @@
                    class="{% if request.endpoint in ['admin_students', 'admin_student_detail'] %}active{% endif %}">
                    👥 Students
                 </a>
+                <a href="{{ url_for('admin_schools') }}"
+                   class="{% if request.endpoint in ['admin_schools', 'add_school', 'edit_school'] %}active{% endif %}">
+                   🏫 Schools
+                </a>
+               <a href="{{ url_for('admin_all_sessions') }}"
+                  class="{% if request.endpoint in ['admin_all_sessions', 'view_student_sessions', 'view_session_detail'] %}active{% endif %}">
+                  🕒 Sessions
+               </a>
                 <a href="{{ url_for('admin_all_sessions') }}"
                    class="{% if request.endpoint in ['admin_all_sessions', 'view_student_sessions', 'view_session_detail'] %}active{% endif %}">
                    🕒 Sessions
-                </a>
-                <a href="{{ url_for('admin_files') }}"
-                   class="{% if request.endpoint in ['admin_files', 'admin_file_view'] %}active{% endif %}">
-                   📁 Files
                 </a>
                 <a href="{{ url_for('ai_analysis_dashboard') }}"
                    class="{% if request.endpoint in ['ai_analysis_dashboard', 'test_sample_analysis', 'analyze_student_session'] %}active{% endif %}">

@@ -1,0 +1,18 @@
+{
+  "schools": [
+    {
+      "school_id": "isg_athens",
+      "name": "International School of Greece",
+      "location": "Athens, Greece",
+      "background": "A leading international school offering a globally-recognized curriculum.",
+      "curriculum_type": "international"
+    },
+    {
+      "school_id": "local_public_1",
+      "name": "Local Public School",
+      "location": "Local Area",
+      "background": "A local public school with a standard national curriculum.",
+      "curriculum_type": "local"
+    }
+  ]
+}

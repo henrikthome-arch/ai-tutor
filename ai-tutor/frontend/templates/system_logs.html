@@ -128,6 +128,9 @@
                             <button onclick="copyLogData('{{ loop.index }}')" class="btn-sm" style="font-size: 12px; padding: 4px 8px; background: #28a745;">
                                 📋 Copy
                             </button>
+                            <a href="{{ url_for('download_log_file', log_file=log.file_name) }}" class="btn-sm" style="font-size: 12px; padding: 4px 8px; background: #007bff; text-decoration: none;" download>
+                                📥 Download
+                            </a>
                         </div>
                         <div id="data-{{ loop.index }}" class="log-data" style="display: none; margin-top: 0.5rem;">
                             <pre id="data-content-{{ loop.index }}" style="background: #f8f9fa; padding: 0.5rem; border-radius: 4px; font-size: 11px; max-height: 200px; overflow-y: auto;">{{ log.data | tojson(indent=2) }}</pre>
@@ -272,11 +275,11 @@ function copyLogData(index) {
             const text = dataContent.textContent || dataContent.innerText || '';
             navigator.clipboard.writeText(text).then(function() {
                 // Visual feedback
-                const button = event.target;
+                const button = document.querySelector(`[onclick="copyLogData('${index}')"]`);
                 const originalText = button.textContent;
                 button.textContent = '✅ Copied!';
                 button.style.background = '#28a745';
-                
+               
                 setTimeout(function() {
                     button.textContent = originalText;
                     button.style.background = '#28a745';
