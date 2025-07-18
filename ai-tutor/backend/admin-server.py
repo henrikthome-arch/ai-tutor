@@ -1353,8 +1353,11 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
         return f"unknown_caller_{call_id}"
     
     # Clean and normalize phone number
-    # Normalize the phone number first
     clean_phone = normalize_phone_number(phone_number)
+    
+    # Log the exact lookup for debugging
+    log_webhook('phone-lookup', f"Looking up student by phone: {clean_phone}",
+               call_id=call_id, phone=clean_phone, original_phone=phone_number)
     
     # The phone manager now handles normalization and ensures fresh data
     student_id = phone_manager.get_student_by_phone(clean_phone)
@@ -1364,6 +1367,10 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
         return student_id
     
     # Create new student if not found
+    log_webhook('student-not-found', f"No student found for phone: {clean_phone}",
+               call_id=call_id, phone=clean_phone)
+    
+    # Pass the normalized phone to create_student_from_call
     new_student_id = create_student_from_call(clean_phone, call_id)
     log_webhook('student-created', f"Created new student {new_student_id}",
                call_id=call_id, student_id=new_student_id, phone=clean_phone)
@@ -1372,7 +1379,12 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
 
 def create_student_from_call(phone: str, call_id: str) -> str:
     """Create a new student from phone call data"""
-    student_id = f"student_{phone[-4:]}" if phone else f"unknown_{call_id[-6:]}"
+    # Ensure phone is normalized for consistent lookup and storage
+    normalized_phone = normalize_phone_number(phone)
+    
+    # Use last 4 digits of normalized phone for ID creation
+    phone_suffix = normalized_phone[-4:] if normalized_phone else ""
+    student_id = f"student_{phone_suffix}" if phone else f"unknown_{call_id[-6:]}"
     
     # Ensure unique ID
     counter = 1
@@ -1387,10 +1399,10 @@ def create_student_from_call(phone: str, call_id: str) -> str:
     
     # Create basic profile
     profile = {
-        'name': f"Student {phone[-4:]}" if phone else f"Unknown Caller",
+        'name': f"Student {phone_suffix}" if phone else f"Unknown Caller",
         'age': 'Unknown',
         'grade': 'Unknown',
-        'phone_number': phone,
+        'phone_number': normalized_phone,  # Store normalized phone in profile
         'created_from_call': call_id,
         'created_date': datetime.now().isoformat(),
         'interests': [],
@@ -1413,10 +1425,12 @@ def create_student_from_call(phone: str, call_id: str) -> str:
     with open(f'{student_dir}/progress.json', 'w', encoding='utf-8') as f:
         json.dump(progress, f, indent=2, ensure_ascii=False)
     
-    # Add phone mapping
-    # Use the corrected manager method to prevent stale state
-    if phone:
-        phone_manager.add_phone_mapping(phone, student_id)
+    # Add phone mapping using normalized phone number
+    if normalized_phone:
+        # Log the exact phone number being mapped for debugging
+        log_webhook('phone-mapping', f"Adding phone mapping: {normalized_phone} → {student_id}",
+                   phone=normalized_phone, student_id=student_id)
+        phone_manager.add_phone_mapping(normalized_phone, student_id)
     
     return student_id
 
