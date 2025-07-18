@@ -114,9 +114,10 @@ def get_all_students():
                     with open(profile_path, 'r', encoding='utf-8') as f:
                         profile = json.load(f)
                     
-                    # Get phone number
+                    # Get phone number from the latest mapping
                     phone = None
-                    for phone_num, sid in phone_manager.phone_mapping.items():
+                    current_mapping = phone_manager.load_phone_mapping()
+                    for phone_num, sid in current_mapping.items():
                         if sid == student_id:
                             phone = phone_num
                             break
@@ -309,9 +310,10 @@ def admin_student_detail(student_id):
         flash(f'Student {student_id} not found', 'error')
         return redirect(url_for('admin_students'))
     
-    # Get phone number
+    # Get phone number from the latest mapping
     phone = None
-    for phone_num, sid in phone_manager.phone_mapping.items():
+    current_mapping = phone_manager.load_phone_mapping()
+    for phone_num, sid in current_mapping.items():
         if sid == student_id:
             phone = phone_num
             break
@@ -540,7 +542,9 @@ def admin_system():
         return redirect(url_for('admin_login'))
     
     stats = get_system_stats()
-    phone_mappings = dict(phone_manager.phone_mapping)
+    
+    # Get the latest phone mappings from disk to ensure we have the most up-to-date data
+    phone_mappings = dict(phone_manager.load_phone_mapping())
     
     # Get students info for phone mapping display
     students = get_all_students()
@@ -571,7 +575,13 @@ def remove_phone_mapping():
     if not phone_number:
         return jsonify({'error': 'Phone number is required'}), 400
     
-    if phone_number in phone_manager.phone_mapping:
+    # Get the latest mapping from disk
+    current_mapping = phone_manager.load_phone_mapping()
+    
+    if phone_number in current_mapping:
+        # Update the in-memory mapping with the latest from disk
+        phone_manager.phone_mapping = current_mapping
+        # Remove the mapping
         del phone_manager.phone_mapping[phone_number]
         phone_manager.save_phone_mapping()
         flash(f'Phone mapping for {phone_number} removed successfully', 'success')
@@ -594,8 +604,9 @@ def add_phone_mapping():
     if not os.path.exists(f'../data/students/{student_id}'):
         return jsonify({'error': 'Student not found'}), 404
     
-    phone_manager.phone_mapping[phone_number] = student_id
-    phone_manager.save_phone_mapping()
+    # Use the add_phone_mapping method which handles loading the latest mapping
+    phone_manager.add_phone_mapping(phone_number, student_id)
+    
     flash(f'Phone mapping added: {phone_number} → {student_id}', 'success')
     return jsonify({'success': True, 'message': 'Phone mapping added'})
 
@@ -722,9 +733,10 @@ def edit_student(student_id):
         flash(f'Student {name} updated successfully!', 'success')
         return redirect(url_for('admin_student_detail', student_id=student_id))
     
-    # Get current phone
+    # Get current phone from the latest mapping
     phone = None
-    for phone_num, sid in phone_manager.phone_mapping.items():
+    current_mapping = phone_manager.load_phone_mapping()
+    for phone_num, sid in current_mapping.items():
         if sid == student_id:
             phone = phone_num
             break
@@ -759,11 +771,15 @@ def delete_student(student_id):
             except:
                 pass
         
-        # Remove phone mapping for this student
+        # Remove phone mapping for this student using the latest mapping from disk
         phone_to_remove = None
-        for phone_num, sid in list(phone_manager.phone_mapping.items()):
+        current_mapping = phone_manager.load_phone_mapping()
+        
+        for phone_num, sid in list(current_mapping.items()):
             if sid == student_id:
                 phone_to_remove = phone_num
+                # Update the in-memory mapping with the latest from disk
+                phone_manager.phone_mapping = current_mapping
                 del phone_manager.phone_mapping[phone_num]
                 break
         
