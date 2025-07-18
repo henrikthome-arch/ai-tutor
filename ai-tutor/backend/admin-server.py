@@ -1686,19 +1686,6 @@ def download_log_file(log_file):
 
     return send_file(log_path, as_attachment=True)
 
-@app.route('/admin/logs/download/<log_file>')
-def download_log_file(log_file):
-    """Download a specific log file"""
-    if not check_auth():
-        return redirect(url_for('admin_login'))
-    
-    # Security: Ensure the file is within the logs directory
-    log_path = os.path.join(system_logger.log_dir, log_file)
-    if not os.path.exists(log_path) or not log_path.startswith(os.path.abspath(system_logger.log_dir)):
-        flash('Log file not found or access denied', 'error')
-        return redirect(url_for('admin_system_logs'))
-
-    return send_file(log_path, as_attachment=True)
 
 @app.route('/admin/logs/cleanup', methods=['POST'])
 def cleanup_system_logs():
