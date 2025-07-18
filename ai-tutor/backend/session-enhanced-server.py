@@ -275,10 +275,16 @@ class PhoneMappingManager:
             logger.error(f"Error saving phone mapping: {e}")
     
     def get_student_by_phone(self, phone_number):
-        """Get student ID by phone number"""
+        """Get student ID by phone number, ensuring fresh data."""
+        # Critical fix: Reload the mapping from disk on every lookup to prevent stale state
+        current_mapping = self.load_phone_mapping()
+        
         normalized_phone = self.normalize_phone_number(phone_number)
-        student_id = self.phone_mapping.get(normalized_phone)
-        logger.info(f"📞 Phone lookup: {normalized_phone} → {student_id}")
+        
+        # Look up in the freshly loaded mapping
+        student_id = current_mapping.get(normalized_phone)
+        
+        logger.info(f"📞 Phone lookup: {normalized_phone} → {student_id} (from fresh data)")
         return student_id
     
     def add_phone_mapping(self, phone_number, student_id):

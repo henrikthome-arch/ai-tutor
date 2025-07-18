@@ -1349,13 +1349,8 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
         return f"unknown_caller_{call_id}"
     
     # Clean and normalize phone number
-    clean_phone = normalize_phone_number(phone_number)
-    
-    # Force reload of mapping to prevent stale cache issues
-    phone_manager.phone_mapping = phone_manager.load_phone_mapping()
-    
-    # Use the dedicated manager method for lookup
-    student_id = phone_manager.get_student_by_phone(clean_phone)
+    # The phone manager now handles normalization and ensures fresh data
+    student_id = phone_manager.get_student_by_phone(phone_number)
     if student_id:
         log_webhook('student-identified', f"Found student {student_id}",
                    call_id=call_id, student_id=student_id, phone=phone_number)
