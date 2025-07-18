@@ -1281,12 +1281,14 @@ def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
                                duration, transcript, call_data)
         
         # Trigger AI analysis
-        # Trigger AI analysis only for calls longer than 30 seconds
-        if student_id and transcript and duration > 30 and AI_POC_AVAILABLE:
+        # Trigger AI analysis only for calls with substantial content
+        # Use transcript length as a better indicator than duration
+        if student_id and transcript and len(transcript) > 500 and AI_POC_AVAILABLE:
             trigger_ai_analysis_async(student_id, transcript, call_id)
-        elif transcript and duration <= 30:
-            log_ai_analysis("Skipping AI analysis for short call",
-                           call_id=call_id, student_id=student_id, duration_seconds=duration)
+        elif transcript and len(transcript) <= 500:
+            log_ai_analysis("Skipping AI analysis for short transcript",
+                           call_id=call_id, student_id=student_id,
+                           duration_seconds=duration, transcript_length=len(transcript))
             
     except Exception as e:
         log_error('WEBHOOK', f"Error in API-driven end-of-call handler", e,
@@ -1484,12 +1486,25 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
         
         # Create session data using API metadata
         metadata = vapi_client.extract_call_metadata(call_data)
+        
+        # Calculate a more reliable duration based on transcript length if duration is 0
+        effective_duration = duration
+        if duration == 0 and transcript and len(transcript) > 100:
+            # Estimate ~10 seconds per 100 characters as a fallback
+            effective_duration = len(transcript) // 10
+            log_webhook('duration-estimate', f"Estimated duration from transcript length",
+                       call_id=call_id, original_duration=duration,
+                       estimated_duration=effective_duration,
+                       transcript_length=len(transcript))
+            print(f"⏱️ Estimated duration from transcript: {effective_duration}s (original: {duration}s)")
+        
         session_data = {
             'call_id': call_id,
             'student_id': student_id,
             'phone_number': phone,
             'start_time': metadata.get('created_at', datetime.now().isoformat()),
-            'duration_seconds': duration,
+            'duration_seconds': effective_duration,  # Use the effective duration
+            'original_duration': duration,  # Keep the original for reference
             'session_type': 'vapi_call_api',
             'transcript_file': f'{timestamp}_vapi_transcript.txt',
             'transcript_length': len(transcript) if transcript else 0,
@@ -1507,26 +1522,36 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
         with open(session_file, 'w', encoding='utf-8') as f:
             json.dump(session_data, f, indent=2, ensure_ascii=False)
         
-        # Save transcript
+        # Save transcript and analyze regardless of duration
         if transcript:
             with open(transcript_file, 'w', encoding='utf-8') as f:
                 f.write(transcript)
             
-            # NEW: Analyze transcript and update student profile
-            try:
-                from transcript_analyzer import TranscriptAnalyzer
-                analyzer = TranscriptAnalyzer()
-                extracted_info = analyzer.analyze_transcript(transcript)
-                if extracted_info:
-                    analyzer.update_student_profile(student_id, extracted_info)
-                    log_webhook('profile-updated', f"Updated student profile from transcript",
+            # Always analyze transcript for profile information if there's content
+            if len(transcript) > 100:  # Only analyze if there's meaningful content
+                try:
+                    from transcript_analyzer import TranscriptAnalyzer
+                    analyzer = TranscriptAnalyzer()
+                    log_webhook('transcript-analysis-start', f"Starting transcript analysis for profile extraction",
                                call_id=call_id, student_id=student_id,
-                               extracted_info=extracted_info)
-                    print(f"👤 Updated profile for student {student_id} with extracted information")
-            except Exception as e:
-                log_error('TRANSCRIPT_ANALYSIS', f"Error analyzing transcript", e,
-                         call_id=call_id, student_id=student_id)
-                print(f"⚠️ Error analyzing transcript: {e}")
+                               transcript_length=len(transcript))
+                    print(f"🔍 Analyzing transcript for student {student_id} profile information...")
+                    
+                    extracted_info = analyzer.analyze_transcript(transcript)
+                    if extracted_info:
+                        analyzer.update_student_profile(student_id, extracted_info)
+                        log_webhook('profile-updated', f"Updated student profile from transcript",
+                                   call_id=call_id, student_id=student_id,
+                                   extracted_info=extracted_info)
+                        print(f"👤 Updated profile for student {student_id} with extracted information: {extracted_info}")
+                    else:
+                        log_webhook('profile-no-info', f"No profile information extracted from transcript",
+                                   call_id=call_id, student_id=student_id)
+                        print(f"ℹ️ No profile information extracted from transcript for student {student_id}")
+                except Exception as e:
+                    log_error('TRANSCRIPT_ANALYSIS', f"Error analyzing transcript", e,
+                             call_id=call_id, student_id=student_id)
+                    print(f"⚠️ Error analyzing transcript: {e}")
         
         print(f"💾 Saved API-driven session: {session_file}")
         log_webhook('session-saved', f"Saved session for call {call_id}",
@@ -1574,32 +1599,56 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
         # Identify student, ensuring a valid student_id is always returned or created
         student_id = identify_or_create_student(customer_phone, call_id)
         
-        # Save using old method
-        save_vapi_session(call_id, student_id, customer_phone, duration,
-                         user_transcript, assistant_transcript, message)
-        
         combined_transcript = user_transcript + "\n" + assistant_transcript
         
-        # Analyze transcript and update student profile
-        if student_id and combined_transcript.strip():
+        # Calculate a more reliable duration based on transcript length if duration is 0
+        effective_duration = duration
+        if duration == 0 and combined_transcript and len(combined_transcript) > 100:
+            # Estimate ~10 seconds per 100 characters as a fallback
+            effective_duration = len(combined_transcript) // 10
+            log_webhook('duration-estimate', f"Estimated duration from webhook transcript length",
+                       call_id=call_id, original_duration=duration,
+                       estimated_duration=effective_duration,
+                       transcript_length=len(combined_transcript))
+            print(f"⏱️ Estimated duration from webhook transcript: {effective_duration}s (original: {duration}s)")
+        
+        # Save using old method with the effective duration
+        save_vapi_session(call_id, student_id, customer_phone, effective_duration,
+                         user_transcript, assistant_transcript, message)
+        
+        # Always analyze transcript for profile information if there's content
+        if student_id and combined_transcript.strip() and len(combined_transcript) > 100:
             try:
                 from transcript_analyzer import TranscriptAnalyzer
                 analyzer = TranscriptAnalyzer()
+                log_webhook('transcript-analysis-start', f"Starting webhook transcript analysis for profile extraction",
+                           call_id=call_id, student_id=student_id,
+                           transcript_length=len(combined_transcript))
+                print(f"🔍 Analyzing webhook transcript for student {student_id} profile information...")
+                
                 extracted_info = analyzer.analyze_transcript(combined_transcript)
                 if extracted_info:
                     analyzer.update_student_profile(student_id, extracted_info)
                     log_webhook('profile-updated', f"Updated student profile from webhook transcript",
                                call_id=call_id, student_id=student_id,
                                extracted_info=extracted_info)
-                    print(f"👤 Updated profile for student {student_id} with extracted information")
+                    print(f"👤 Updated profile for student {student_id} with extracted information: {extracted_info}")
+                else:
+                    log_webhook('profile-no-info', f"No profile information extracted from webhook transcript",
+                               call_id=call_id, student_id=student_id)
+                    print(f"ℹ️ No profile information extracted from webhook transcript for student {student_id}")
             except Exception as e:
                 log_error('TRANSCRIPT_ANALYSIS', f"Error analyzing webhook transcript", e,
                          call_id=call_id, student_id=student_id)
                 print(f"⚠️ Error analyzing webhook transcript: {e}")
         
-        # Trigger AI analysis if we have transcript
-        if student_id and combined_transcript.strip() and AI_POC_AVAILABLE:
+        # Trigger AI analysis based on transcript length rather than duration
+        if student_id and combined_transcript.strip() and len(combined_transcript) > 500 and AI_POC_AVAILABLE:
             trigger_ai_analysis_async(student_id, combined_transcript, call_id)
+        elif combined_transcript.strip() and len(combined_transcript) <= 500:
+            log_ai_analysis("Skipping AI analysis for short webhook transcript",
+                           call_id=call_id, student_id=student_id,
+                           duration_seconds=duration, transcript_length=len(combined_transcript))
             
     except Exception as e:
         log_error('WEBHOOK', f"Error in webhook fallback processing", e,
