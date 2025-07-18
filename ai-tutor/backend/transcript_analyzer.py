@@ -105,9 +105,11 @@ Do not include any explanatory text in your response, ONLY the JSON object.
             logger.info(f"Analyzing transcript with {len(transcript)} characters")
             
             # Create a direct prompt for the AI model following the user's suggestion
-            direct_prompt = f"""Below is a transcript from which I want you to extract some key information:
+            direct_prompt = f"""Below follows a transcript of a conversation between an AI tutor and a Student:
 
 {transcript}
+
+END OF TRANSCRIPT
 
 Provide the response in the format of JSON as per the example below. Extract only information that is explicitly stated by the student.
 
@@ -124,10 +126,10 @@ Provide the response in the format of JSON as per the example below. Extract onl
 }}
 
 IMPORTANT:
-1. Look carefully for statements like "I'm 10" or "I'm in 4th grade" or "I like playing games"
-2. Return ONLY the JSON object, no other text
-3. If information is not present, use null for numbers and empty arrays for lists
-4. Make sure to extract ALL information mentioned by the student
+1. Return ONLY the JSON object, no other text
+2. If information is not present, use null for numbers and empty arrays for lists
+3. Make sure to extract ALL information mentioned by the student
+4. Pay attention to direct answers to questions like "How old are you?" or "What grade are you in?"
 """
             
             # Log the prompt for debugging
@@ -145,6 +147,11 @@ IMPORTANT:
             
             # Get AI analysis
             logger.info("Sending transcript to AI model for analysis")
+            
+            # Use the direct prompt we created
+            context["prompt"] = direct_prompt
+            logger.info("Added direct prompt to context")
+            
             analysis = await provider.analyze_session(transcript, context)
             logger.info(f"Received analysis response from provider")
             

@@ -1,5 +1,5 @@
 """
-AI Provider implementations for session post-processing POC
+AI Provider implementations for session post-processing
 Supports OpenAI and Anthropic with provider-agnostic interface
 """
 
@@ -56,292 +56,253 @@ class SimpleAIProvider(ABC):
         """Simple cost estimation"""
         pass
 
-class MockOpenAIProvider(SimpleAIProvider):
-    """Mock OpenAI provider for POC validation (no actual API calls)"""
+class OpenAIProvider(SimpleAIProvider):
+    """Real OpenAI provider implementation"""
     
     def __init__(self):
-        self.config = ai_config.get_openai_config()
-        self.model = self.config['model']
-        
+        try:
+            import openai
+            self.openai = openai
+            self.config = ai_config.get_openai_config()
+            self.model = self.config['model']
+            self.api_key = self.config['api_key']
+            self.max_tokens = self.config['max_tokens']
+            self.temperature = self.config['temperature']
+            self.timeout = self.config['timeout']
+            
+            # Set API key
+            self.openai.api_key = self.api_key
+            
+            logger.info(f"OpenAI provider initialized with model: {self.model}")
+        except ImportError:
+            logger.error("OpenAI package not installed. Install with: pip install openai")
+            raise
+        except Exception as e:
+            logger.error(f"Error initializing OpenAI provider: {e}")
+            raise
+    
     async def analyze_session(self, transcript: str, student_context: Dict[str, Any]) -> BasicAnalysis:
-        """Mock OpenAI analysis for POC"""
-        
+        """Analyze session with OpenAI"""
         start_time = datetime.now()
         
-        # Simulate API delay
-        await asyncio.sleep(1.5)
-        
-        # Generate mock analysis based on transcript content
-        analysis_text = self._generate_mock_analysis(transcript, student_context)
-        
-        processing_time = (datetime.now() - start_time).total_seconds()
-        
-        return BasicAnalysis(
-            conceptual_understanding=analysis_text['understanding'],
-            engagement_level=analysis_text['engagement'],
-            progress_indicators=analysis_text['progress'],
-            recommendations=analysis_text['recommendations'],
-            confidence_score=0.85,
-            provider_used="openai",
-            processing_time=processing_time,
-            cost_estimate=self.estimate_cost(len(transcript)),
-            timestamp=datetime.now(),
-            raw_response=analysis_text.get('raw_response', json.dumps(analysis_text, indent=2))
-        )
-    
-    def _generate_mock_analysis(self, transcript: str, student_context: Dict[str, Any]) -> Dict[str, str]:
-        """Generate mock educational analysis with profile extraction"""
-        
-        student_name = student_context.get('name', 'Student')
-        subject = student_context.get('subject', 'General')
-        age = student_context.get('age', 'Unknown')
-        
-        # Check if we have a custom prompt for profile extraction
-        if 'prompt' in student_context:
-            logger.info("Using custom prompt for profile extraction")
+        try:
+            # Check if we have a custom prompt for profile extraction
+            if 'prompt' in student_context:
+                prompt = student_context['prompt']
+                logger.info(f"Using custom prompt for OpenAI: {prompt[:50]}...")
+                
+                # Create messages for the API call
+                messages = [
+                    {"role": "system", "content": "You are an expert educational data analyst."},
+                    {"role": "user", "content": prompt}
+                ]
+                
+                # Make the API call
+                logger.info(f"Calling OpenAI API with model: {self.model}")
+                response = await self.openai.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    max_tokens=self.max_tokens,
+                    temperature=self.temperature,
+                    timeout=self.timeout
+                )
+                
+                # Extract the response content
+                raw_response = response.choices[0].message.content
+                logger.info(f"Received response from OpenAI: {raw_response[:100]}...")
+                
+                # For profile extraction, we expect a JSON response
+                try:
+                    # Try to parse the entire response as JSON
+                    extracted_info = json.loads(raw_response)
+                    logger.info(f"Successfully parsed JSON response from OpenAI")
+                except json.JSONDecodeError:
+                    # If that fails, try to extract JSON from the text
+                    import re
+                    json_match = re.search(r'({[\s\S]*})', raw_response)
+                    if json_match:
+                        extracted_info = json.loads(json_match.group(1))
+                        logger.info(f"Extracted JSON from OpenAI response text")
+                    else:
+                        logger.error("Could not extract JSON from OpenAI response")
+                        extracted_info = {}
+                
+                # Create a standard analysis response
+                understanding = f"OpenAI Analysis: Student demonstrated good conceptual grasp of the lesson material."
+                engagement = "Student showed consistent engagement throughout the tutoring session."
+                progress = "Steady learning progress observed. Student building confidence in the subject area."
+                recommendations = "Continue current approach. Consider introducing more challenging concepts gradually."
+                
+                processing_time = (datetime.now() - start_time).total_seconds()
+                
+                return BasicAnalysis(
+                    conceptual_understanding=understanding,
+                    engagement_level=engagement,
+                    progress_indicators=progress,
+                    recommendations=recommendations,
+                    confidence_score=0.9,
+                    provider_used="openai",
+                    processing_time=processing_time,
+                    cost_estimate=self.estimate_cost(len(transcript)),
+                    timestamp=datetime.now(),
+                    raw_response=raw_response
+                )
             
-            # Extract student profile information from transcript
-            import re
-            import json
+            # Standard session analysis if no custom prompt
+            # This would be implemented for full session analysis
+            # For now, we're focusing on profile extraction
+            logger.warning("No custom prompt provided for OpenAI analysis")
+            raise NotImplementedError("Standard session analysis not implemented yet")
             
-            # Extract age
-            age_match = re.search(r"I'?m\s+(\d+)", transcript)
-            extracted_age = int(age_match.group(1)) if age_match else None
-            
-            # Extract grade
-            grade_match = re.search(r"(?:I'?m in|I am in|in)\s+(?:the\s+)?(\d+)(?:st|nd|rd|th)?\s+grade", transcript)
-            grade_word_match = re.search(r"(?:I'?m in|I am in|in)\s+(?:the\s+)?(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth)\s+grade", transcript, re.IGNORECASE)
-            
-            extracted_grade = None
-            if grade_match:
-                extracted_grade = int(grade_match.group(1))
-            elif grade_word_match:
-                grade_words = {
-                    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
-                    "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
-                    "eleventh": 11, "twelfth": 12
-                }
-                grade_word = grade_word_match.group(1).lower()
-                if grade_word in grade_words:
-                    extracted_grade = grade_words[grade_word]
-            
-            # Extract interests
-            interests = []
-            interest_matches = re.findall(r"I (?:like|love|enjoy) ([^.,!?]+)", transcript, re.IGNORECASE)
-            for match in interest_matches:
-                interests.append(match.strip())
-            
-            # Create profile JSON
-            profile_json = {
-                "age": extracted_age,
-                "grade": extracted_grade,
-                "interests": interests,
-                "learning_preferences": [],
-                "subjects": {
-                    "favorite": [],
-                    "challenging": []
-                },
-                "confidence_score": 0.9
-            }
-            
-            # Log the extracted profile
-            logger.info(f"Extracted profile: {json.dumps(profile_json)}")
-            
-            # Return standard analysis with raw JSON response
-            understanding = f"OpenAI Analysis: {student_name} demonstrated good conceptual grasp of the lesson material."
-            engagement = "Student showed consistent engagement throughout the tutoring session."
-            progress = "Steady learning progress observed. Student building confidence in the subject area."
-            recommendations = "Continue current approach. Consider introducing more challenging concepts gradually."
-            
-            # Set the raw response to the profile JSON
-            raw_response = json.dumps(profile_json)
-            
-            return {
-                'understanding': understanding,
-                'engagement': engagement,
-                'progress': progress,
-                'recommendations': recommendations,
-                'raw_response': raw_response
-            }
-        
-        # Standard analysis if no custom prompt
-        transcript_lower = transcript.lower()
-        
-        if 'math' in subject.lower() or any(word in transcript_lower for word in ['equation', 'solve', 'number', 'calculate']):
-            understanding = f"OpenAI Analysis: {student_name} demonstrated solid mathematical reasoning skills, showing understanding of core algebraic concepts."
-            engagement = "High engagement - student actively participated in problem-solving and asked clarifying questions."
-            progress = "Strong progress in equation solving. Student successfully applied step-by-step methodology."
-            recommendations = "Continue with similar difficulty level. Introduce word problems to apply mathematical concepts in real-world contexts."
-        
-        elif any(word in transcript_lower for word in ['read', 'story', 'book', 'writing']):
-            understanding = f"OpenAI Analysis: {student_name} shows good comprehension skills and vocabulary development for age {age}."
-            engagement = "Moderate to high engagement - student showed interest in the reading material."
-            progress = "Reading fluency improving. Student demonstrates better comprehension of complex sentences."
-            recommendations = "Encourage more independent reading. Focus on expanding vocabulary through context clues."
-        
-        else:
-            understanding = f"OpenAI Analysis: {student_name} demonstrated good conceptual grasp of the lesson material."
-            engagement = "Student showed consistent engagement throughout the tutoring session."
-            progress = "Steady learning progress observed. Student building confidence in the subject area."
-            recommendations = "Continue current approach. Consider introducing more challenging concepts gradually."
-        
-        return {
-            'understanding': understanding,
-            'engagement': engagement,
-            'progress': progress,
-            'recommendations': recommendations
-        }
+        except Exception as e:
+            logger.error(f"Error in OpenAI analysis: {e}")
+            raise
     
     def get_provider_name(self) -> str:
-        return f"OpenAI (Mock - {self.model})"
+        return f"OpenAI ({self.model})"
     
     def estimate_cost(self, transcript_length: int) -> float:
-        # Mock cost estimation: ~$0.001 per 1000 characters
-        return (transcript_length / 1000) * 0.001
+        # Approximate cost estimation based on model and input length
+        # These rates should be updated based on current OpenAI pricing
+        model_rates = {
+            "gpt-4o": 0.00005,  # $0.05 per 1K tokens
+            "gpt-4o-mini": 0.00001,  # $0.01 per 1K tokens
+            "gpt-3.5-turbo": 0.000001  # $0.001 per 1K tokens
+        }
+        
+        # Default to gpt-3.5-turbo rate if model not found
+        rate = model_rates.get(self.model, 0.000001)
+        
+        # Rough estimate: 1 token ≈ 4 characters
+        estimated_tokens = transcript_length / 4
+        return (estimated_tokens / 1000) * rate
 
-class MockAnthropicProvider(SimpleAIProvider):
-    """Mock Anthropic provider for POC validation"""
+class AnthropicProvider(SimpleAIProvider):
+    """Real Anthropic provider implementation"""
     
     def __init__(self):
-        self.config = ai_config.get_anthropic_config()
-        self.model = self.config['model']
-        
+        try:
+            import anthropic
+            self.anthropic = anthropic
+            self.config = ai_config.get_anthropic_config()
+            self.model = self.config['model']
+            self.api_key = self.config['api_key']
+            self.max_tokens = self.config['max_tokens']
+            self.temperature = self.config['temperature']
+            self.timeout = self.config['timeout']
+            
+            # Initialize client
+            self.client = anthropic.Anthropic(api_key=self.api_key)
+            
+            logger.info(f"Anthropic provider initialized with model: {self.model}")
+        except ImportError:
+            logger.error("Anthropic package not installed. Install with: pip install anthropic")
+            raise
+        except Exception as e:
+            logger.error(f"Error initializing Anthropic provider: {e}")
+            raise
+    
     async def analyze_session(self, transcript: str, student_context: Dict[str, Any]) -> BasicAnalysis:
-        """Mock Anthropic analysis for POC"""
-        
+        """Analyze session with Anthropic"""
         start_time = datetime.now()
         
-        # Simulate different processing time
-        await asyncio.sleep(2.0)
-        
-        analysis_text = self._generate_mock_analysis(transcript, student_context)
-        
-        processing_time = (datetime.now() - start_time).total_seconds()
-        
-        return BasicAnalysis(
-            conceptual_understanding=analysis_text['understanding'],
-            engagement_level=analysis_text['engagement'],
-            progress_indicators=analysis_text['progress'],
-            recommendations=analysis_text['recommendations'],
-            confidence_score=0.82,
-            provider_used="anthropic",
-            processing_time=processing_time,
-            cost_estimate=self.estimate_cost(len(transcript)),
-            timestamp=datetime.now(),
-            raw_response=analysis_text.get('raw_response', json.dumps(analysis_text, indent=2))
-        )
-    
-    def _generate_mock_analysis(self, transcript: str, student_context: Dict[str, Any]) -> Dict[str, str]:
-        """Generate mock Claude analysis with profile extraction"""
-        
-        student_name = student_context.get('name', 'Student')
-        subject = student_context.get('subject', 'General')
-        
-        # Check if we have a custom prompt for profile extraction
-        if 'prompt' in student_context:
-            logger.info("Using custom prompt for profile extraction in Anthropic provider")
+        try:
+            # Check if we have a custom prompt for profile extraction
+            if 'prompt' in student_context:
+                prompt = student_context['prompt']
+                logger.info(f"Using custom prompt for Anthropic: {prompt[:50]}...")
+                
+                # Make the API call
+                logger.info(f"Calling Anthropic API with model: {self.model}")
+                
+                # Create a coroutine for the API call
+                async def call_anthropic():
+                    response = await self.client.messages.create(
+                        model=self.model,
+                        max_tokens=self.max_tokens,
+                        temperature=self.temperature,
+                        system="You are an expert educational data analyst.",
+                        messages=[
+                            {"role": "user", "content": prompt}
+                        ]
+                    )
+                    return response
+                
+                # Run the coroutine with a timeout
+                response = await asyncio.wait_for(call_anthropic(), timeout=self.timeout)
+                
+                # Extract the response content
+                raw_response = response.content[0].text
+                logger.info(f"Received response from Anthropic: {raw_response[:100]}...")
+                
+                # For profile extraction, we expect a JSON response
+                try:
+                    # Try to parse the entire response as JSON
+                    extracted_info = json.loads(raw_response)
+                    logger.info(f"Successfully parsed JSON response from Anthropic")
+                except json.JSONDecodeError:
+                    # If that fails, try to extract JSON from the text
+                    import re
+                    json_match = re.search(r'({[\s\S]*})', raw_response)
+                    if json_match:
+                        extracted_info = json.loads(json_match.group(1))
+                        logger.info(f"Extracted JSON from Anthropic response text")
+                    else:
+                        logger.error("Could not extract JSON from Anthropic response")
+                        extracted_info = {}
+                
+                # Create a standard analysis response
+                understanding = f"Claude Analysis: Student shows thoughtful engagement with the learning material."
+                engagement = "Positive learning attitude - student actively participating and showing intellectual curiosity."
+                progress = "Steady academic growth with good foundation building."
+                recommendations = "Continue fostering critical thinking. Introduce more independent exploration opportunities."
+                
+                processing_time = (datetime.now() - start_time).total_seconds()
+                
+                return BasicAnalysis(
+                    conceptual_understanding=understanding,
+                    engagement_level=engagement,
+                    progress_indicators=progress,
+                    recommendations=recommendations,
+                    confidence_score=0.9,
+                    provider_used="anthropic",
+                    processing_time=processing_time,
+                    cost_estimate=self.estimate_cost(len(transcript)),
+                    timestamp=datetime.now(),
+                    raw_response=raw_response
+                )
             
-            # Extract student profile information from transcript
-            import re
-            import json
+            # Standard session analysis if no custom prompt
+            # This would be implemented for full session analysis
+            # For now, we're focusing on profile extraction
+            logger.warning("No custom prompt provided for Anthropic analysis")
+            raise NotImplementedError("Standard session analysis not implemented yet")
             
-            # Extract age
-            age_match = re.search(r"I'?m\s+(\d+)", transcript)
-            extracted_age = int(age_match.group(1)) if age_match else None
-            
-            # Extract grade
-            grade_match = re.search(r"(?:I'?m in|I am in|in)\s+(?:the\s+)?(\d+)(?:st|nd|rd|th)?\s+grade", transcript)
-            grade_word_match = re.search(r"(?:I'?m in|I am in|in)\s+(?:the\s+)?(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth)\s+grade", transcript, re.IGNORECASE)
-            
-            extracted_grade = None
-            if grade_match:
-                extracted_grade = int(grade_match.group(1))
-            elif grade_word_match:
-                grade_words = {
-                    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
-                    "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
-                    "eleventh": 11, "twelfth": 12
-                }
-                grade_word = grade_word_match.group(1).lower()
-                if grade_word in grade_words:
-                    extracted_grade = grade_words[grade_word]
-            
-            # Extract interests
-            interests = []
-            interest_matches = re.findall(r"I (?:like|love|enjoy) ([^.,!?]+)", transcript, re.IGNORECASE)
-            for match in interest_matches:
-                interests.append(match.strip())
-            
-            # Create profile JSON
-            profile_json = {
-                "age": extracted_age,
-                "grade": extracted_grade,
-                "interests": interests,
-                "learning_preferences": [],
-                "subjects": {
-                    "favorite": [],
-                    "challenging": []
-                },
-                "confidence_score": 0.9
-            }
-            
-            # Log the extracted profile
-            logger.info(f"Anthropic extracted profile: {json.dumps(profile_json)}")
-            
-            # Return standard analysis with raw JSON response
-            understanding = f"Claude Analysis: {student_name} shows thoughtful engagement with the learning material and demonstrates good critical thinking skills."
-            engagement = "Positive learning attitude - student actively participating and showing intellectual curiosity."
-            progress = "Steady academic growth with good foundation building. Student developing effective learning strategies."
-            recommendations = "Continue fostering critical thinking. Introduce more independent exploration opportunities."
-            
-            # Set the raw response to the profile JSON
-            raw_response = json.dumps(profile_json)
-            
-            return {
-                'understanding': understanding,
-                'engagement': engagement,
-                'progress': progress,
-                'recommendations': recommendations,
-                'raw_response': raw_response
-            }
-        
-        # Standard analysis if no custom prompt
-        transcript_lower = transcript.lower()
-        
-        if 'math' in subject.lower() or any(word in transcript_lower for word in ['equation', 'solve', 'number']):
-            understanding = f"Claude Analysis: {student_name} exhibits strong analytical thinking and mathematical intuition. Shows excellent grasp of underlying mathematical principles."
-            engagement = "Highly engaged - student demonstrates curiosity and willingness to explore different solution approaches."
-            progress = "Excellent mathematical development. Student showing increased confidence in tackling complex problems."
-            recommendations = "Introduce more challenging multi-step problems. Consider exploring mathematical connections to real-world applications."
-        
-        elif any(word in transcript_lower for word in ['read', 'story', 'book', 'writing']):
-            understanding = f"Claude Analysis: {student_name} demonstrates thoughtful reading comprehension and growing literary awareness."
-            engagement = "Good engagement with text - student making meaningful connections and asking insightful questions."
-            progress = "Strong progress in critical thinking about literature. Developing analytical reading skills."
-            recommendations = "Encourage deeper textual analysis. Introduce more complex literary works appropriate for student's level."
-        
-        else:
-            understanding = f"Claude Analysis: {student_name} shows thoughtful engagement with the learning material and demonstrates good critical thinking skills."
-            engagement = "Positive learning attitude - student actively participating and showing intellectual curiosity."
-            progress = "Steady academic growth with good foundation building. Student developing effective learning strategies."
-            recommendations = "Continue fostering critical thinking. Introduce more independent exploration opportunities."
-        
-        return {
-            'understanding': understanding,
-            'engagement': engagement,
-            'progress': progress,
-            'recommendations': recommendations
-        }
+        except Exception as e:
+            logger.error(f"Error in Anthropic analysis: {e}")
+            raise
     
     def get_provider_name(self) -> str:
-        return f"Anthropic (Mock - {self.model})"
+        return f"Anthropic ({self.model})"
     
     def estimate_cost(self, transcript_length: int) -> float:
-        # Anthropic cost estimation
-        return (transcript_length / 1000) * 0.0008
+        # Approximate cost estimation based on model and input length
+        # These rates should be updated based on current Anthropic pricing
+        model_rates = {
+            "claude-3-opus-20240229": 0.00003,  # $0.03 per 1K tokens
+            "claude-3-sonnet-20240229": 0.00001,  # $0.01 per 1K tokens
+            "claude-3-haiku-20240307": 0.000003  # $0.003 per 1K tokens
+        }
+        
+        # Default to haiku rate if model not found
+        rate = model_rates.get(self.model, 0.000003)
+        
+        # Rough estimate: 1 token ≈ 4 characters
+        estimated_tokens = transcript_length / 4
+        return (estimated_tokens / 1000) * rate
 
 class ProviderManager:
-    """Simplified provider manager for POC"""
+    """Provider manager for AI analysis"""
     
     def __init__(self):
         self.providers = {}
@@ -355,22 +316,39 @@ class ProviderManager:
         logger.info(f"Current provider: {self.current_provider}")
     
     def _initialize_providers(self):
-        """Initialize available providers"""
-        try:
-            # Always add mock providers for POC
-            self.providers['openai'] = MockOpenAIProvider()
-            logger.info("OpenAI mock provider initialized")
-        except Exception as e:
-            logger.warning(f"OpenAI provider initialization failed: {e}")
+        """Initialize available providers based on configuration"""
+        # Check which providers are configured
+        available_providers = ai_config.get_available_providers()
         
-        try:
-            self.providers['anthropic'] = MockAnthropicProvider()
-            logger.info("Anthropic mock provider initialized")
-        except Exception as e:
-            logger.warning(f"Anthropic provider initialization failed: {e}")
+        if not available_providers:
+            logger.warning("No AI providers configured. Check API keys in environment variables.")
+        
+        # Initialize OpenAI if configured
+        if 'openai' in available_providers:
+            try:
+                self.providers['openai'] = OpenAIProvider()
+                logger.info("OpenAI provider initialized")
+            except Exception as e:
+                logger.warning(f"OpenAI provider initialization failed: {e}")
+        
+        # Initialize Anthropic if configured
+        if 'anthropic' in available_providers:
+            try:
+                self.providers['anthropic'] = AnthropicProvider()
+                logger.info("Anthropic provider initialized")
+            except Exception as e:
+                logger.warning(f"Anthropic provider initialization failed: {e}")
+        
+        # Set default provider if current is not available
+        if self.current_provider not in self.providers and self.providers:
+            self.current_provider = list(self.providers.keys())[0]
+            logger.warning(f"Default provider not available. Using {self.current_provider} instead.")
     
     async def analyze_session(self, transcript: str, student_context: Dict[str, Any]) -> BasicAnalysis:
         """Analyze session with current provider"""
+        
+        if not self.providers:
+            raise ValueError("No AI providers available. Check API keys in environment variables.")
         
         if self.current_provider not in self.providers:
             raise ValueError(f"Provider {self.current_provider} not available. Available: {list(self.providers.keys())}")
