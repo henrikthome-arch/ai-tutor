@@ -1349,17 +1349,20 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
         return f"unknown_caller_{call_id}"
     
     # Clean and normalize phone number
+    # Normalize the phone number first
+    clean_phone = normalize_phone_number(phone_number)
+    
     # The phone manager now handles normalization and ensures fresh data
-    student_id = phone_manager.get_student_by_phone(phone_number)
+    student_id = phone_manager.get_student_by_phone(clean_phone)
     if student_id:
         log_webhook('student-identified', f"Found student {student_id}",
-                   call_id=call_id, student_id=student_id, phone=phone_number)
+                   call_id=call_id, student_id=student_id, phone=clean_phone)
         return student_id
     
     # Create new student if not found
     new_student_id = create_student_from_call(clean_phone, call_id)
     log_webhook('student-created', f"Created new student {new_student_id}",
-               call_id=call_id, student_id=new_student_id, phone=phone_number)
+               call_id=call_id, student_id=new_student_id, phone=clean_phone)
     
     return new_student_id
 

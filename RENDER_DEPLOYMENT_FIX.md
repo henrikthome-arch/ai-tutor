@@ -1,33 +1,42 @@
-# How to Fix the Render Deployment
+# Render.com Deployment Troubleshooting Guide
 
-The deployment is failing because Render is trying to run a file that no longer exists. This is set by the **Start Command** in your service's settings on Render.
+This guide will walk you through the necessary steps to diagnose and fix the persistent student recognition issue. The root cause is not in the Python code, but in the Render.com deployment environment configuration.
 
-Follow these steps to fix it:
+## Step 1: Verify Persistent Storage (Crucial)
 
-## Step 1: Go to your Render Dashboard
+The most likely cause of this issue is that the `phone_mapping.json` file is being erased on every deploy. This happens when the data directory is not configured as a persistent disk.
 
-1.  Log in to your Render account.
-2.  Find your service named **`ai-tutor`** in the dashboard and click on it.
+1.  Go to your **Render Dashboard** and select your AI Tutor service.
+2.  Navigate to the **"Disks"** section in the sidebar.
+3.  **Verify** that you have a disk configured with the following settings:
+    *   **Mount Path:** `ai-tutor/data`
+    *   **Size:** At least 1 GB (or your chosen size).
+4.  **If there is no disk configured**, this is the problem. You **must** create one:
+    *   Click **"New Disk"**.
+    *   Set the **Name** to something descriptive (e.g., `ai-tutor-data`).
+    *   Set the **Mount Path** to `ai-tutor/data`. **This must be exact.**
+    *   Choose a size and click **"Create Disk"**.
+5.  After creating the disk, you **must trigger a new deploy** for the change to take effect.
 
-## Step 2: Find the Settings Page
+## Step 2: Clear Build Cache and Manually Deploy
 
-1.  On your service's page, look for a navigation menu on the left side.
-2.  Click on the **"Settings"** link.
+Even with a persistent disk, Render might be using a stale build cache. We need to force a clean build to ensure all of my latest code fixes are included.
 
-## Step 3: Update the Start Command
+1.  In your service's dashboard, go to the **"Manual Deploy"** section.
+2.  Select the **`main`** branch.
+3.  **Crucially, click the "Clear build cache" option.**
+4.  Click **"Deploy latest commit"**.
 
-1.  Scroll down the Settings page until you find the **"Build & Deploy"** section.
-2.  You will see a field labeled **"Start Command"**.
-3.  The current (incorrect) value is likely `python simple-server-fixed.py` or something similar.
-4.  **Delete** the old command and replace it with this exact command:
-    ```
-    python ai-tutor/backend/admin-server.py
-    ```
+## Step 3: Run the Definitive Test
 
-## Step 4: Save and Deploy
+After the new deployment is live, we will perform a final test to confirm the fix.
 
-1.  Scroll to the bottom of the page and click the **"Save Changes"** button.
-2.  After saving, go back to your service's main page.
-3.  Click the **"Manual Deploy"** button and choose **"Deploy latest commit"** to trigger a new deployment with the correct start command.
+1.  Wait for the deployment to complete successfully.
+2.  **Do not place a test call yet.**
+3.  Access your admin dashboard and manually add your phone number and a test student ID to the phone mappings.
+4.  **Trigger another manual deploy**, again with the **"Clear build cache"** option enabled.
+5.  Once the second deployment is complete, access the admin dashboard again.
+    *   **If your phone number mapping is still there**, the persistent disk is working. Proceed to place a test call. The issue should now be resolved.
+    *   **If your phone number mapping is gone**, the disk is still not configured correctly. Please double-check the mount path and contact Render support if necessary.
 
-After this, the deployment should succeed. Please monitor the logs to confirm.
+Following these steps will resolve the environmental issues and allow the corrected code to function as designed.
