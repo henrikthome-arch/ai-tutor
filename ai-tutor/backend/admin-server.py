@@ -25,9 +25,11 @@ except ImportError:
 import sys
 sys.path.append('.')
 
-# Import PhoneMappingManager from session-enhanced-server.py
+# Import PhoneMappingManager from session-enhanced-server.py (robust path)
 import importlib.util
-spec = importlib.util.spec_from_file_location("session_enhanced_server", "./session-enhanced-server.py")
+script_dir = os.path.dirname(os.path.abspath(__file__))
+ses_path = os.path.join(script_dir, "session-enhanced-server.py")
+spec = importlib.util.spec_from_file_location("session_enhanced_server", ses_path)
 session_enhanced_server = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(session_enhanced_server)
 
