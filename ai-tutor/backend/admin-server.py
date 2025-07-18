@@ -1281,12 +1281,12 @@ def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
                                duration, transcript, call_data)
         
         # Trigger AI analysis
-        # Trigger AI analysis only for calls with substantial content
-        # Use transcript length as a better indicator than duration
-        if student_id and transcript and len(transcript) > 500 and AI_POC_AVAILABLE:
+        # Always analyze transcript for profile extraction regardless of length
+        # Only skip if transcript is extremely short or empty
+        if student_id and transcript and len(transcript) > 100 and AI_POC_AVAILABLE:
             trigger_ai_analysis_async(student_id, transcript, call_id)
-        elif transcript and len(transcript) <= 500:
-            log_ai_analysis("Skipping AI analysis for short transcript",
+        elif transcript and len(transcript) <= 100:
+            log_ai_analysis("Skipping AI analysis for extremely short transcript",
                            call_id=call_id, student_id=student_id,
                            duration_seconds=duration, transcript_length=len(transcript))
             
@@ -1642,11 +1642,12 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
                          call_id=call_id, student_id=student_id)
                 print(f"⚠️ Error analyzing webhook transcript: {e}")
         
-        # Trigger AI analysis based on transcript length rather than duration
-        if student_id and combined_transcript.strip() and len(combined_transcript) > 500 and AI_POC_AVAILABLE:
+        # Always analyze transcript for profile extraction regardless of length
+        # Only skip if transcript is extremely short or empty
+        if student_id and combined_transcript.strip() and len(combined_transcript) > 100 and AI_POC_AVAILABLE:
             trigger_ai_analysis_async(student_id, combined_transcript, call_id)
-        elif combined_transcript.strip() and len(combined_transcript) <= 500:
-            log_ai_analysis("Skipping AI analysis for short webhook transcript",
+        elif combined_transcript.strip() and len(combined_transcript) <= 100:
+            log_ai_analysis("Skipping AI analysis for extremely short webhook transcript",
                            call_id=call_id, student_id=student_id,
                            duration_seconds=duration, transcript_length=len(combined_transcript))
             

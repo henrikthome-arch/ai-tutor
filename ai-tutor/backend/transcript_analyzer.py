@@ -152,6 +152,13 @@ IMPORTANT:
             context["prompt"] = direct_prompt
             logger.info("Added direct prompt to context")
             
+            # Log that we're about to call the AI provider
+            from system_logger import log_ai_analysis
+            log_ai_analysis("Sending transcript to AI provider for analysis",
+                           provider=self.provider_manager.current_provider,
+                           transcript_length=len(transcript),
+                           context_type="profile_extraction")
+            
             analysis = await provider.analyze_session(transcript, context)
             logger.info(f"Received analysis response from provider")
             
@@ -277,10 +284,24 @@ IMPORTANT:
                 # Log each extracted field for better debugging
                 for key, value in extracted_info.items():
                     logger.info(f"Extracted {key}: {value}")
+                
+                # Log successful extraction to system logger
+                from system_logger import log_ai_analysis
+                log_ai_analysis("Successfully extracted profile information",
+                               extracted_fields=list(extracted_info.keys()),
+                               student_id=student_id if 'student_id' in locals() else None,
+                               provider=self.provider_manager.current_provider)
             else:
                 logger.warning("No information extracted from transcript")
                 # Log a sample of the transcript to help debug
                 logger.warning(f"Transcript sample: {transcript[:200]}...")
+                
+                # Log failed extraction to system logger
+                from system_logger import log_ai_analysis
+                log_ai_analysis("Failed to extract profile information",
+                               level="WARNING",
+                               transcript_length=len(transcript),
+                               provider=self.provider_manager.current_provider)
                 
             return extracted_info
         except Exception as e:

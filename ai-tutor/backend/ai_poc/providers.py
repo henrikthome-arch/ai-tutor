@@ -366,11 +366,29 @@ class ProviderManager:
             # Track costs
             self.daily_cost_tracking += analysis.cost_estimate
             
+            # Log detailed information about the AI usage
+            from system_logger import log_ai_analysis
+            log_ai_analysis("AI provider analysis completed",
+                           provider=self.current_provider,
+                           model=provider.get_provider_name(),
+                           cost=analysis.cost_estimate,
+                           processing_time=analysis.processing_time,
+                           transcript_length=len(transcript) if transcript else 0,
+                           confidence_score=analysis.confidence_score)
+            
             logger.info(f"Analysis completed. Cost: ${analysis.cost_estimate:.4f}, Time: {analysis.processing_time:.2f}s")
             return analysis
             
         except Exception as e:
             logger.error(f"Analysis failed with {self.current_provider}: {e}")
+            
+            # Log the error with detailed information
+            from system_logger import log_error
+            log_error('AI_PROVIDER', f"Analysis failed with {self.current_provider}", e,
+                     provider=self.current_provider,
+                     transcript_length=len(transcript) if transcript else 0,
+                     context_keys=list(student_context.keys()) if student_context else [])
+            
             raise
     
     def switch_provider(self, new_provider: str) -> bool:
