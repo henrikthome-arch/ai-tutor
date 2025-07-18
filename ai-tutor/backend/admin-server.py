@@ -1354,13 +1354,12 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
     # Force reload of mapping to prevent stale cache issues
     phone_manager.phone_mapping = phone_manager.load_phone_mapping()
     
-    # Look up existing student
-    for phone, student_id in phone_manager.phone_mapping.items():
-        # Compare normalized incoming number with the already-normalized key from the file
-        if phone == clean_phone:
-            log_webhook('student-identified', f"Found student {student_id}",
-                       call_id=call_id, student_id=student_id, phone=phone_number)
-            return student_id
+    # Use the dedicated manager method for lookup
+    student_id = phone_manager.get_student_by_phone(clean_phone)
+    if student_id:
+        log_webhook('student-identified', f"Found student {student_id}",
+                   call_id=call_id, student_id=student_id, phone=phone_number)
+        return student_id
     
     # Create new student if not found
     new_student_id = create_student_from_call(clean_phone, call_id)

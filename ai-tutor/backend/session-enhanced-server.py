@@ -255,7 +255,9 @@ class PhoneMappingManager:
             try:
                 with open(self.mapping_file, 'r') as f:
                     data = json.load(f)
-                    return data.get('phone_to_student', {})
+                    # The mapping is the entire file content, not nested.
+                    # This was a bug. Correcting to load the entire dictionary.
+                    return data
             except Exception as e:
                 logger.error(f"Error loading phone mapping: {e}")
                 return {}
@@ -265,12 +267,9 @@ class PhoneMappingManager:
         """Save phone to student mapping"""
         try:
             os.makedirs(os.path.dirname(self.mapping_file), exist_ok=True)
-            data = {
-                'phone_to_student': self.phone_mapping,
-                'last_updated': datetime.utcnow().isoformat()
-            }
+            # This was also a bug. Saving the mapping directly.
             with open(self.mapping_file, 'w') as f:
-                json.dump(data, f, indent=2)
+                json.dump(self.phone_mapping, f, indent=2)
             logger.info(f"📞 Saved phone mapping to {self.mapping_file}")
         except Exception as e:
             logger.error(f"Error saving phone mapping: {e}")
