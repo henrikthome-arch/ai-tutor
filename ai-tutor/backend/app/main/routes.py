@@ -14,6 +14,7 @@ from flask import current_app
 # Import system components
 from backend.system_logger import system_logger, log_admin_action, log_webhook, log_ai_analysis, log_error, log_system
 from backend.vapi.client import vapi_client
+from app.services.token_service import TokenService
 
 # Import AI components
 try:
@@ -37,6 +38,7 @@ main = Blueprint('main', __name__)
 student_service = StudentService()
 session_service = SessionService()
 analytics_service = AnalyticsService(None)  # Will be initialized with db session in each request
+token_service = TokenService()
 
 # Authentication helper
 def check_auth():
@@ -779,6 +781,75 @@ def cleanup_system_logs():
     except Exception as e:
         log_error('ADMIN', 'Manual log cleanup failed', e)
         return jsonify({'error': str(e)}), 500
+
+# Token Management Routes
+@main.route('/admin/tokens')
+def admin_tokens():
+    """Token generation page for debugging and testing"""
+    if not check_auth():
+        return redirect(url_for('main.admin_login'))
+    
+    # Get active tokens
+    active_tokens = token_service.get_active_tokens()
+    
+    return render_template('admin/generate_token.html',
+                         active_tokens=active_tokens)
+
+@main.route('/admin/tokens/generate', methods=['POST'])
+def generate_token():
+    """Generate a new access token"""
+    if not check_auth():
+        return redirect(url_for('main.admin_login'))
+    
+    # Get form data
+    token_name = request.form.get('token_name', 'Unnamed Token')
+    scopes = request.form.getlist('scopes')
+    expiration_hours = int(request.form.get('expiration', 4))
+    
+    if not scopes:
+        flash('At least one scope must be selected', 'error')
+        return redirect(url_for('main.admin_tokens'))
+    
+    # Generate token
+    token_data = token_service.generate_token(
+        name=token_name,
+        scopes=scopes,
+        expiration_hours=expiration_hours
+    )
+    
+    log_admin_action('generate_token', session.get('admin_username', 'unknown'),
+                    token_name=token_name,
+                    scopes=scopes,
+                    expiration_hours=expiration_hours,
+                    token_id=token_data['id'])
+    
+    flash('Token generated successfully', 'success')
+    
+    # Get active tokens for display
+    active_tokens = token_service.get_active_tokens()
+    
+    return render_template('admin/generate_token.html',
+                         token=token_data['token'],
+                         token_name=token_name,
+                         token_scopes=scopes,
+                         token_expires=token_data['expires_at'],
+                         active_tokens=active_tokens)
+
+@main.route('/admin/tokens/revoke/<token_id>', methods=['POST'])
+def revoke_token(token_id):
+    """Revoke an access token"""
+    if not check_auth():
+        return redirect(url_for('main.admin_login'))
+    
+    # Revoke token
+    if token_service.revoke_token(token_id):
+        log_admin_action('revoke_token', session.get('admin_username', 'unknown'),
+                        token_id=token_id)
+        flash('Token revoked successfully', 'success')
+    else:
+        flash('Token not found or already revoked', 'error')
+    
+    return redirect(url_for('main.admin_tokens'))
 
 # Analytics Dashboard Routes
 @main.route('/admin/analytics')

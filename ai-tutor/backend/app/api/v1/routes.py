@@ -17,6 +17,9 @@ from flask import session
 from backend.system_logger import system_logger, log_admin_action, log_webhook, log_ai_analysis, log_error, log_system
 from backend.vapi.client import vapi_client
 
+# Import auth components
+from app.auth.decorators import token_or_session_auth, require_token_scope
+
 # Import AI components
 try:
     from backend.ai.session_processor import session_processor
@@ -39,36 +42,30 @@ student_service = StudentService()
 session_service = SessionService()
 ai_service = AIService()
 
-# Authentication helper
+# Authentication helper (kept for backward compatibility)
 def check_auth():
     """Check if user is authenticated"""
     return session.get('admin_logged_in', False)
 
 # API routes for AJAX requests
 @api.route('/admin/api/stats')
+@token_or_session_auth(required_scope='admin:read')
 def api_stats():
-    if not check_auth():
-        return jsonify({'error': 'Not authenticated'}), 401
-    
     return jsonify(student_service.get_system_stats())
 
 @api.route('/admin/api/ai-stats')
+@token_or_session_auth(required_scope='admin:read')
 def api_ai_stats():
     """Get AI processing statistics"""
-    if not check_auth():
-        return jsonify({'error': 'Not authenticated'}), 401
-    
     if not AI_POC_AVAILABLE:
         return jsonify({'error': 'AI POC not available'}), 503
     
     return jsonify(session_processor.get_processing_stats())
 
 @api.route('/admin/api/task/<task_id>')
+@token_or_session_auth(required_scope='tasks:read')
 def api_task_status(task_id):
     """Get the status of a Celery task"""
-    if not check_auth():
-        return jsonify({'error': 'Not authenticated'}), 401
-    
     task_status = ai_service.get_task_status(task_id)
     return jsonify(task_status)
 
@@ -626,3 +623,53 @@ def trigger_ai_analysis_async(student_id, transcript, call_id):
                  call_id=call_id,
                  student_id=student_id)
         print(f"❌ Error triggering AI analysis: {e}")
+
+# API routes for debugging and testing
+@api.route('/admin/api/logs')
+@token_or_session_auth(required_scope='logs:read')
+def api_logs():
+    """Get system logs for debugging and testing"""
+    try:
+        # Get query parameters
+        date = request.args.get('date')
+        level = request.args.get('level')
+        limit = request.args.get('limit', 100, type=int)
+        
+        # Get logs from system_logger
+        logs = system_logger.get_logs(date=date, level=level, limit=limit)
+        
+        return jsonify({
+            'status': 'success',
+            'count': len(logs),
+            'logs': logs
+        })
+    except Exception as e:
+        log_error('API', f"Error retrieving logs: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Error retrieving logs: {str(e)}"
+        }), 500
+
+@api.route('/admin/api/logs/sessions')
+@token_or_session_auth(required_scope='logs:read')
+def api_session_logs():
+    """Get session logs for debugging and testing"""
+    try:
+        # Get query parameters
+        student_id = request.args.get('student_id')
+        limit = request.args.get('limit', 10, type=int)
+        
+        # Get session logs
+        sessions = session_service.get_recent_sessions(student_id=student_id, limit=limit)
+        
+        return jsonify({
+            'status': 'success',
+            'count': len(sessions),
+            'sessions': sessions
+        })
+    except Exception as e:
+        log_error('API', f"Error retrieving session logs: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Error retrieving session logs: {str(e)}"
+        }), 500

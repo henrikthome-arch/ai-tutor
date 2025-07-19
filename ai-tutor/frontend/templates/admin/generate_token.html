@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}Generate Access Token - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Generate Access Token</h1>
+    <p class="lead">Create short-lived access tokens for debugging and testing purposes.</p>
+
+    {% if message %}
+    <div class="alert alert-{{ message_type }}">
+        {{ message }}
+    </div>
+    {% endif %}
+
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Token Generator</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('main.generate_token') }}">
+                <div class="mb-3">
+                    <label for="token_name" class="form-label">Token Name/Description</label>
+                    <input type="text" class="form-control" id="token_name" name="token_name" required
+                        placeholder="e.g., Debug token for regression testing">
+                    <div class="form-text">A descriptive name to identify this token's purpose</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Token Scopes</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="scopes" value="admin:read" id="scope_admin_read" checked>
+                        <label class="form-check-label" for="scope_admin_read">
+                            admin:read - Access to admin dashboard statistics
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="scopes" value="logs:read" id="scope_logs_read" checked>
+                        <label class="form-check-label" for="scope_logs_read">
+                            logs:read - Access to system logs
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="scopes" value="tasks:read" id="scope_tasks_read" checked>
+                        <label class="form-check-label" for="scope_tasks_read">
+                            tasks:read - Access to background task status
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="expiration" class="form-label">Expiration Time</label>
+                    <select class="form-select" id="expiration" name="expiration">
+                        <option value="1">1 hour</option>
+                        <option value="4" selected>4 hours</option>
+                        <option value="8">8 hours</option>
+                        <option value="24">24 hours</option>
+                        <option value="168">7 days</option>
+                    </select>
+                    <div class="form-text">How long the token will be valid</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Generate Token</button>
+            </form>
+        </div>
+    </div>
+
+    {% if token %}
+    <div class="card mb-4">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Generated Token</h5>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-warning">
+                <strong>Important:</strong> Copy this token now. It will not be displayed again.
+            </div>
+            
+            <div class="mb-3">
+                <label for="token_value" class="form-label">Access Token</label>
+                <div class="input-group">
+                    <input type="text" class="form-control font-monospace" id="token_value" value="{{ token }}" readonly>
+                    <button class="btn btn-outline-secondary" type="button" onclick="copyToken()">
+                        <i class="bi bi-clipboard"></i> Copy
+                    </button>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Token Details</label>
+                <ul class="list-group">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Name
+                        <span class="badge bg-primary rounded-pill">{{ token_name }}</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Scopes
+                        <span>
+                            {% for scope in token_scopes %}
+                            <span class="badge bg-info text-dark me-1">{{ scope }}</span>
+                            {% endfor %}
+                        </span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Expires
+                        <span class="badge bg-secondary rounded-pill">{{ token_expires }}</span>
+                    </li>
+                </ul>
+            </div>
+
+            <h5>Usage Examples</h5>
+            <div class="mb-3">
+                <label class="form-label">cURL Example</label>
+                <div class="input-group">
+                    <textarea class="form-control font-monospace" rows="3" readonly>curl -H "Authorization: Bearer {{ token }}" {{ request.host_url }}admin/api/logs</textarea>
+                    <button class="btn btn-outline-secondary" type="button" onclick="copyCurl()">
+                        <i class="bi bi-clipboard"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Python Example</label>
+                <div class="input-group">
+                    <textarea class="form-control font-monospace" rows="6" readonly>import requests
+
+headers = {
+    'Authorization': 'Bearer {{ token }}'
+}
+response = requests.get('{{ request.host_url }}admin/api/logs', headers=headers)
+print(response.json())</textarea>
+                    <button class="btn btn-outline-secondary" type="button" onclick="copyPython()">
+                        <i class="bi bi-clipboard"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0">Active Tokens</h5>
+        </div>
+        <div class="card-body">
+            {% if active_tokens %}
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Scopes</th>
+                            <th>Created</th>
+                            <th>Expires</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for token in active_tokens %}
+                        <tr>
+                            <td>{{ token.name }}</td>
+                            <td>
+                                {% for scope in token.scopes %}
+                                <span class="badge bg-info text-dark me-1">{{ scope }}</span>
+                                {% endfor %}
+                            </td>
+                            <td>{{ token.created_at }}</td>
+                            <td>{{ token.expires_at }}</td>
+                            <td>
+                                <form method="POST" action="{{ url_for('main.revoke_token', token_id=token.id) }}" class="d-inline">
+                                    <button type="submit" class="btn btn-sm btn-danger">Revoke</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted">No active tokens found.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+    function copyToken() {
+        const tokenInput = document.getElementById('token_value');
+        tokenInput.select();
+        document.execCommand('copy');
+        alert('Token copied to clipboard!');
+    }
+
+    function copyCurl() {
+        const curlText = document.querySelector('textarea[rows="3"]');
+        curlText.select();
+        document.execCommand('copy');
+        alert('cURL command copied to clipboard!');
+    }
+
+    function copyPython() {
+        const pythonText = document.querySelector('textarea[rows="6"]');
+        pythonText.select();
+        document.execCommand('copy');
+        alert('Python code copied to clipboard!');
+    }
+</script>
+{% endblock %}
