@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Add Curriculum - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / 
+    <a href="{{ url_for('admin_curriculum') }}">📚 Curriculum</a> / 
+    <span>➕ Add Curriculum</span>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1 style="color: #2c3e50;">Add New Curriculum</h1>
+    <a href="{{ url_for('admin_curriculum') }}" class="btn" style="background: #95a5a6;">
+        ← Back to Curriculum
+    </a>
+</div>
+
+<div class="card" style="max-width: 600px; margin: 0 auto;">
+    <form method="POST" style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <div>
+            <label for="id" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                Curriculum ID *
+            </label>
+            <input type="text" 
+                   id="id" 
+                   name="id" 
+                   required 
+                   placeholder="e.g., math_grade_4"
+                   style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+            <small style="color: #666; font-size: 0.9rem;">
+                Unique identifier for this curriculum (lowercase, no spaces)
+            </small>
+        </div>
+        
+        <div>
+            <label for="school_id" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                School *
+            </label>
+            <select id="school_id" 
+                    name="school_id" 
+                    required 
+                    style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                <option value="">Select School</option>
+                {% for school in schools %}
+                <option value="{{ school.school_id }}">{{ school.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <label for="grade" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                    Grade Level *
+                </label>
+                <select id="grade" 
+                        name="grade" 
+                        required 
+                        style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                    <option value="">Select Grade</option>
+                    {% for grade_num in range(3, 13) %}
+                    <option value="{{ grade_num }}">Grade {{ grade_num }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div>
+                <label for="subject" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                    Subject *
+                </label>
+                <input type="text" 
+                       id="subject" 
+                       name="subject" 
+                       required 
+                       placeholder="e.g., Mathematics"
+                       style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+            </div>
+        </div>
+        
+        <div>
+            <label for="student_type" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                Student Type *
+            </label>
+            <select id="student_type" 
+                    name="student_type" 
+                    required 
+                    style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                <option value="">Select Student Type</option>
+                <option value="Regular">Regular</option>
+                <option value="Advanced">Advanced</option>
+                <option value="Special Needs">Special Needs</option>
+                <option value="ESL">ESL</option>
+                <option value="Gifted">Gifted</option>
+            </select>
+        </div>
+        
+        <div>
+            <label for="goals" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                Learning Goals
+            </label>
+            <textarea id="goals" 
+                      name="goals" 
+                      rows="5"
+                      placeholder="Enter the learning goals and objectives for this curriculum"
+                      style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;"></textarea>
+        </div>
+        
+        <div style="border-top: 1px solid #eee; padding-top: 1.5rem; display: flex; gap: 1rem; justify-content: flex-end;">
+            <a href="{{ url_for('admin_curriculum') }}" 
+               class="btn" 
+               style="background: #95a5a6; text-decoration: none;">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-success">
+                ➕ Add Curriculum
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+// Auto-generate curriculum ID from subject and grade
+document.getElementById('subject').addEventListener('input', updateCurriculumId);
+document.getElementById('grade').addEventListener('change', updateCurriculumId);
+
+function updateCurriculumId() {
+    const subject = document.getElementById('subject').value;
+    const grade = document.getElementById('grade').value;
+    
+    if (subject && grade) {
+        const subjectSlug = subject.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        document.getElementById('id').value = `${subjectSlug}_grade_${grade}`;
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,34 @@
+{
+  "schools": [
+    {
+      "school_id": "international_school_greece",
+      "name": "International School of Greece",
+      "location": "Athens, Greece",
+      "background": "A prestigious international school offering a blend of Greek and international curriculum for students from diverse backgrounds.",
+      "curriculum_type": "International Baccalaureate",
+      "curriculum_mapping": {
+        "math_grade_4": [4],
+        "science_grade_4": [4],
+        "english_grade_4": [4],
+        "math_grade_5": [5],
+        "history_grade_5": [5]
+      }
+    },
+    {
+      "school_id": "american_academy",
+      "name": "American Academy",
+      "location": "New York, USA",
+      "background": "A modern school focused on STEM education and innovative teaching methods.",
+      "curriculum_type": "American Common Core",
+      "curriculum_mapping": {}
+    },
+    {
+      "school_id": "british_international",
+      "name": "British International School",
+      "location": "London, UK",
+      "background": "A traditional British curriculum school with emphasis on academic excellence and character development.",
+      "curriculum_type": "British National Curriculum",
+      "curriculum_mapping": {}
+    }
+  ]
+}

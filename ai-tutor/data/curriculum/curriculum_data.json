@@ -1,0 +1,44 @@
+{
+  "curriculums": [
+    {
+      "id": "math_grade_4",
+      "school_id": "international_school_greece",
+      "grade": 4,
+      "subject": "Mathematics",
+      "student_type": "Regular",
+      "goals": "Develop strong foundational math skills including arithmetic operations, fractions, decimals, and basic geometry. Students will learn problem-solving strategies and mathematical reasoning."
+    },
+    {
+      "id": "science_grade_4",
+      "school_id": "international_school_greece",
+      "grade": 4,
+      "subject": "Science",
+      "student_type": "Regular",
+      "goals": "Explore the natural world through hands-on experiments and observations. Topics include ecosystems, weather patterns, simple machines, and the solar system."
+    },
+    {
+      "id": "english_grade_4",
+      "school_id": "international_school_greece",
+      "grade": 4,
+      "subject": "English Language Arts",
+      "student_type": "ESL",
+      "goals": "Develop English language proficiency through reading comprehension, vocabulary building, and writing exercises. Focus on grammar fundamentals and conversational skills."
+    },
+    {
+      "id": "math_grade_5",
+      "school_id": "international_school_greece",
+      "grade": 5,
+      "subject": "Mathematics",
+      "student_type": "Advanced",
+      "goals": "Extend mathematical understanding with pre-algebra concepts, complex fractions, decimals, percentages, and geometric principles. Emphasis on problem-solving and critical thinking."
+    },
+    {
+      "id": "history_grade_5",
+      "school_id": "international_school_greece",
+      "grade": 5,
+      "subject": "History",
+      "student_type": "Regular",
+      "goals": "Explore ancient civilizations with focus on Greek history, mythology, and cultural contributions. Students will develop research skills and historical analysis."
+    }
+  ]
+}

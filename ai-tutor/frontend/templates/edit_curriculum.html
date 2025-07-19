@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Curriculum - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / 
+    <a href="{{ url_for('admin_curriculum') }}">📚 Curriculum</a> / 
+    <span>✏️ Edit {{ curriculum.id }}</span>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1 style="color: #2c3e50;">Edit Curriculum</h1>
+    <a href="{{ url_for('admin_curriculum') }}" class="btn" style="background: #95a5a6;">
+        ← Back to Curriculum
+    </a>
+</div>
+
+<div class="card" style="max-width: 600px; margin: 0 auto;">
+    <form method="POST" style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <div>
+            <label style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                Curriculum ID
+            </label>
+            <div style="background: #f8f9fa; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                {{ curriculum.id }}
+            </div>
+            <small style="color: #666; font-size: 0.9rem;">
+                Curriculum ID cannot be changed after creation
+            </small>
+        </div>
+        
+        <div>
+            <label for="school_id" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                School *
+            </label>
+            <select id="school_id" 
+                    name="school_id" 
+                    required 
+                    style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                <option value="">Select School</option>
+                {% for school in schools %}
+                <option value="{{ school.school_id }}" {% if curriculum.school_id == school.school_id %}selected{% endif %}>
+                    {{ school.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <label for="grade" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                    Grade Level *
+                </label>
+                <select id="grade" 
+                        name="grade" 
+                        required 
+                        style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                    <option value="">Select Grade</option>
+                    {% for grade_num in range(3, 13) %}
+                    <option value="{{ grade_num }}" {% if curriculum.grade == grade_num %}selected{% endif %}>
+                        Grade {{ grade_num }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div>
+                <label for="subject" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                    Subject *
+                </label>
+                <input type="text" 
+                       id="subject" 
+                       name="subject" 
+                       value="{{ curriculum.subject }}"
+                       required 
+                       placeholder="e.g., Mathematics"
+                       style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+            </div>
+        </div>
+        
+        <div>
+            <label for="student_type" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                Student Type *
+            </label>
+            <select id="student_type" 
+                    name="student_type" 
+                    required 
+                    style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">
+                <option value="">Select Student Type</option>
+                {% for type in ['Regular', 'Advanced', 'Special Needs', 'ESL', 'Gifted'] %}
+                <option value="{{ type }}" {% if curriculum.student_type == type %}selected{% endif %}>
+                    {{ type }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div>
+            <label for="goals" style="font-weight: 600; color: #666; display: block; margin-bottom: 5px;">
+                Learning Goals
+            </label>
+            <textarea id="goals" 
+                      name="goals" 
+                      rows="5"
+                      placeholder="Enter the learning goals and objectives for this curriculum"
+                      style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem;">{{ curriculum.goals }}</textarea>
+        </div>
+        
+        <div style="border-top: 1px solid #eee; padding-top: 1.5rem; display: flex; gap: 1rem; justify-content: space-between;">
+            <form method="POST" action="{{ url_for('delete_curriculum', curriculum_id=curriculum.id) }}" 
+                  onsubmit="return confirm('Are you sure you want to delete this curriculum? This action cannot be undone.');" 
+                  style="display: inline;">
+                <button type="submit" class="btn" style="background: #e74c3c;">
+                    🗑️ Delete Curriculum
+                </button>
+            </form>
+            
+            <div style="display: flex; gap: 1rem;">
+                <a href="{{ url_for('admin_curriculum') }}" 
+                   class="btn" 
+                   style="background: #95a5a6; text-decoration: none;">
+                    Cancel
+                </a>
+                <button type="submit" class="btn" style="background: #f39c12;">
+                    💾 Save Changes
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

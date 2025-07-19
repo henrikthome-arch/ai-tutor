@@ -262,7 +262,7 @@ IMPORTANT:
         
         return clean_info
     
-    def analyze_transcript(self, transcript):
+    def analyze_transcript(self, transcript, student_id=None):
         """Analyze transcript and extract student information (synchronous wrapper)"""
         if not transcript:
             return {}
@@ -289,7 +289,7 @@ IMPORTANT:
                 from system_logger import log_ai_analysis
                 log_ai_analysis("Successfully extracted profile information",
                                extracted_fields=list(extracted_info.keys()),
-                               student_id=student_id if 'student_id' in locals() else None,
+                               student_id=student_id,
                                provider=self.provider_manager.current_provider)
             else:
                 logger.warning("No information extracted from transcript")
@@ -301,6 +301,7 @@ IMPORTANT:
                 log_ai_analysis("Failed to extract profile information",
                                level="WARNING",
                                transcript_length=len(transcript),
+                               student_id=student_id,
                                provider=self.provider_manager.current_provider)
                 
             return extracted_info
