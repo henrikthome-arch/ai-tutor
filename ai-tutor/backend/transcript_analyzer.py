@@ -313,9 +313,23 @@ IMPORTANT:
         if not extracted_info:
             return False
         
-        profile_path = f'../data/students/{student_id}/profile.json'
-        if not os.path.exists(profile_path):
-            logger.warning(f"Profile not found for student {student_id}")
+        # Try multiple path options to handle different working directory contexts
+        possible_paths = [
+            f'../data/students/{student_id}/profile.json',  # Relative from backend/
+            f'data/students/{student_id}/profile.json',     # Relative from project root
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'data', 'students', student_id, 'profile.json')  # Absolute path
+        ]
+        
+        profile_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                profile_path = path
+                logger.info(f"Found student profile at: {path}")
+                break
+        
+        if not profile_path:
+            logger.warning(f"Profile not found for student {student_id}. Tried paths: {possible_paths}")
             return False
         
         try:

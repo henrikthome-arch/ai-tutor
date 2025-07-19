@@ -1431,7 +1431,7 @@ def save_vapi_session(call_id, student_id, phone, duration, user_transcript, ass
                 from transcript_analyzer import TranscriptAnalyzer
                 analyzer = TranscriptAnalyzer()
                 # Use only the user transcript for profile extraction
-                extracted_info = analyzer.analyze_transcript(user_transcript)
+                extracted_info = analyzer.analyze_transcript(user_transcript, student_id)
                 if extracted_info:
                     analyzer.update_student_profile(student_id, extracted_info)
                     log_webhook('profile-updated', f"Updated student profile from webhook session",
@@ -1624,7 +1624,7 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
                                transcript_length=len(transcript))
                     print(f"🔍 Analyzing transcript for student {student_id} profile information...")
                     
-                    extracted_info = analyzer.analyze_transcript(transcript)
+                    extracted_info = analyzer.analyze_transcript(transcript, student_id)
                     if extracted_info:
                         analyzer.update_student_profile(student_id, extracted_info)
                         log_webhook('profile-updated', f"Updated student profile from transcript",
@@ -1713,7 +1713,7 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
                            transcript_length=len(combined_transcript))
                 print(f"🔍 Analyzing webhook transcript for student {student_id} profile information...")
                 
-                extracted_info = analyzer.analyze_transcript(combined_transcript)
+                extracted_info = analyzer.analyze_transcript(combined_transcript, student_id)
                 if extracted_info:
                     analyzer.update_student_profile(student_id, extracted_info)
                     log_webhook('profile-updated', f"Updated student profile from webhook transcript",

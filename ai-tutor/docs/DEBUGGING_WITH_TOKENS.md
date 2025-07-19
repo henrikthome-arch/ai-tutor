@@ -197,18 +197,101 @@ To ensure that transcript analysis continues to work correctly after code change
 
 ## Troubleshooting Token Issues
 
+### Verifying Token Validity Before Use
+
+Before attempting API requests, verify your token is valid:
+
+```bash
+# Unix/Linux/macOS
+curl -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  https://ai-tutor-ptnl.onrender.com/admin/api/verify-token
+
+# Windows PowerShell
+$token = "YOUR_TOKEN_HERE"
+Invoke-RestMethod -Uri "https://ai-tutor-ptnl.onrender.com/admin/api/verify-token" -Headers @{Authorization="Bearer $token"}
+```
+
+This will return information about your token's validity, scopes, and expiration time.
+
+### Command Line Formatting Issues
+
+#### Windows PowerShell
+
+PowerShell requires different syntax for curl commands:
+
+```powershell
+# PowerShell syntax
+$token = "YOUR_TOKEN_HERE"
+$headers = @{
+    Authorization = "Bearer $token"
+    "Content-Type" = "application/json"
+}
+
+# For GET requests
+Invoke-RestMethod -Uri "https://ai-tutor-ptnl.onrender.com/admin/api/logs?category=TRANSCRIPT_ANALYSIS&level=ERROR&days=1" -Headers $headers
+
+# For POST requests with JSON body
+$body = @{
+    student_id = "student_id_here"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post -Uri "https://ai-tutor-ptnl.onrender.com:3001/mcp/get-student-context" -Headers $headers -Body $body
+```
+
+#### Unix/Linux/macOS
+
+Ensure proper quoting in bash/zsh:
+
+```bash
+# Correct JSON formatting with single quotes outside, double quotes inside
+curl -X POST -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"student_id": "student_id_here"}' \
+  https://ai-tutor-ptnl.onrender.com:3001/mcp/get-student-context
+```
+
+### Connection Issues
+
+If you encounter connection errors:
+
+1. **Check network connectivity**:
+   ```bash
+   ping ai-tutor-ptnl.onrender.com
+   ```
+
+2. **Verify the server is running**:
+   ```bash
+   curl https://ai-tutor-ptnl.onrender.com/health
+   ```
+
+3. **Check for firewall issues**:
+   - Ensure your network allows outbound connections to ports 443 (HTTPS) and 3001 (MCP server)
+   - If on a corporate network, check with IT about proxy settings
+
+4. **Try with verbose output for more details**:
+   ```bash
+   # Unix/Linux/macOS
+   curl -v -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+     https://ai-tutor-ptnl.onrender.com/admin/api/logs
+
+   # Windows PowerShell
+   Invoke-RestMethod -Uri "https://ai-tutor-ptnl.onrender.com/admin/api/logs" -Headers @{Authorization="Bearer $token"} -Verbose
+   ```
+
 ### Invalid Token Errors
 
 If you receive a 401 Unauthorized error:
-- Check if the token has expired
-- Verify you're using the correct token
-- Ensure the token is properly formatted in the Authorization header
+- Check if the token has expired (tokens typically last 4 hours by default)
+- Verify you're using the correct token (copy-paste errors are common)
+- Ensure the token is properly formatted in the Authorization header (must be `Bearer YOUR_TOKEN_HERE` with a space after "Bearer")
+- Try generating a new token if you're unsure
 
 ### Insufficient Scope Errors
 
 If you receive a 403 Forbidden error:
 - Check if your token has the necessary scope for the endpoint
 - Generate a new token with the required scopes
+- Verify you're accessing the correct endpoint URL
 
 ## Best Practices
 
@@ -253,9 +336,25 @@ The token provided by the admin is a JWT (JSON Web Token) that grants temporary 
 - Limited duration (when it expires)
 - Specific permissions (what actions you can perform)
 
-### 2. Using the Token for API Requests
+### 2. Verifying Token Validity
 
-When the admin provides you with a token like `5cNCenWTWC9TWzVVAoYkEw08BCjbcmdAJzZSsLRxTBE`, you can use it to make API requests to investigate issues:
+Before using the token, verify it's valid and check its permissions:
+
+```bash
+# Unix/Linux/macOS
+curl -H "Authorization: Bearer 5cNCenWTWC9TWzVVAoYkEw08BCjbcmdAJzZSsLRxTBE" \
+  https://ai-tutor-ptnl.onrender.com/admin/api/verify-token
+```
+
+```powershell
+# Windows PowerShell
+$token = "5cNCenWTWC9TWzVVAoYkEw08BCjbcmdAJzZSsLRxTBE"
+Invoke-RestMethod -Uri "https://ai-tutor-ptnl.onrender.com/admin/api/verify-token" -Headers @{Authorization="Bearer $token"}
+```
+
+### 3. Adapting Commands for Different Environments
+
+#### For Unix/Linux/macOS Users
 
 ```bash
 # Example: Checking system logs for transcript analysis errors
@@ -263,41 +362,119 @@ curl -H "Authorization: Bearer 5cNCenWTWC9TWzVVAoYkEw08BCjbcmdAJzZSsLRxTBE" \
   https://ai-tutor-ptnl.onrender.com/admin/api/logs?category=TRANSCRIPT_ANALYSIS&level=ERROR&days=1
 ```
 
-### 3. Debugging Transcript Analysis Issues
+#### For Windows PowerShell Users
+
+```powershell
+# Set token variable for reuse
+$token = "5cNCenWTWC9TWzVVAoYkEw08BCjbcmdAJzZSsLRxTBE"
+$headers = @{
+    Authorization = "Bearer $token"
+    "Content-Type" = "application/json"
+}
+
+# Example: Checking system logs
+Invoke-RestMethod -Uri "https://ai-tutor-ptnl.onrender.com/admin/api/logs?category=TRANSCRIPT_ANALYSIS&level=ERROR&days=1" -Headers $headers
+```
+
+### 4. Debugging Transcript Analysis Issues
 
 To investigate why information wasn't extracted from a call transcript:
 
 1. **Check the system logs for errors**:
+
 ```bash
+# Unix/Linux/macOS
 curl -H "Authorization: Bearer 5cNCenWTWC9TWzVVAoYkEw08BCjbcmdAJzZSsLRxTBE" \
   https://ai-tutor-ptnl.onrender.com/admin/api/logs?category=TRANSCRIPT_ANALYSIS&level=ERROR&days=1
 ```
 
+```powershell
+# Windows PowerShell
+$token = "5cNCenWTWC9TWzVVAoYkEw08BCjbcmdAJzZSsLRxTBE"
+$headers = @{Authorization="Bearer $token"}
+Invoke-RestMethod -Uri "https://ai-tutor-ptnl.onrender.com/admin/api/logs?category=TRANSCRIPT_ANALYSIS&level=ERROR&days=1" -Headers $headers
+```
+
 2. **Examine the transcript content**:
+
 ```bash
+# Unix/Linux/macOS
 curl -X POST -H "Authorization: Bearer 5cNCenWTWC9TWzVVAoYkEw08BCjbcmdAJzZSsLRxTBE" \
   -H "Content-Type: application/json" \
   -d '{"student_id": "student_id_here"}' \
   https://ai-tutor-ptnl.onrender.com:3001/mcp/get-recent-sessions
 ```
 
+```powershell
+# Windows PowerShell
+$token = "5cNCenWTWC9TWzVVAoYkEw08BCjbcmdAJzZSsLRxTBE"
+$headers = @{
+    Authorization = "Bearer $token"
+    "Content-Type" = "application/json"
+}
+$body = @{
+    student_id = "student_id_here"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post -Uri "https://ai-tutor-ptnl.onrender.com:3001/mcp/get-recent-sessions" -Headers $headers -Body $body
+```
+
 3. **Check AI provider status**:
+
 ```bash
+# Unix/Linux/macOS
 curl -H "Authorization: Bearer 5cNCenWTWC9TWzVVAoYkEw08BCjbcmdAJzZSsLRxTBE" \
   https://ai-tutor-ptnl.onrender.com/admin/api/ai-stats
 ```
 
-### 4. Reporting Findings
+```powershell
+# Windows PowerShell
+$token = "5cNCenWTWC9TWzVVAoYkEw08BCjbcmdAJzZSsLRxTBE"
+$headers = @{Authorization="Bearer $token"}
+Invoke-RestMethod -Uri "https://ai-tutor-ptnl.onrender.com/admin/api/ai-stats" -Headers $headers
+```
+
+### 5. Troubleshooting Connection Issues
+
+If the admin reports connection issues:
+
+1. **Suggest checking network connectivity**:
+```bash
+ping ai-tutor-ptnl.onrender.com
+```
+
+2. **Recommend verbose output for more details**:
+```bash
+# Unix/Linux/macOS
+curl -v -H "Authorization: Bearer 5cNCenWTWC9TWzVVAoYkEw08BCjbcmdAJzZSsLRxTBE" \
+  https://ai-tutor-ptnl.onrender.com/admin/api/logs
+```
+
+```powershell
+# Windows PowerShell
+$token = "5cNCenWTWC9TWzVVAoYkEw08BCjbcmdAJzZSsLRxTBE"
+$headers = @{Authorization="Bearer $token"}
+Invoke-RestMethod -Uri "https://ai-tutor-ptnl.onrender.com/admin/api/logs" -Headers $headers -Verbose
+```
+
+3. **Check for common syntax errors**:
+   - Missing or incorrect quotes in JSON
+   - Incorrect header formatting
+   - URL typos or missing parts
+
+### 6. Reporting Findings
 
 After investigating, provide the admin with:
-- The specific error messages found in logs
-- The likely cause of the issue
-- Recommended solutions
+- The specific error messages found in logs (with exact timestamps and error codes)
+- The likely cause of the issue based on the error patterns
+- Recommended solutions with exact commands to try
 - Any patterns you noticed in the data
+- Screenshots or formatted output of relevant log entries
 
-### 5. Security Considerations
+### 7. Security Considerations
 
 - Never share the token with anyone other than the admin who provided it
 - Don't store the token beyond the current debugging session
 - Only use the token for the specific debugging task requested
 - Report any security concerns immediately
+- Recommend token revocation after debugging is complete
