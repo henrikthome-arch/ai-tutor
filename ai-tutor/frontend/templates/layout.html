@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+
+{# This is a compatibility template to bridge templates that use layout.html instead of base.html #}
+{# It simply extends base.html and passes through all blocks #}
+
+{% block title %}{{ self.title() }}{% endblock %}
+
+{% block content %}{{ self.content() }}{% endblock %}
