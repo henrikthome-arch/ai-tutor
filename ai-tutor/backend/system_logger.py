@@ -63,6 +63,33 @@ class SystemLogRepository:
             print(f"Error retrieving logs: {e}")
             return []
     
+    def get_logs_by_date(self, date, category=None, level=None):
+        """Get logs for a specific date"""
+        try:
+            # Import here to avoid circular imports
+            from app.models.system_log import SystemLog
+            from datetime import datetime, timedelta
+            
+            # Convert date to datetime range
+            start_date = datetime.combine(date, datetime.min.time())
+            end_date = datetime.combine(date, datetime.max.time())
+            
+            query = self.db_session.query(SystemLog).filter(
+                SystemLog.timestamp >= start_date,
+                SystemLog.timestamp <= end_date
+            )
+            
+            if category:
+                query = query.filter(SystemLog.category == category.upper())
+            
+            if level:
+                query = query.filter(SystemLog.level == level.upper())
+            
+            return query.order_by(SystemLog.timestamp.desc()).all()
+        except Exception as e:
+            print(f"Error retrieving logs by date: {e}")
+            return []
+    
     def cleanup_old_logs(self, days=30):
         """Remove log entries older than the specified number of days"""
         try:
@@ -144,14 +171,11 @@ class SystemLogger:
         self.max_age_days = max_age_days
         self.lock = threading.Lock()
         
-        # Create a database session
-        self.db_session = db.session
+        # Don't initialize db_session or repository here to avoid application context issues
+        # They will be initialized on-demand in each method
         
-        # Initialize the repository
-        self.repository = SystemLogRepository(self.db_session)
-        
-        # Initialize with startup log
-        self.log('SYSTEM', 'SystemLogger initialized', {'max_age_days': max_age_days})
+        # Log initialization to console only (not to DB yet)
+        print(f"[SYSTEM] SystemLogger initialized (max_age_days={max_age_days})")
     
     def log(self, category: str, message: str, data: Optional[Dict[str, Any]] = None, level: str = 'INFO'):
         """
@@ -166,7 +190,16 @@ class SystemLogger:
         # Thread-safe logging
         with self.lock:
             try:
-                self.repository.create(category, message, data, level)
+                # Get repository on-demand to ensure we're in an application context
+                from flask import current_app
+                if current_app:
+                    # We're in an application context
+                    repository = SystemLogRepository(db.session)
+                    repository.create(category, message, data, level)
+                else:
+                    # Not in application context, log to console only
+                    timestamp = datetime.now()
+                    print(f"[{timestamp.isoformat()}] {category.upper()}/{level.upper()}: {message}")
             except Exception as e:
                 # Fallback to console if database writing fails
                 timestamp = datetime.now()
@@ -209,7 +242,9 @@ class SystemLogger:
         """
         with self.lock:
             try:
-                deleted_count = self.repository.cleanup_old_logs(self.max_age_days)
+                # Get repository on-demand to ensure we're in an application context
+                repository = SystemLogRepository(db.session)
+                deleted_count = repository.cleanup_old_logs(self.max_age_days)
                 
                 # Log the cleanup operation
                 if deleted_count > 0:
@@ -246,7 +281,9 @@ class SystemLogger:
         """
         with self.lock:
             try:
-                logs = self.repository.get_logs(days, category, level, limit)
+                # Get repository on-demand to ensure we're in an application context
+                repository = SystemLogRepository(db.session)
+                logs = repository.get_logs(days, category, level, limit)
                 return [log.to_dict() for log in logs]
             except Exception as e:
                 print(f"Error retrieving logs: {e}")
@@ -256,7 +293,9 @@ class SystemLogger:
         """Get statistics about the logging system"""
         with self.lock:
             try:
-                return self.repository.get_log_statistics()
+                # Get repository on-demand to ensure we're in an application context
+                repository = SystemLogRepository(db.session)
+                return repository.get_log_statistics()
             except Exception as e:
                 print(f"Error retrieving log statistics: {e}")
                 return {

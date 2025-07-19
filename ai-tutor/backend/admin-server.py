@@ -48,7 +48,7 @@ SessionTracker = session_enhanced_server.SessionTracker
 
 # Import System Logger
 from system_logger import system_logger, log_admin_action, log_webhook, log_ai_analysis, log_error, log_system
-from app.repositories.system_log_repository import SystemLogRepository
+from system_logger import SystemLogRepository
 
 # Import VAPI Client
 from vapi_client import vapi_client
@@ -1491,25 +1491,24 @@ def get_logs_api():
         days = int(request.args.get('days', 7))
         limit = int(request.args.get('limit', 100))
         
-        # Initialize the repository
-        log_repository = SystemLogRepository(db.session)
-        
+        # Use the system_logger directly instead of creating a new repository
         if date:
             # Parse date string to date object
             try:
-                date_obj = datetime.datetime.strptime(date, '%Y-%m-%d').date()
+                date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+                # For date-specific queries, we need to use the repository
+                log_repository = SystemLogRepository(db.session)
                 logs = log_repository.get_logs_by_date(date_obj, category, level)
+                # Convert logs to dictionaries
+                log_dicts = [log.to_dict() for log in logs]
             except ValueError:
                 return jsonify({
                     'success': False,
                     'error': 'Invalid date format. Use YYYY-MM-DD'
                 }), 400
         else:
-            # Get logs for the specified number of days
-            logs = log_repository.get_logs(days, category, level, limit)
-        
-        # Convert logs to dictionaries
-        log_dicts = [log.to_dict() for log in logs]
+            # Get logs for the specified number of days using system_logger
+            log_dicts = system_logger.get_logs(days, category, level, limit)
         
         return jsonify({
             'success': True,
@@ -2122,17 +2121,11 @@ def admin_system_logs():
     level = request.args.get('level', '')
     
     try:
-        # Initialize the repository
-        log_repository = SystemLogRepository(db.session)
-        
-        # Get logs from database
-        logs = log_repository.get_logs(days=days, category=category, level=level)
-        
-        # Convert logs to dictionaries
-        logs = [log.to_dict() for log in logs]
+        # Use the system_logger directly instead of creating a new repository
+        logs = system_logger.get_logs(days=days, category=category, level=level)
         
         # Get log statistics
-        log_stats = log_repository.get_log_statistics()
+        log_stats = system_logger.get_log_statistics()
         
         # Get available categories and levels for filtering
         available_categories = list(log_stats.get('categories', {}).keys())
@@ -2180,14 +2173,8 @@ def export_logs():
         category = request.args.get('category', '')
         level = request.args.get('level', '')
         
-        # Initialize the repository
-        log_repository = SystemLogRepository(db.session)
-        
-        # Get logs from database
-        logs = log_repository.get_logs(days=days, category=category, level=level)
-        
-        # Convert logs to dictionaries
-        logs_dict = [log.to_dict() for log in logs]
+        # Use the system_logger directly
+        logs_dict = system_logger.get_logs(days=days, category=category, level=level)
         
         # Create a temporary file
         import tempfile
@@ -2200,7 +2187,7 @@ def export_logs():
                         days_filter=days,
                         category_filter=category,
                         level_filter=level,
-                        log_count=len(logs))
+                        log_count=len(logs_dict))
         
         # Send the file
         return send_file(temp_file.name,
