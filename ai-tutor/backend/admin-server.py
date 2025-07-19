@@ -43,7 +43,90 @@ from system_logger import system_logger, log_admin_action, log_webhook, log_ai_a
 from vapi_client import vapi_client
 
 # Import TokenService
-from app.services.token_service import TokenService
+try:
+    from app.services.token_service import TokenService
+    print("🔑 TokenService imported from app.services.token_service")
+except ImportError:
+    # Fallback to local implementation if module not found
+    print("⚠️ TokenService module not found, using local implementation")
+    from datetime import datetime, timedelta
+    import secrets
+    import uuid
+    
+    class TokenService:
+        """Simple local implementation of TokenService for token management."""
+        
+        # Define available scopes and their descriptions
+        AVAILABLE_SCOPES = {
+            'api:read': 'Read access to API endpoints',
+            'api:write': 'Write access to API endpoints',
+            'logs:read': 'Read access to system logs',
+            'mcp:access': 'Access to MCP server functionality',
+            'admin:read': 'Read access to admin dashboard',
+        }
+        
+        def __init__(self):
+            """Initialize with empty tokens storage."""
+            self.tokens = {}  # token_id -> token_data
+        
+        def generate_token(self, name="Debug Token", scopes=None, expiration_hours=4):
+            """Generate a simple token with the given scopes and expiration."""
+            if scopes is None:
+                scopes = ['api:read']
+                
+            # Generate a token ID
+            token_id = str(uuid.uuid4())
+            
+            # Generate a simple token
+            token = secrets.token_urlsafe(32)
+            
+            # Calculate expiration
+            expires_at = datetime.utcnow() + timedelta(hours=expiration_hours)
+            
+            # Store token data
+            token_data = {
+                'id': token_id,
+                'token': token,
+                'name': name,
+                'scopes': scopes,
+                'created_at': datetime.utcnow().isoformat(),
+                'expires_at': expires_at.isoformat(),
+                'is_active': True
+            }
+            
+            self.tokens[token_id] = token_data
+            
+            return token_data
+        
+        def get_active_tokens(self):
+            """Get all active tokens."""
+            now = datetime.utcnow()
+            active_tokens = []
+            
+            for token_id, token_data in self.tokens.items():
+                if not token_data.get('is_active', False):
+                    continue
+                    
+                # Parse expiration time
+                expires_at = datetime.fromisoformat(token_data['expires_at'])
+                
+                # Check if token is expired
+                if expires_at < now:
+                    token_data['is_active'] = False
+                    continue
+                    
+                # Add remaining time
+                token_data['expires_in'] = (expires_at - now).total_seconds() // 60
+                active_tokens.append(token_data)
+                
+            return active_tokens
+        
+        def revoke_token(self, token_id):
+            """Revoke a token by ID."""
+            if token_id in self.tokens:
+                self.tokens[token_id]['is_active'] = False
+                return True
+            return False
 
 # Import AI POC components
 try:
