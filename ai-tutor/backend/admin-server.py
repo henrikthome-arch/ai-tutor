@@ -322,6 +322,34 @@ def save_all_schools(schools_data):
     with open(schools_file, 'w', encoding='utf-8') as f:
         json.dump({'schools': schools_data}, f, indent=2, ensure_ascii=False)
 
+def get_all_curriculums():
+    """Get list of all curriculums from data file"""
+    curriculum_file = 'data/curriculum/curriculum_data.json'
+    if not os.path.exists(curriculum_file):
+        return []
+    
+    with open(curriculum_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    return data.get('curriculums', [])
+
+def save_all_curriculums(curriculum_data):
+    """Save all curriculums to the data file"""
+    curriculum_file = 'data/curriculum/curriculum_data.json'
+    os.makedirs(os.path.dirname(curriculum_file), exist_ok=True)
+    with open(curriculum_file, 'w', encoding='utf-8') as f:
+        json.dump({'curriculums': curriculum_data}, f, indent=2, ensure_ascii=False)
+
+def get_school_curriculums(school_id):
+    """Get all curriculums for a specific school"""
+    curriculums = get_all_curriculums()
+    return [c for c in curriculums if c['school_id'] == school_id]
+
+def get_curriculum_by_id(curriculum_id):
+    """Get a specific curriculum by ID"""
+    curriculums = get_all_curriculums()
+    return next((c for c in curriculums if c['id'] == curriculum_id), None)
+
 # Root route for health checks
 @app.route('/')
 def index():
@@ -462,12 +490,15 @@ def add_school():
            "name": request.form['name'],
            "location": request.form['location'],
            "background": request.form['background'],
-           "curriculum_type": request.form['curriculum_type']
+           "curriculum_type": request.form['curriculum_type'],
+           "curriculum_mapping": {}  # Initialize empty curriculum mapping
        }
        schools.append(new_school)
        save_all_schools(schools)
        flash('School added successfully!', 'success')
-       return redirect(url_for('admin_schools'))
+       
+       # Redirect to curriculum management for this school
+       return redirect(url_for('school_curriculum', school_id=new_school['school_id']))
        
    return render_template('add_school.html')
 
@@ -488,9 +519,16 @@ def edit_school(school_id):
        school['location'] = request.form['location']
        school['background'] = request.form['background']
        school['curriculum_type'] = request.form['curriculum_type']
+       
+       # Initialize curriculum_mapping if it doesn't exist
+       if 'curriculum_mapping' not in school:
+           school['curriculum_mapping'] = {}
+           
        save_all_schools(schools)
        flash('School updated successfully!', 'success')
-       return redirect(url_for('admin_schools'))
+       
+       # Redirect to curriculum management for this school
+       return redirect(url_for('school_curriculum', school_id=school_id))
 
    return render_template('edit_school.html', school=school)
 
@@ -504,6 +542,127 @@ def delete_school(school_id):
    save_all_schools(schools)
    flash('School deleted successfully!', 'success')
    return redirect(url_for('admin_schools'))
+
+# Curriculum Management Routes
+@app.route('/admin/curriculum')
+def admin_curriculum():
+    """View all curriculums"""
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    curriculums = get_all_curriculums()
+    schools = get_all_schools()
+    schools_dict = {s['school_id']: s for s in schools}
+    
+    return render_template('curriculum.html',
+                          curriculums=curriculums,
+                          schools=schools,
+                          schools_dict=schools_dict)
+
+@app.route('/admin/curriculum/add', methods=['GET', 'POST'])
+def add_curriculum():
+    """Add a new curriculum"""
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    schools = get_all_schools()
+    
+    if request.method == 'POST':
+        curriculum_id = request.form['id'].lower().replace(' ', '_')
+        school_id = request.form['school_id']
+        
+        # Validate school exists
+        school = next((s for s in schools if s['school_id'] == school_id), None)
+        if not school:
+            flash('School not found', 'error')
+            return render_template('add_curriculum.html', schools=schools)
+        
+        # Create new curriculum
+        new_curriculum = {
+            'id': curriculum_id,
+            'school_id': school_id,
+            'grade': int(request.form['grade']),
+            'subject': request.form['subject'],
+            'student_type': request.form['student_type'],
+            'goals': request.form['goals']
+        }
+        
+        # Save to file
+        curriculums = get_all_curriculums()
+        curriculums.append(new_curriculum)
+        save_all_curriculums(curriculums)
+        
+        flash('Curriculum added successfully!', 'success')
+        return redirect(url_for('admin_curriculum'))
+    
+    return render_template('add_curriculum.html', schools=schools)
+
+@app.route('/admin/curriculum/edit/<curriculum_id>', methods=['GET', 'POST'])
+def edit_curriculum(curriculum_id):
+    """Edit an existing curriculum"""
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    curriculum = get_curriculum_by_id(curriculum_id)
+    if not curriculum:
+        flash('Curriculum not found', 'error')
+        return redirect(url_for('admin_curriculum'))
+    
+    schools = get_all_schools()
+    
+    if request.method == 'POST':
+        # Update curriculum
+        curriculum['school_id'] = request.form['school_id']
+        curriculum['grade'] = int(request.form['grade'])
+        curriculum['subject'] = request.form['subject']
+        curriculum['student_type'] = request.form['student_type']
+        curriculum['goals'] = request.form['goals']
+        
+        # Save to file
+        curriculums = get_all_curriculums()
+        for i, c in enumerate(curriculums):
+            if c['id'] == curriculum_id:
+                curriculums[i] = curriculum
+                break
+        
+        save_all_curriculums(curriculums)
+        
+        flash('Curriculum updated successfully!', 'success')
+        return redirect(url_for('admin_curriculum'))
+    
+    return render_template('edit_curriculum.html',
+                          curriculum=curriculum,
+                          schools=schools)
+
+@app.route('/admin/curriculum/delete/<curriculum_id>', methods=['POST'])
+def delete_curriculum(curriculum_id):
+    """Delete a curriculum"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    curriculums = get_all_curriculums()
+    curriculums = [c for c in curriculums if c['id'] != curriculum_id]
+    save_all_curriculums(curriculums)
+    
+    flash('Curriculum deleted successfully!', 'success')
+    return redirect(url_for('admin_curriculum'))
+
+@app.route('/admin/schools/<school_id>/curriculum')
+def school_curriculum(school_id):
+    """View curriculums for a specific school"""
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    school = next((s for s in get_all_schools() if s['school_id'] == school_id), None)
+    if not school:
+        flash('School not found', 'error')
+        return redirect(url_for('admin_schools'))
+    
+    curriculums = get_school_curriculums(school_id)
+    
+    return render_template('school_curriculum.html',
+                          school=school,
+                          curriculums=curriculums)
 
 # File browser routes
 @app.route('/admin/files')
@@ -703,18 +862,22 @@ def add_student():
     if not check_auth():
         return redirect(url_for('admin_login'))
     
+    # Get schools for the dropdown
+    schools = get_all_schools()
+    
     if request.method == 'POST':
         # Get form data
         name = request.form.get('name')
         age = request.form.get('age')
         grade = request.form.get('grade')
         phone = request.form.get('phone')
+        school_id = request.form.get('school_id')
         interests = request.form.get('interests', '').split(',')
         interests = [i.strip() for i in interests if i.strip()]
         
         if not name or not age or not grade:
             flash('Name, age, and grade are required', 'error')
-            return render_template('add_student.html')
+            return render_template('add_student.html', schools=schools)
         
         # Generate student ID
         student_id = name.lower().replace(' ', '_').replace('.', '')
@@ -729,6 +892,20 @@ def add_student():
         os.makedirs(student_dir, exist_ok=True)
         os.makedirs(f'{student_dir}/sessions', exist_ok=True)
         
+        # Get school information
+        school = next((s for s in schools if s['school_id'] == school_id), None)
+        school_name = school['name'] if school else 'Unknown School'
+        
+        # Get school's curriculum if available
+        curriculum_id = None
+        if school and 'curriculum_mapping' in school:
+            # Try to find a curriculum for the student's grade
+            grade_int = int(grade)
+            for curr_id, curr_grades in school['curriculum_mapping'].items():
+                if grade_int in curr_grades:
+                    curriculum_id = curr_id
+                    break
+        
         # Create profile
         profile = {
             'name': name,
@@ -736,7 +913,9 @@ def add_student():
             'grade': int(grade),
             'interests': interests,
             'learning_preferences': [],
-            'curriculum': 'International School Greece',
+            'school_id': school_id,
+            'school_name': school_name,
+            'curriculum_id': curriculum_id,
             'created_date': datetime.now().isoformat()
         }
         
@@ -763,7 +942,7 @@ def add_student():
         flash(f'Student {name} added successfully!', 'success')
         return redirect(url_for('admin_student_detail', student_id=student_id))
     
-    return render_template('add_student.html')
+    return render_template('add_student.html', schools=schools)
 
 @app.route('/admin/students/<student_id>/edit', methods=['GET', 'POST'])
 def edit_student(student_id):
@@ -788,6 +967,20 @@ def edit_student(student_id):
             flash('Name, age, and grade are required', 'error')
             return render_template('edit_student.html', student=student_data, student_id=student_id)
         
+        # Get school information
+        school = next((s for s in schools if s['school_id'] == school_id), None)
+        school_name = school['name'] if school else 'Unknown School'
+        
+        # Get school's curriculum if available
+        curriculum_id = None
+        if school and 'curriculum_mapping' in school:
+            # Try to find a curriculum for the student's grade
+            grade_int = int(grade)
+            for curr_id, curr_grades in school['curriculum_mapping'].items():
+                if grade_int in curr_grades:
+                    curriculum_id = curr_id
+                    break
+        
         # Update profile
         profile = student_data.get('profile', {})
         profile.update({
@@ -795,6 +988,9 @@ def edit_student(student_id):
             'age': int(age),
             'grade': int(grade),
             'interests': interests,
+            'school_id': school_id,
+            'school_name': school_name,
+            'curriculum_id': curriculum_id,
             'last_updated': datetime.now().isoformat()
         })
         
@@ -831,7 +1027,8 @@ def edit_student(student_id):
     return render_template('edit_student.html',
                          student=student_data.get('profile', {}),
                          student_id=student_id,
-                         phone=phone)
+                         phone=phone,
+                         schools=schools)
 
 @app.route('/admin/students/<student_id>/delete', methods=['POST'])
 def delete_student(student_id):
