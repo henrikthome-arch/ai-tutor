@@ -473,6 +473,24 @@ def index():
     """Root route for health checks and redirects"""
     return redirect(url_for('admin_dashboard'))
 
+@app.route('/health')
+def health_check():
+    """Simple health check that doesn't depend on database"""
+    try:
+        return jsonify({
+            'status': 'ok',
+            'timestamp': datetime.now().isoformat(),
+            'environment': FLASK_ENV,
+            'server': 'AI Tutor Admin Server'
+        })
+    except Exception as e:
+        log_error('HEALTH', 'Health check failed', e)
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
+
 # Authentication routes
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
@@ -512,16 +530,60 @@ def admin_dashboard():
     if not check_auth():
         return redirect(url_for('admin_login'))
     
-    stats = get_system_stats()
-    recent_students = get_all_students()[:5]  # Get 5 most recent
-    phone_mappings = dict(phone_manager.phone_mapping)
-    students_info = {s['id']: s for s in get_all_students()}
-    
-    return render_template('dashboard.html',
-                         stats=stats,
-                         recent_students=recent_students,
-                         phone_mappings=phone_mappings,
-                         students_info=students_info)
+    try:
+        # Get system stats with error handling
+        try:
+            stats = get_system_stats()
+        except Exception as e:
+            log_error('ADMIN', 'Error getting system stats for dashboard', e)
+            print(f"Dashboard error: Failed to get system stats: {e}")
+            stats = {
+                'total_students': 0,
+                'sessions_today': 0,
+                'total_sessions': 0,
+                'server_status': "Error",
+                'phone_mappings': 0
+            }
+        
+        # Get students with error handling
+        try:
+            all_students = get_all_students()
+            recent_students = all_students[:5] if all_students else []  # Get 5 most recent
+            students_info = {s['id']: s for s in all_students}
+        except Exception as e:
+            log_error('ADMIN', 'Error getting students for dashboard', e)
+            print(f"Dashboard error: Failed to get students: {e}")
+            recent_students = []
+            students_info = {}
+        
+        # Get phone mappings safely
+        try:
+            phone_mappings = dict(phone_manager.phone_mapping)
+        except Exception as e:
+            log_error('ADMIN', 'Error getting phone mappings for dashboard', e)
+            print(f"Dashboard error: Failed to get phone mappings: {e}")
+            phone_mappings = {}
+        
+        return render_template('dashboard.html',
+                             stats=stats,
+                             recent_students=recent_students,
+                             phone_mappings=phone_mappings,
+                             students_info=students_info)
+    except Exception as e:
+        log_error('ADMIN', 'Critical error in admin dashboard', e)
+        print(f"Critical dashboard error: {e}")
+        # Return a simple error page instead of trying to render the full dashboard
+        return f"""
+        <html>
+            <head><title>Admin Dashboard - Error</title></head>
+            <body>
+                <h1>Admin Dashboard Error</h1>
+                <p>There was an error loading the dashboard. Please check the server logs.</p>
+                <p>Error: {str(e)}</p>
+                <p><a href="/admin/login">Return to login</a></p>
+            </body>
+        </html>
+        """, 500
 
 # Student management routes
 @app.route('/admin/students')
@@ -670,7 +732,7 @@ def edit_school(school_id):
    return render_template('edit_school.html', school=school.to_dict())
 
 @app.route('/admin/schools/delete/<school_id>', methods=['POST'])
-def delete_school(school_id):
+def delete_school_route(school_id):
    if not check_auth():
        return redirect(url_for('admin_login'))
    
@@ -2381,10 +2443,12 @@ if __name__ == '__main__':
     # Initialize database
     try:
         # Create database tables if they don't exist
-        db.create_all()
-        print("🗄️  Database tables created/verified")
+        with app.app_context():
+            db.create_all()
+            print("🗄️  Database tables created/verified")
     except Exception as e:
         print(f"⚠️  Database initialization failed: {e}")
+        log_error('DATABASE', 'Database initialization failed', e)
     
     # Run initial cleanup
     try:
@@ -2392,13 +2456,15 @@ if __name__ == '__main__':
         from app.tasks.maintenance_tasks import cleanup_old_logs
         from app.config import Config
         
-        # Run cleanup task directly (not as a Celery task)
-        deleted_count = cleanup_old_logs(days=Config.LOG_RETENTION_DAYS)
-        
-        if deleted_count > 0:
-            print(f"🧹 Initial cleanup: {deleted_count} old log entries removed")
+        # Run cleanup task directly (not as a Celery task) within app context
+        with app.app_context():
+            deleted_count = cleanup_old_logs(days=Config.LOG_RETENTION_DAYS)
+            
+            if deleted_count > 0:
+                print(f"🧹 Initial cleanup: {deleted_count} old log entries removed")
     except Exception as e:
         print(f"⚠️  Initial cleanup failed: {e}")
+        log_error('DATABASE', 'Initial log cleanup failed', e)
     
     # Production vs Development settings
     if FLASK_ENV == 'production':
