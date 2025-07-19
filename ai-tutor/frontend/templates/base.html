@@ -275,12 +275,10 @@
                   class="{% if request.endpoint in ['admin_all_sessions', 'view_student_sessions', 'view_session_detail'] %}active{% endif %}">
                   🕒 Sessions
                </a>
-                <!-- Token management link - uncomment after deploying routes to production
-                <a href="#"
-                   class="{% if false %}active{% endif %}">
+                <a href="{{ url_for('main.admin_tokens') }}"
+                   class="{% if request.endpoint in ['main.admin_tokens', 'main.generate_token', 'main.revoke_token'] %}active{% endif %}">
                    🔑 Tokens
                 </a>
-                -->
                 <a href="{{ url_for('ai_analysis_dashboard') }}"
                    class="{% if request.endpoint in ['ai_analysis_dashboard', 'test_sample_analysis', 'analyze_student_session'] %}active{% endif %}">
                    🤖 AI Analysis
