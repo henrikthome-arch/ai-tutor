@@ -29,8 +29,7 @@ class Config:
     CELERY_TIMEZONE = 'UTC'
     
     # Logging Configuration
-    LOG_DIR = os.getenv('LOG_DIR', '../data/logs')
-    LOG_MAX_AGE_DAYS = int(os.getenv('LOG_MAX_AGE_DAYS', 30))
+    LOG_RETENTION_DAYS = int(os.getenv('LOG_RETENTION_DAYS', 30))  # Days to keep logs in database
 
 
 class DevelopmentConfig(Config):

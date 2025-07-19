@@ -752,19 +752,42 @@ def admin_system_logs():
                              'level': level
                          })
 
-@main.route('/admin/logs/download/<log_file>')
-def download_log_file(log_file):
-    """Download a specific log file"""
+@main.route('/admin/logs/export')
+def export_logs():
+    """Export logs as JSON file"""
     if not check_auth():
         return redirect(url_for('main.admin_login'))
     
-    # Security: Ensure the file is within the logs directory
-    log_path = os.path.join(system_logger.log_dir, log_file)
-    if not os.path.exists(log_path) or not log_path.startswith(system_logger.log_dir):
-        flash('Log file not found or access denied', 'error')
+    try:
+        # Get filter parameters
+        days = int(request.args.get('days', 7))
+        category = request.args.get('category', '')
+        level = request.args.get('level', '')
+        
+        # Get logs from system_logger
+        logs = system_logger.get_logs(days=days, category=category, level=level)
+        
+        # Create a temporary file
+        import tempfile
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.json')
+        temp_file.write(json.dumps(logs, indent=2).encode('utf-8'))
+        temp_file.close()
+        
+        # Log the export
+        log_admin_action('export_logs', session.get('admin_username', 'unknown'),
+                        days_filter=days,
+                        category_filter=category,
+                        level_filter=level,
+                        log_count=len(logs))
+        
+        # Send the file
+        return send_file(temp_file.name,
+                        as_attachment=True,
+                        download_name=f'logs_{datetime.now().strftime("%Y-%m-%d")}.json')
+    except Exception as e:
+        flash(f'Error exporting logs: {str(e)}', 'error')
+        log_error('DATABASE', 'Error exporting logs', e)
         return redirect(url_for('main.admin_system_logs'))
-
-    return send_file(log_path, as_attachment=True)
 
 @main.route('/admin/logs/cleanup', methods=['POST'])
 def cleanup_system_logs():
@@ -775,9 +798,15 @@ def cleanup_system_logs():
     log_admin_action('manual_log_cleanup', session.get('admin_username', 'unknown'))
     
     try:
-        cleanup_stats = system_logger.cleanup_old_logs()
-        flash(f"Log cleanup completed: {cleanup_stats['deleted_files']} files deleted", 'success')
-        return jsonify({'success': True, 'stats': cleanup_stats})
+        # Import and use the Celery task for log cleanup
+        from app.tasks.maintenance_tasks import cleanup_old_logs
+        from app.config import Config
+        
+        # Run cleanup task directly (not as a Celery task)
+        deleted_count = cleanup_old_logs(days=Config.LOG_RETENTION_DAYS)
+        
+        flash(f"Log cleanup completed: {deleted_count} log entries deleted", 'success')
+        return jsonify({'success': True, 'stats': {'deleted_entries': deleted_count}})
     except Exception as e:
         log_error('ADMIN', 'Manual log cleanup failed', e)
         return jsonify({'error': str(e)}), 500

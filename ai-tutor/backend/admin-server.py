@@ -13,6 +13,16 @@ from typing import Dict, Any
 from flask import Flask, render_template, session, redirect, request, flash, url_for, jsonify, send_file
 import secrets
 
+# Import database models and repositories
+from app import db
+from app.models.student import Student
+from app.models.profile import Profile
+from app.models.school import School
+from app.models.curriculum import Curriculum
+from app.models.session import Session
+from app.models.assessment import Assessment
+from app.repositories import student_repository, session_repository
+
 # Load environment variables
 try:
     from dotenv import load_dotenv
@@ -38,6 +48,7 @@ SessionTracker = session_enhanced_server.SessionTracker
 
 # Import System Logger
 from system_logger import system_logger, log_admin_action, log_webhook, log_ai_analysis, log_error, log_system
+from app.repositories.system_log_repository import SystemLogRepository
 
 # Import VAPI Client
 from vapi_client import vapi_client
@@ -185,170 +196,228 @@ def check_auth():
     return session.get('admin_logged_in', False)
 
 def get_all_students():
-    """Get list of all students from data directory"""
-    students = []
-    students_dir = '../data/students'
-    
-    if not os.path.exists(students_dir):
-        return students
-    
-    for student_id in os.listdir(students_dir):
-        student_path = os.path.join(students_dir, student_id)
-        if os.path.isdir(student_path):
-            profile_path = os.path.join(student_path, 'profile.json')
-            if os.path.exists(profile_path):
-                try:
-                    with open(profile_path, 'r', encoding='utf-8') as f:
-                        profile = json.load(f)
-                    
-                    # Get phone number from the latest mapping
-                    phone = None
-                    current_mapping = phone_manager.load_phone_mapping()
-                    for phone_num, sid in current_mapping.items():
-                        if sid == student_id:
-                            phone = phone_num
-                            break
-                    
-                    # Get session count
-                    sessions_dir = os.path.join(student_path, 'sessions')
-                    session_count = 0
-                    if os.path.exists(sessions_dir):
-                        session_count = len([f for f in os.listdir(sessions_dir) if f.endswith('_session.json')])
-                    
-                    students.append({
-                        'id': student_id,
-                        'name': profile.get('name', 'Unknown'),
-                        'age': profile.get('age', 'Unknown'),
-                        'grade': profile.get('grade', 'Unknown'),
-                        'phone': phone,
-                        'session_count': session_count,
-                        'profile': profile
-                    })
-                except Exception as e:
-                    print(f"Error loading student {student_id}: {e}")
-    
-    return sorted(students, key=lambda x: x['name'])
+    """Get list of all students from database"""
+    try:
+        # Get all students from repository
+        students = student_repository.get_all()
+        
+        # Get phone mappings
+        phone_mappings = phone_manager.load_phone_mapping()
+        
+        # Add phone numbers to students
+        for student in students:
+            student_id = str(student['id'])
+            # Find phone number for this student
+            phone = None
+            for phone_num, sid in phone_mappings.items():
+                if sid == student_id:
+                    phone = phone_num
+                    break
+            student['phone'] = phone
+            
+            # Get session count
+            student_sessions = session_repository.get_by_student_id(student_id)
+            student['session_count'] = len(student_sessions)
+        
+        return sorted(students, key=lambda x: x.get('full_name', ''))
+    except Exception as e:
+        print(f"Error getting students from database: {e}")
+        log_error('DATABASE', 'Error getting students', e)
+        return []
 
 def get_student_data(student_id):
-    """Get detailed student data"""
-    student_dir = f'../data/students/{student_id}'
-    if not os.path.exists(student_dir):
+    """Get detailed student data from database"""
+    try:
+        # Get student from repository
+        student = student_repository.get_by_id(student_id)
+        if not student:
+            return None
+        
+        # Get student sessions
+        sessions = session_repository.get_by_student_id(student_id)
+        
+        # Get student assessments
+        assessments = Assessment.query.filter_by(student_id=student_id).all()
+        assessments_data = [assessment.to_dict() for assessment in assessments]
+        
+        # Create student data object
+        student_data = {
+            'id': student_id,
+            'profile': student,
+            'progress': {
+                'overall_progress': 0,  # Default value
+                'subjects': {},
+                'goals': [],
+                'streak_days': 0,
+                'last_updated': datetime.now().isoformat()
+            },
+            'assessment': assessments_data[0] if assessments_data else None,
+            'sessions': sessions
+        }
+        
+        # Sort sessions by start time (newest first)
+        student_data['sessions'].sort(key=lambda x: x.get('start_datetime', ''), reverse=True)
+        
+        return student_data
+    except Exception as e:
+        print(f"Error getting student data from database: {e}")
+        log_error('DATABASE', 'Error getting student data', e, student_id=student_id)
         return None
-    
-    student_data = {
-        'id': student_id,
-        'profile': None,
-        'progress': None,
-        'assessment': None,
-        'sessions': []
-    }
-    
-    # Load profile
-    profile_path = os.path.join(student_dir, 'profile.json')
-    if os.path.exists(profile_path):
-        with open(profile_path, 'r', encoding='utf-8') as f:
-            student_data['profile'] = json.load(f)
-    
-    # Load progress
-    progress_path = os.path.join(student_dir, 'progress.json')
-    if os.path.exists(progress_path):
-        with open(progress_path, 'r', encoding='utf-8') as f:
-            student_data['progress'] = json.load(f)
-
-    # Load assessment
-    assessment_path = os.path.join(student_dir, 'assessment.json')
-    if os.path.exists(assessment_path):
-        with open(assessment_path, 'r', encoding='utf-8') as f:
-            student_data['assessment'] = json.load(f)
-    
-    # Load sessions
-    sessions_dir = os.path.join(student_dir, 'sessions')
-    if os.path.exists(sessions_dir):
-        for session_file in os.listdir(sessions_dir):
-            if session_file.endswith('_session.json'):
-                session_path = os.path.join(sessions_dir, session_file)
-                try:
-                    with open(session_path, 'r', encoding='utf-8') as f:
-                        session_data = json.load(f)
-                    student_data['sessions'].append(session_data)
-                except Exception as e:
-                    print(f"Error loading session {session_file}: {e}")
-    
-    # Sort sessions by start time (newest first)
-    student_data['sessions'].sort(key=lambda x: x.get('start_time', ''), reverse=True)
-    
-    return student_data
 
 def get_system_stats():
-    """Get system statistics for dashboard"""
-    students = get_all_students()
-    
-    # Count sessions today
-    today = datetime.now().strftime('%Y-%m-%d')
-    sessions_today = 0
-    
-    for student in students:
-        sessions_dir = f'../data/students/{student["id"]}/sessions'
-        if os.path.exists(sessions_dir):
-            for session_file in os.listdir(sessions_dir):
-                if session_file.endswith('_session.json') and today in session_file:
-                    sessions_today += 1
-    
-    # Get server status
-    server_status = "Online" if os.path.exists('../data') else "Offline"
-    
-    return {
-        'total_students': len(students),
-        'sessions_today': sessions_today,
-        'total_sessions': sum(s['session_count'] for s in students),
-        'server_status': server_status,
-        'phone_mappings': len(phone_manager.phone_mapping)
-    }
+    """Get system statistics for dashboard from database"""
+    try:
+        # Get counts from database
+        total_students = Student.query.count()
+        
+        # Count sessions today
+        today = datetime.now().date()
+        sessions_today = Session.query.filter(
+            Session.start_datetime >= today,
+            Session.start_datetime < today + timedelta(days=1)
+        ).count()
+        
+        # Get total sessions
+        total_sessions = Session.query.count()
+        
+        # Get server status
+        server_status = "Online"  # Assume online if we can query the database
+        
+        return {
+            'total_students': total_students,
+            'sessions_today': sessions_today,
+            'total_sessions': total_sessions,
+            'server_status': server_status,
+            'phone_mappings': len(phone_manager.phone_mapping)
+        }
+    except Exception as e:
+        print(f"Error getting system stats from database: {e}")
+        log_error('DATABASE', 'Error getting system stats', e)
+        return {
+            'total_students': 0,
+            'sessions_today': 0,
+            'total_sessions': 0,
+            'server_status': "Error",
+            'phone_mappings': 0
+        }
 
 def get_all_schools():
-    """Get list of all schools from data file"""
-    schools_file = 'data/schools/school_data.json'
-    if not os.path.exists(schools_file):
+    """Get list of all schools from database"""
+    try:
+        schools = School.query.all()
+        return [school.to_dict() for school in schools]
+    except Exception as e:
+        print(f"Error getting schools from database: {e}")
+        log_error('DATABASE', 'Error getting schools', e)
         return []
-    
-    with open(schools_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    
-    return data.get('schools', [])
 
-def save_all_schools(schools_data):
-    """Save all schools to the data file"""
-    schools_file = 'data/schools/school_data.json'
-    with open(schools_file, 'w', encoding='utf-8') as f:
-        json.dump({'schools': schools_data}, f, indent=2, ensure_ascii=False)
+def save_school(school_data):
+    """Save a school to the database"""
+    try:
+        # Check if school exists
+        school = School.query.filter_by(id=school_data.get('id')).first()
+        
+        if school:
+            # Update existing school
+            for key, value in school_data.items():
+                if hasattr(school, key):
+                    setattr(school, key, value)
+        else:
+            # Create new school
+            school = School(**school_data)
+            db.session.add(school)
+        
+        db.session.commit()
+        return school.to_dict()
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error saving school to database: {e}")
+        log_error('DATABASE', 'Error saving school', e)
+        return None
+
+def delete_school(school_id):
+    """Delete a school from the database"""
+    try:
+        school = School.query.get(school_id)
+        if school:
+            db.session.delete(school)
+            db.session.commit()
+            return True
+        return False
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting school from database: {e}")
+        log_error('DATABASE', 'Error deleting school', e)
+        return False
 
 def get_all_curriculums():
-    """Get list of all curriculums from data file"""
-    curriculum_file = 'data/curriculum/curriculum_data.json'
-    if not os.path.exists(curriculum_file):
+    """Get list of all curriculums from database"""
+    try:
+        curriculums = Curriculum.query.all()
+        return [curriculum.to_dict() for curriculum in curriculums]
+    except Exception as e:
+        print(f"Error getting curriculums from database: {e}")
+        log_error('DATABASE', 'Error getting curriculums', e)
         return []
-    
-    with open(curriculum_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    
-    return data.get('curriculums', [])
 
-def save_all_curriculums(curriculum_data):
-    """Save all curriculums to the data file"""
-    curriculum_file = 'data/curriculum/curriculum_data.json'
-    os.makedirs(os.path.dirname(curriculum_file), exist_ok=True)
-    with open(curriculum_file, 'w', encoding='utf-8') as f:
-        json.dump({'curriculums': curriculum_data}, f, indent=2, ensure_ascii=False)
+def save_curriculum(curriculum_data):
+    """Save a curriculum to the database"""
+    try:
+        # Check if curriculum exists
+        curriculum = Curriculum.query.filter_by(id=curriculum_data.get('id')).first()
+        
+        if curriculum:
+            # Update existing curriculum
+            for key, value in curriculum_data.items():
+                if hasattr(curriculum, key):
+                    setattr(curriculum, key, value)
+        else:
+            # Create new curriculum
+            curriculum = Curriculum(**curriculum_data)
+            db.session.add(curriculum)
+        
+        db.session.commit()
+        return curriculum.to_dict()
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error saving curriculum to database: {e}")
+        log_error('DATABASE', 'Error saving curriculum', e)
+        return None
+
+def delete_curriculum(curriculum_id):
+    """Delete a curriculum from the database"""
+    try:
+        curriculum = Curriculum.query.get(curriculum_id)
+        if curriculum:
+            db.session.delete(curriculum)
+            db.session.commit()
+            return True
+        return False
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting curriculum from database: {e}")
+        log_error('DATABASE', 'Error deleting curriculum', e)
+        return False
 
 def get_school_curriculums(school_id):
     """Get all curriculums for a specific school"""
-    curriculums = get_all_curriculums()
-    return [c for c in curriculums if c['school_id'] == school_id]
+    try:
+        curriculums = Curriculum.query.filter_by(school_id=school_id).all()
+        return [curriculum.to_dict() for curriculum in curriculums]
+    except Exception as e:
+        print(f"Error getting school curriculums from database: {e}")
+        log_error('DATABASE', 'Error getting school curriculums', e)
+        return []
 
 def get_curriculum_by_id(curriculum_id):
     """Get a specific curriculum by ID"""
-    curriculums = get_all_curriculums()
-    return next((c for c in curriculums if c['id'] == curriculum_id), None)
+    try:
+        curriculum = Curriculum.query.get(curriculum_id)
+        return curriculum.to_dict() if curriculum else None
+    except Exception as e:
+        print(f"Error getting curriculum from database: {e}")
+        log_error('DATABASE', 'Error getting curriculum', e)
+        return None
 
 # Root route for health checks
 @app.route('/')
@@ -484,21 +553,31 @@ def add_school():
        return redirect(url_for('admin_login'))
    
    if request.method == 'POST':
-       schools = get_all_schools()
-       new_school = {
-           "school_id": request.form['school_id'],
-           "name": request.form['name'],
-           "location": request.form['location'],
-           "background": request.form['background'],
-           "curriculum_type": request.form['curriculum_type'],
-           "curriculum_mapping": {}  # Initialize empty curriculum mapping
-       }
-       schools.append(new_school)
-       save_all_schools(schools)
-       flash('School added successfully!', 'success')
+       try:
+           # Create school data
+           new_school = {
+               "id": None,  # Auto-generated by database
+               "name": request.form['name'],
+               "country": request.form['country'] if 'country' in request.form else '',
+               "city": request.form['city'] if 'city' in request.form else request.form.get('location', ''),
+               "description": request.form['description'] if 'description' in request.form else request.form.get('background', '')
+           }
+           
+           # Save to database
+           saved_school = save_school(new_school)
+           if not saved_school:
+               flash('Error saving school to database', 'error')
+               return render_template('add_school.html')
+           
+           flash('School added successfully!', 'success')
+           
+           # Redirect to curriculum management for this school
+           return redirect(url_for('school_curriculum', school_id=saved_school['id']))
        
-       # Redirect to curriculum management for this school
-       return redirect(url_for('school_curriculum', school_id=new_school['school_id']))
+       except Exception as e:
+           flash(f'Error adding school: {str(e)}', 'error')
+           log_error('DATABASE', 'Error adding school', e)
+           return render_template('add_school.html')
        
    return render_template('add_school.html')
 
@@ -507,40 +586,56 @@ def edit_school(school_id):
    if not check_auth():
        return redirect(url_for('admin_login'))
 
-   schools = get_all_schools()
-   school = next((s for s in schools if s['school_id'] == school_id), None)
-
+   # Get school from database
+   school = School.query.get(school_id)
    if not school:
        flash('School not found!', 'error')
        return redirect(url_for('admin_schools'))
 
    if request.method == 'POST':
-       school['name'] = request.form['name']
-       school['location'] = request.form['location']
-       school['background'] = request.form['background']
-       school['curriculum_type'] = request.form['curriculum_type']
-       
-       # Initialize curriculum_mapping if it doesn't exist
-       if 'curriculum_mapping' not in school:
-           school['curriculum_mapping'] = {}
+       try:
+           # Update school data
+           school_data = {
+               "id": school_id,
+               "name": request.form['name'],
+               "country": request.form['country'] if 'country' in request.form else '',
+               "city": request.form['city'] if 'city' in request.form else request.form.get('location', ''),
+               "description": request.form['description'] if 'description' in request.form else request.form.get('background', '')
+           }
            
-       save_all_schools(schools)
-       flash('School updated successfully!', 'success')
+           # Save to database
+           updated_school = save_school(school_data)
+           if not updated_school:
+               flash('Error updating school in database', 'error')
+               return render_template('edit_school.html', school=school.to_dict())
+           
+           flash('School updated successfully!', 'success')
+           
+           # Redirect to curriculum management for this school
+           return redirect(url_for('school_curriculum', school_id=school_id))
        
-       # Redirect to curriculum management for this school
-       return redirect(url_for('school_curriculum', school_id=school_id))
+       except Exception as e:
+           flash(f'Error updating school: {str(e)}', 'error')
+           log_error('DATABASE', 'Error updating school', e, school_id=school_id)
+           return render_template('edit_school.html', school=school.to_dict())
 
-   return render_template('edit_school.html', school=school)
+   return render_template('edit_school.html', school=school.to_dict())
 
 @app.route('/admin/schools/delete/<school_id>', methods=['POST'])
 def delete_school(school_id):
    if not check_auth():
        return redirect(url_for('admin_login'))
-       
-   schools = get_all_schools()
-   schools = [s for s in schools if s['school_id'] != school_id]
-   save_all_schools(schools)
-   flash('School deleted successfully!', 'success')
+   
+   try:
+       # Delete school from database
+       if delete_school(school_id):
+           flash('School deleted successfully!', 'success')
+       else:
+           flash('Error deleting school from database', 'error')
+   except Exception as e:
+       flash(f'Error deleting school: {str(e)}', 'error')
+       log_error('DATABASE', 'Error deleting school', e, school_id=school_id)
+   
    return redirect(url_for('admin_schools'))
 
 # Curriculum Management Routes
@@ -568,32 +663,38 @@ def add_curriculum():
     schools = get_all_schools()
     
     if request.method == 'POST':
-        curriculum_id = request.form['id'].lower().replace(' ', '_')
-        school_id = request.form['school_id']
+        try:
+            school_id = request.form['school_id']
+            
+            # Validate school exists
+            school = School.query.get(school_id)
+            if not school:
+                flash('School not found', 'error')
+                return render_template('add_curriculum.html', schools=schools)
+            
+            # Create new curriculum
+            new_curriculum = {
+                'id': None,  # Auto-generated by database
+                'school_id': int(school_id),
+                'grade': int(request.form['grade']),
+                'subject': request.form['subject'],
+                'student_type': request.form['student_type'],
+                'goals': request.form['goals']
+            }
+            
+            # Save to database
+            saved_curriculum = save_curriculum(new_curriculum)
+            if not saved_curriculum:
+                flash('Error saving curriculum to database', 'error')
+                return render_template('add_curriculum.html', schools=schools)
+            
+            flash('Curriculum added successfully!', 'success')
+            return redirect(url_for('admin_curriculum'))
         
-        # Validate school exists
-        school = next((s for s in schools if s['school_id'] == school_id), None)
-        if not school:
-            flash('School not found', 'error')
+        except Exception as e:
+            flash(f'Error adding curriculum: {str(e)}', 'error')
+            log_error('DATABASE', 'Error adding curriculum', e)
             return render_template('add_curriculum.html', schools=schools)
-        
-        # Create new curriculum
-        new_curriculum = {
-            'id': curriculum_id,
-            'school_id': school_id,
-            'grade': int(request.form['grade']),
-            'subject': request.form['subject'],
-            'student_type': request.form['student_type'],
-            'goals': request.form['goals']
-        }
-        
-        # Save to file
-        curriculums = get_all_curriculums()
-        curriculums.append(new_curriculum)
-        save_all_curriculums(curriculums)
-        
-        flash('Curriculum added successfully!', 'success')
-        return redirect(url_for('admin_curriculum'))
     
     return render_template('add_curriculum.html', schools=schools)
 
@@ -611,40 +712,51 @@ def edit_curriculum(curriculum_id):
     schools = get_all_schools()
     
     if request.method == 'POST':
-        # Update curriculum
-        curriculum['school_id'] = request.form['school_id']
-        curriculum['grade'] = int(request.form['grade'])
-        curriculum['subject'] = request.form['subject']
-        curriculum['student_type'] = request.form['student_type']
-        curriculum['goals'] = request.form['goals']
+        try:
+            # Update curriculum
+            updated_curriculum = {
+                'id': curriculum_id,
+                'school_id': int(request.form['school_id']),
+                'grade': int(request.form['grade']),
+                'subject': request.form['subject'],
+                'student_type': request.form['student_type'],
+                'goals': request.form['goals']
+            }
+            
+            # Save to database
+            saved_curriculum = save_curriculum(updated_curriculum)
+            if not saved_curriculum:
+                flash('Error updating curriculum in database', 'error')
+                return render_template('edit_curriculum.html', curriculum=curriculum, schools=schools)
+            
+            flash('Curriculum updated successfully!', 'success')
+            return redirect(url_for('admin_curriculum'))
         
-        # Save to file
-        curriculums = get_all_curriculums()
-        for i, c in enumerate(curriculums):
-            if c['id'] == curriculum_id:
-                curriculums[i] = curriculum
-                break
-        
-        save_all_curriculums(curriculums)
-        
-        flash('Curriculum updated successfully!', 'success')
-        return redirect(url_for('admin_curriculum'))
+        except Exception as e:
+            flash(f'Error updating curriculum: {str(e)}', 'error')
+            log_error('DATABASE', 'Error updating curriculum', e, curriculum_id=curriculum_id)
+            return render_template('edit_curriculum.html', curriculum=curriculum, schools=schools)
     
     return render_template('edit_curriculum.html',
                           curriculum=curriculum,
                           schools=schools)
 
 @app.route('/admin/curriculum/delete/<curriculum_id>', methods=['POST'])
-def delete_curriculum(curriculum_id):
+def delete_curriculum_route(curriculum_id):
     """Delete a curriculum"""
     if not check_auth():
         return jsonify({'error': 'Not authenticated'}), 401
     
-    curriculums = get_all_curriculums()
-    curriculums = [c for c in curriculums if c['id'] != curriculum_id]
-    save_all_curriculums(curriculums)
+    try:
+        # Delete curriculum from database
+        if delete_curriculum(curriculum_id):
+            flash('Curriculum deleted successfully!', 'success')
+        else:
+            flash('Error deleting curriculum from database', 'error')
+    except Exception as e:
+        flash(f'Error deleting curriculum: {str(e)}', 'error')
+        log_error('DATABASE', 'Error deleting curriculum', e, curriculum_id=curriculum_id)
     
-    flash('Curriculum deleted successfully!', 'success')
     return redirect(url_for('admin_curriculum'))
 
 @app.route('/admin/schools/<school_id>/curriculum')
@@ -664,122 +776,116 @@ def school_curriculum(school_id):
                           school=school,
                           curriculums=curriculums)
 
-# File browser routes
-@app.route('/admin/files')
-def admin_files():
+# Database browser routes
+@app.route('/admin/database')
+def admin_database():
     if not check_auth():
         return redirect(url_for('admin_login'))
-    
-    path = request.args.get('path', '../data')
-    
-    # Security: ensure path is within data directory
-    if not path.startswith('../data'):
-        path = '../data'
-    
-    files = []
-    directories = []
-    
-    if os.path.exists(path):
-        for item in os.listdir(path):
-            item_path = os.path.join(path, item)
-            if os.path.isdir(item_path):
-                directories.append({
-                    'name': item,
-                    'path': item_path,
-                    'type': 'directory'
-                })
-            else:
-                stat = os.stat(item_path)
-                files.append({
-                    'name': item,
-                    'path': item_path,
-                    'type': 'file',
-                    'size': stat.st_size,
-                    'modified': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
-                })
-    
-    # Calculate directory stats
-    total_items = len(directories) + len(files)
-    stats = {
-        'total_items': total_items,
-        'folders': len(directories),
-        'files': len(files),
-        'total_size': f"{sum(f.get('size', 0) for f in files)} bytes"
-    }
-    
-    # Build breadcrumb for navigation
-    breadcrumb_parts = []
-    if path != '../data':
-        path_parts = path.split('/')
-        for i, part in enumerate(path_parts):
-            breadcrumb_parts.append({
-                'name': part,
-                'path': '/'.join(path_parts[:i+1])
-            })
-    
-    # Calculate parent path for back button
-    parent_path = '/'.join(path.split('/')[:-1]) if '/' in path and path != '../data' else ''
-    
-    # Combine directories and files for unified display
-    items = []
-    for d in directories:
-        items.append({
-            'name': d['name'],
-            'type': 'directory',
-            'size': f"{len(os.listdir(d['path']))} items" if os.path.exists(d['path']) else "0 items",
-            'modified': datetime.fromtimestamp(os.path.getctime(d['path'])).strftime('%Y-%m-%d %H:%M') if os.path.exists(d['path']) else 'Unknown',
-            'count': len(os.listdir(d['path'])) if os.path.exists(d['path']) else 0
-        })
-    
-    for f in files:
-        items.append({
-            'name': f['name'],
-            'type': 'file',
-            'size': f"{f['size']} bytes",
-            'modified': f['modified']
-        })
-    
-    return render_template('files.html',
-                         current_path=path,
-                         items=items,
-                         stats=stats,
-                         breadcrumb_parts=breadcrumb_parts,
-                         parent_path=parent_path)
-
-@app.route('/admin/files/view')
-def admin_file_view():
-    if not check_auth():
-        return redirect(url_for('admin_login'))
-    
-    file_path = request.args.get('path')
-    if not file_path or not file_path.startswith('../data'):
-        flash('Invalid file path', 'error')
-        return redirect(url_for('admin_files'))
-    
-    if not os.path.exists(file_path):
-        flash('File not found', 'error')
-        return redirect(url_for('admin_files'))
     
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        # Get counts of each model
+        stats = {
+            'students': Student.query.count(),
+            'schools': School.query.count(),
+            'curriculums': Curriculum.query.count(),
+            'sessions': Session.query.count(),
+            'assessments': Assessment.query.count()
+        }
         
-        # Try to parse as JSON for pretty display
-        try:
-            json_data = json.loads(content)
-            content = json.dumps(json_data, indent=2, ensure_ascii=False)
-            file_type = 'json'
-        except:
-            file_type = 'text'
+        # Get list of tables
+        tables = [
+            {'name': 'Students', 'count': stats['students'], 'url': url_for('admin_database_table', table='students')},
+            {'name': 'Schools', 'count': stats['schools'], 'url': url_for('admin_database_table', table='schools')},
+            {'name': 'Curriculums', 'count': stats['curriculums'], 'url': url_for('admin_database_table', table='curriculums')},
+            {'name': 'Sessions', 'count': stats['sessions'], 'url': url_for('admin_database_table', table='sessions')},
+            {'name': 'Assessments', 'count': stats['assessments'], 'url': url_for('admin_database_table', table='assessments')}
+        ]
         
-        return render_template('file_view.html',
-                             file_path=file_path,
-                             content=content,
-                             file_type=file_type)
-    
+        return render_template('database.html',
+                             tables=tables,
+                             stats=stats)
     except Exception as e:
-        flash(f'Error reading file: {e}', 'error')
-        return redirect(url_for('admin_files'))
+        flash(f'Error accessing database: {str(e)}', 'error')
+        log_error('DATABASE', 'Error accessing database browser', e)
+        return render_template('database.html', tables=[], stats={})
+
+@app.route('/admin/database/<table>')
+def admin_database_table(table):
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    try:
+        # Get table data based on table name
+        if table == 'students':
+            items = Student.query.all()
+            items = [item.to_dict() for item in items]
+        elif table == 'schools':
+            items = School.query.all()
+            items = [item.to_dict() for item in items]
+        elif table == 'curriculums':
+            items = Curriculum.query.all()
+            items = [item.to_dict() for item in items]
+        elif table == 'sessions':
+            items = Session.query.all()
+            items = [item.to_dict() for item in items]
+        elif table == 'assessments':
+            items = Assessment.query.all()
+            items = [item.to_dict() for item in items]
+        else:
+            flash(f'Unknown table: {table}', 'error')
+            return redirect(url_for('admin_database'))
+        
+        # Get column names from first item
+        columns = []
+        if items:
+            columns = list(items[0].keys())
+        
+        return render_template('database_table.html',
+                             table_name=table,
+                             items=items,
+                             columns=columns)
+    except Exception as e:
+        flash(f'Error accessing table {table}: {str(e)}', 'error')
+        log_error('DATABASE', f'Error accessing database table {table}', e)
+        return render_template('database_table.html', table_name=table, items=[], columns=[])
+
+@app.route('/admin/database/view/<table>/<item_id>')
+def admin_database_view(table, item_id):
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    try:
+        # Get item data based on table name and ID
+        item = None
+        if table == 'students':
+            item = Student.query.get(item_id)
+        elif table == 'schools':
+            item = School.query.get(item_id)
+        elif table == 'curriculums':
+            item = Curriculum.query.get(item_id)
+        elif table == 'sessions':
+            item = Session.query.get(item_id)
+        elif table == 'assessments':
+            item = Assessment.query.get(item_id)
+        
+        if not item:
+            flash(f'Item not found: {table}/{item_id}', 'error')
+            return redirect(url_for('admin_database_table', table=table))
+        
+        # Convert to dictionary
+        item_data = item.to_dict()
+        
+        # Format as JSON for display
+        content = json.dumps(item_data, indent=2, ensure_ascii=False)
+        
+        return render_template('database_view.html',
+                             table_name=table,
+                             item_id=item_id,
+                             content=content)
+    except Exception as e:
+        flash(f'Error viewing item {table}/{item_id}: {str(e)}', 'error')
+        log_error('DATABASE', f'Error viewing database item {table}/{item_id}', e)
+        return redirect(url_for('admin_database_table', table=table))
 
 # System info route
 @app.route('/admin/system')
@@ -866,81 +972,55 @@ def add_student():
     schools = get_all_schools()
     
     if request.method == 'POST':
-        # Get form data
-        name = request.form.get('name')
-        age = request.form.get('age')
-        grade = request.form.get('grade')
-        phone = request.form.get('phone')
-        school_id = request.form.get('school_id')
-        interests = request.form.get('interests', '').split(',')
-        interests = [i.strip() for i in interests if i.strip()]
-        
-        if not name or not age or not grade:
-            flash('Name, age, and grade are required', 'error')
+        try:
+            # Get form data
+            name_parts = request.form.get('name', '').split()
+            first_name = name_parts[0] if name_parts else ''
+            last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+            age = request.form.get('age')
+            grade = request.form.get('grade')
+            phone = request.form.get('phone')
+            school_id = request.form.get('school_id')
+            interests = request.form.get('interests', '').split(',')
+            interests = [i.strip() for i in interests if i.strip()]
+            
+            if not first_name or not age or not grade:
+                flash('Name, age, and grade are required', 'error')
+                return render_template('add_student.html', schools=schools)
+            
+            # Create student data
+            student_data = {
+                'first_name': first_name,
+                'last_name': last_name,
+                'date_of_birth': None,  # Calculate from age if needed
+                'phone_number': phone,
+                'student_type': 'International',  # Default value
+                'school_id': int(school_id) if school_id else None,
+                'interests': interests,
+                'learning_preferences': []
+            }
+            
+            # Create student in database
+            new_student = student_repository.create(student_data)
+            
+            if not new_student:
+                flash('Error creating student', 'error')
+                return render_template('add_student.html', schools=schools)
+            
+            student_id = new_student['id']
+            
+            # Add phone mapping if provided
+            if phone:
+                phone_manager.phone_mapping[phone] = str(student_id)
+                phone_manager.save_phone_mapping()
+            
+            flash(f'Student {first_name} {last_name} added successfully!', 'success')
+            return redirect(url_for('admin_student_detail', student_id=student_id))
+            
+        except Exception as e:
+            flash(f'Error creating student: {str(e)}', 'error')
+            log_error('DATABASE', 'Error creating student', e)
             return render_template('add_student.html', schools=schools)
-        
-        # Generate student ID
-        student_id = name.lower().replace(' ', '_').replace('.', '')
-        counter = 1
-        base_id = student_id
-        while os.path.exists(f'../data/students/{student_id}'):
-            student_id = f"{base_id}_{counter}"
-            counter += 1
-        
-        # Create student directory
-        student_dir = f'../data/students/{student_id}'
-        os.makedirs(student_dir, exist_ok=True)
-        os.makedirs(f'{student_dir}/sessions', exist_ok=True)
-        
-        # Get school information
-        school = next((s for s in schools if s['school_id'] == school_id), None)
-        school_name = school['name'] if school else 'Unknown School'
-        
-        # Get school's curriculum if available
-        curriculum_id = None
-        if school and 'curriculum_mapping' in school:
-            # Try to find a curriculum for the student's grade
-            grade_int = int(grade)
-            for curr_id, curr_grades in school['curriculum_mapping'].items():
-                if grade_int in curr_grades:
-                    curriculum_id = curr_id
-                    break
-        
-        # Create profile
-        profile = {
-            'name': name,
-            'age': int(age),
-            'grade': int(grade),
-            'interests': interests,
-            'learning_preferences': [],
-            'school_id': school_id,
-            'school_name': school_name,
-            'curriculum_id': curriculum_id,
-            'created_date': datetime.now().isoformat()
-        }
-        
-        with open(f'{student_dir}/profile.json', 'w', encoding='utf-8') as f:
-            json.dump(profile, f, indent=2, ensure_ascii=False)
-        
-        # Create initial progress
-        progress = {
-            'overall_progress': 0,
-            'subjects': {},
-            'goals': [],
-            'streak_days': 0,
-            'last_updated': datetime.now().isoformat()
-        }
-        
-        with open(f'{student_dir}/progress.json', 'w', encoding='utf-8') as f:
-            json.dump(progress, f, indent=2, ensure_ascii=False)
-        
-        # Add phone mapping if provided
-        if phone:
-            phone_manager.phone_mapping[phone] = student_id
-            phone_manager.save_phone_mapping()
-        
-        flash(f'Student {name} added successfully!', 'success')
-        return redirect(url_for('admin_student_detail', student_id=student_id))
     
     return render_template('add_student.html', schools=schools)
 
@@ -949,72 +1029,69 @@ def edit_student(student_id):
     if not check_auth():
         return redirect(url_for('admin_login'))
     
-    student_data = get_student_data(student_id)
-    if not student_data:
+    # Get schools for the dropdown
+    schools = get_all_schools()
+    
+    # Get student data
+    student = student_repository.get_by_id(student_id)
+    if not student:
         flash(f'Student {student_id} not found', 'error')
         return redirect(url_for('admin_students'))
     
     if request.method == 'POST':
-        # Get form data
-        name = request.form.get('name')
-        age = request.form.get('age')
-        grade = request.form.get('grade')
-        phone = request.form.get('phone')
-        interests = request.form.get('interests', '').split(',')
-        interests = [i.strip() for i in interests if i.strip()]
-        
-        if not name or not age or not grade:
-            flash('Name, age, and grade are required', 'error')
-            return render_template('edit_student.html', student=student_data, student_id=student_id)
-        
-        # Get school information
-        school = next((s for s in schools if s['school_id'] == school_id), None)
-        school_name = school['name'] if school else 'Unknown School'
-        
-        # Get school's curriculum if available
-        curriculum_id = None
-        if school and 'curriculum_mapping' in school:
-            # Try to find a curriculum for the student's grade
-            grade_int = int(grade)
-            for curr_id, curr_grades in school['curriculum_mapping'].items():
-                if grade_int in curr_grades:
-                    curriculum_id = curr_id
+        try:
+            # Get form data
+            name_parts = request.form.get('name', '').split()
+            first_name = name_parts[0] if name_parts else ''
+            last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+            age = request.form.get('age')
+            grade = request.form.get('grade')
+            phone = request.form.get('phone')
+            school_id = request.form.get('school_id')
+            interests = request.form.get('interests', '').split(',')
+            interests = [i.strip() for i in interests if i.strip()]
+            
+            if not first_name or not age or not grade:
+                flash('Name, age, and grade are required', 'error')
+                return render_template('edit_student.html', student=student, student_id=student_id, phone=phone, schools=schools)
+            
+            # Update student data
+            student_data = {
+                'first_name': first_name,
+                'last_name': last_name,
+                'school_id': int(school_id) if school_id else None,
+                'interests': interests
+            }
+            
+            # Update student in database
+            updated_student = student_repository.update(student_id, student_data)
+            
+            if not updated_student:
+                flash('Error updating student', 'error')
+                return render_template('edit_student.html', student=student, student_id=student_id, phone=phone, schools=schools)
+            
+            # Update phone mapping
+            # Remove old phone mapping for this student
+            old_phone = None
+            for phone_num, sid in list(phone_manager.phone_mapping.items()):
+                if sid == student_id:
+                    old_phone = phone_num
+                    del phone_manager.phone_mapping[phone_num]
                     break
-        
-        # Update profile
-        profile = student_data.get('profile', {})
-        profile.update({
-            'name': name,
-            'age': int(age),
-            'grade': int(grade),
-            'interests': interests,
-            'school_id': school_id,
-            'school_name': school_name,
-            'curriculum_id': curriculum_id,
-            'last_updated': datetime.now().isoformat()
-        })
-        
-        profile_path = f'../data/students/{student_id}/profile.json'
-        with open(profile_path, 'w', encoding='utf-8') as f:
-            json.dump(profile, f, indent=2, ensure_ascii=False)
-        
-        # Update phone mapping
-        # Remove old phone mapping for this student
-        old_phone = None
-        for phone_num, sid in list(phone_manager.phone_mapping.items()):
-            if sid == student_id:
-                old_phone = phone_num
-                del phone_manager.phone_mapping[phone_num]
-                break
-        
-        # Add new phone mapping
-        if phone:
-            phone_manager.phone_mapping[phone] = student_id
-        
-        phone_manager.save_phone_mapping()
-        
-        flash(f'Student {name} updated successfully!', 'success')
-        return redirect(url_for('admin_student_detail', student_id=student_id))
+            
+            # Add new phone mapping
+            if phone:
+                phone_manager.phone_mapping[phone] = student_id
+            
+            phone_manager.save_phone_mapping()
+            
+            flash(f'Student {first_name} {last_name} updated successfully!', 'success')
+            return redirect(url_for('admin_student_detail', student_id=student_id))
+            
+        except Exception as e:
+            flash(f'Error updating student: {str(e)}', 'error')
+            log_error('DATABASE', 'Error updating student', e, student_id=student_id)
+            return render_template('edit_student.html', student=student, student_id=student_id, phone=phone, schools=schools)
     
     # Get current phone from the latest mapping
     phone = None
@@ -1024,38 +1101,37 @@ def edit_student(student_id):
             phone = phone_num
             break
     
+    # Format student data for template
+    student_display = {
+        'name': f"{student.get('first_name', '')} {student.get('last_name', '')}".strip(),
+        'age': student.get('age', ''),
+        'grade': student.get('grade', ''),
+        'interests': student.get('interests', []),
+        'learning_preferences': student.get('learning_preferences', []),
+        'school_id': student.get('school_id', '')
+    }
+    
     return render_template('edit_student.html',
-                         student=student_data.get('profile', {}),
+                         student=student_display,
                          student_id=student_id,
                          phone=phone,
                          schools=schools)
 
 @app.route('/admin/students/<student_id>/delete', methods=['POST'])
 def delete_student(student_id):
-    """Delete a student and all associated data"""
+    """Delete a student and all associated data from database"""
     if not check_auth():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
-        import shutil
-        
-        # Check if student exists
-        student_dir = f'../data/students/{student_id}'
-        if not os.path.exists(student_dir):
+        # Get student for logging
+        student = student_repository.get_by_id(student_id)
+        if not student:
             return jsonify({'error': 'Student not found'}), 404
         
-        # Get student name for logging
-        student_name = 'Unknown'
-        profile_path = os.path.join(student_dir, 'profile.json')
-        if os.path.exists(profile_path):
-            try:
-                with open(profile_path, 'r', encoding='utf-8') as f:
-                    profile = json.load(f)
-                student_name = profile.get('name', 'Unknown')
-            except:
-                pass
+        student_name = f"{student.get('first_name', '')} {student.get('last_name', '')}".strip()
         
-        # Remove phone mapping for this student using the latest mapping from disk
+        # Remove phone mapping for this student
         phone_to_remove = None
         current_mapping = phone_manager.load_phone_mapping()
         
@@ -1070,21 +1146,22 @@ def delete_student(student_id):
         if phone_to_remove:
             phone_manager.save_phone_mapping()
         
-        # Remove the entire student directory
-        shutil.rmtree(student_dir)
-        
-        log_admin_action('delete_student', session.get('admin_username', 'unknown'),
-                        student_id=student_id,
-                        student_name=student_name,
-                        phone_removed=phone_to_remove,
-                        ip_address=request.remote_addr)
-        
-        return jsonify({
-            'success': True,
-            'message': f'Student {student_name} deleted successfully',
-            'student_id': student_id,
-            'redirect': url_for('admin_students')
-        })
+        # Delete student from database
+        if student_repository.delete(student_id):
+            log_admin_action('delete_student', session.get('admin_username', 'unknown'),
+                            student_id=student_id,
+                            student_name=student_name,
+                            phone_removed=phone_to_remove,
+                            ip_address=request.remote_addr)
+            
+            return jsonify({
+                'success': True,
+                'message': f'Student {student_name} deleted successfully',
+                'student_id': student_id,
+                'redirect': url_for('admin_students')
+            })
+        else:
+            return jsonify({'error': 'Failed to delete student from database'}), 500
         
     except Exception as e:
         log_error('ADMIN', f'Error deleting student {student_id}', e,
@@ -1099,66 +1176,66 @@ def admin_all_sessions():
     if not check_auth():
         return redirect(url_for('admin_login'))
     
-    # Get all students and their sessions
-    all_sessions = []
-    students = get_all_students()
-    
-    for student in students:
-        student_id = student['id']
-        sessions_dir = f'../data/students/{student_id}/sessions'
+    try:
+        # Get all sessions from database
+        all_sessions = session_repository.get_all()
         
-        if os.path.exists(sessions_dir):
-            for file in os.listdir(sessions_dir):
-                if file.endswith('_session.json') or file.endswith('_summary.json'):
-                    file_path = os.path.join(sessions_dir, file)
-                    try:
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
-                        
-                        # Check if there's a corresponding transcript
-                        transcript_file = file.replace('_session.json', '_transcript.txt').replace('_summary.json', '_transcript.txt')
-                        transcript_path = os.path.join(sessions_dir, transcript_file)
-                        has_transcript = os.path.exists(transcript_path)
-                        
-                        # Check if there's a corresponding AI analysis
-                        analysis_file = file.replace('_session.json', '_ai_analysis.json').replace('_summary.json', '_ai_analysis.json')
-                        analysis_path = os.path.join(sessions_dir, analysis_file)
-                        has_analysis = os.path.exists(analysis_path)
-                        
-                        session_info = {
-                            'student_id': student_id,
-                            'student_name': student['name'],
-                            'student_grade': student['grade'],
-                            'file': file,
-                            'date': data.get('start_time', '').split('T')[0] if data.get('start_time') else 'Unknown',
-                            'time': data.get('start_time', '').split('T')[1][:8] if data.get('start_time') and 'T' in data.get('start_time', '') else '',
-                            'duration': data.get('duration_minutes', data.get('duration_seconds', 0) // 60 if data.get('duration_seconds') else 'Unknown'),
-                            'type': 'VAPI Call' if 'vapi' in file else 'Regular Session',
-                            'has_transcript': has_transcript,
-                            'has_analysis': has_analysis,
-                            'data': data
-                        }
-                        all_sessions.append(session_info)
-                        
-                    except Exception as e:
-                        print(f"Error loading session file {file} for student {student_id}: {e}")
+        # Get all students for additional information
+        students = get_all_students()
+        students_dict = {s['id']: s for s in students}
+        
+        # Enhance session data with student information
+        for session in all_sessions:
+            student_id = session.get('student_id')
+            student = students_dict.get(student_id, {})
+            
+            session['student_name'] = student.get('full_name', 'Unknown')
+            session['student_grade'] = student.get('grade', 'Unknown')
+            
+            # Format date and time
+            start_datetime = session.get('start_datetime', '')
+            if start_datetime:
+                if isinstance(start_datetime, str) and 'T' in start_datetime:
+                    session['date'] = start_datetime.split('T')[0]
+                    session['time'] = start_datetime.split('T')[1][:8]
+                else:
+                    session['date'] = str(start_datetime).split(' ')[0]
+                    session['time'] = str(start_datetime).split(' ')[1][:8] if ' ' in str(start_datetime) else ''
+            else:
+                session['date'] = 'Unknown'
+                session['time'] = ''
+            
+            # Set session type
+            session['type'] = 'VAPI Call' if session.get('session_type') == 'phone' else 'Regular Session'
+            
+            # Set duration
+            session['duration'] = session.get('duration_minutes', session.get('duration', 0) // 60 if session.get('duration') else 'Unknown')
+            
+            # Set transcript and analysis flags
+            session['has_transcript'] = bool(session.get('transcript'))
+            session['has_analysis'] = False  # Set based on your database schema
+        
+        # Sort by date and time (newest first)
+        all_sessions.sort(key=lambda x: (x.get('date', ''), x.get('time', '')), reverse=True)
+        
+        # Calculate session statistics
+        session_stats = {
+            'total_sessions': len(all_sessions),
+            'vapi_sessions': len([s for s in all_sessions if s.get('type') == 'VAPI Call']),
+            'regular_sessions': len([s for s in all_sessions if s.get('type') == 'Regular Session']),
+            'with_transcripts': len([s for s in all_sessions if s.get('has_transcript')]),
+            'with_analysis': len([s for s in all_sessions if s.get('has_analysis')]),
+            'total_students': len(students)
+        }
+        
+        return render_template('all_sessions.html',
+                             sessions=all_sessions,
+                             session_stats=session_stats)
     
-    # Sort by date and time (newest first)
-    all_sessions.sort(key=lambda x: (x['date'], x['time']), reverse=True)
-    
-    # Calculate session statistics
-    session_stats = {
-        'total_sessions': len(all_sessions),
-        'vapi_sessions': len([s for s in all_sessions if s['type'] == 'VAPI Call']),
-        'regular_sessions': len([s for s in all_sessions if s['type'] == 'Regular Session']),
-        'with_transcripts': len([s for s in all_sessions if s['has_transcript']]),
-        'with_analysis': len([s for s in all_sessions if s['has_analysis']]),
-        'total_students': len(students)
-    }
-    
-    return render_template('all_sessions.html',
-                         sessions=all_sessions,
-                         session_stats=session_stats)
+    except Exception as e:
+        flash(f'Error loading sessions: {str(e)}', 'error')
+        log_error('DATABASE', 'Error loading all sessions', e)
+        return render_template('all_sessions.html', sessions=[], session_stats={})
 
 # Session and Assessment Viewer
 @app.route('/admin/students/<student_id>/sessions')
@@ -1166,92 +1243,85 @@ def view_student_sessions(student_id):
     if not check_auth():
         return redirect(url_for('admin_login'))
     
-    student_data = get_student_data(student_id)
-    if not student_data:
-        flash(f'Student {student_id} not found', 'error')
-        return redirect(url_for('admin_students'))
+    try:
+        # Get student data
+        student_data = get_student_data(student_id)
+        if not student_data:
+            flash(f'Student {student_id} not found', 'error')
+            return redirect(url_for('admin_students'))
+        
+        # Get sessions for this student from database
+        sessions = session_repository.get_by_student_id(student_id)
+        
+        # Format session data for template
+        for session in sessions:
+            # Format date and time
+            start_datetime = session.get('start_datetime', '')
+            if start_datetime:
+                if isinstance(start_datetime, str) and 'T' in start_datetime:
+                    session['date'] = start_datetime.split('T')[0]
+                    session['time'] = start_datetime.split('T')[1][:8]
+                else:
+                    session['date'] = str(start_datetime).split(' ')[0]
+                    session['time'] = str(start_datetime).split(' ')[1][:8] if ' ' in str(start_datetime) else ''
+            else:
+                session['date'] = 'Unknown'
+                session['time'] = ''
+            
+            # Set session type
+            session['type'] = 'VAPI Call' if session.get('session_type') == 'phone' else 'Regular Session'
+            
+            # Set duration
+            session['duration'] = session.get('duration_minutes', session.get('duration', 0) // 60 if session.get('duration') else 'Unknown')
+            
+            # Set transcript and analysis flags
+            session['has_transcript'] = bool(session.get('transcript'))
+            session['has_analysis'] = False  # Set based on your database schema
+            
+            # Set file name for compatibility with template
+            session['file'] = f"session_{session.get('id')}"
+        
+        # Sort by date (newest first)
+        sessions.sort(key=lambda x: x.get('date', ''), reverse=True)
+        
+        return render_template('session_list.html',
+                             student=student_data.get('profile', {}),
+                             student_id=student_id,
+                             sessions=sessions)
     
-    sessions_dir = f'../data/students/{student_id}/sessions'
-    sessions = []
-    
-    if os.path.exists(sessions_dir):
-        for file in os.listdir(sessions_dir):
-            if file.endswith('_session.json') or file.endswith('_summary.json'):
-                file_path = os.path.join(sessions_dir, file)
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                    
-                    # Check if there's a corresponding transcript
-                    transcript_file = file.replace('_session.json', '_transcript.txt').replace('_summary.json', '_transcript.txt')
-                    transcript_path = os.path.join(sessions_dir, transcript_file)
-                    has_transcript = os.path.exists(transcript_path)
-                    
-                    # Check if there's a corresponding AI analysis
-                    analysis_file = file.replace('_session.json', '_ai_analysis.json').replace('_summary.json', '_ai_analysis.json')
-                    analysis_path = os.path.join(sessions_dir, analysis_file)
-                    has_analysis = os.path.exists(analysis_path)
-                    
-                    sessions.append({
-                        'file': file,
-                        'date': data.get('start_time', '').split('T')[0] if data.get('start_time') else 'Unknown',
-                        'time': data.get('start_time', '').split('T')[1][:8] if data.get('start_time') and 'T' in data.get('start_time', '') else '',
-                        'duration': data.get('duration_minutes', data.get('duration_seconds', 0) // 60 if data.get('duration_seconds') else 'Unknown'),
-                        'type': 'VAPI Call' if 'vapi' in file else 'Regular Session',
-                        'has_transcript': has_transcript,
-                        'has_analysis': has_analysis,
-                        'data': data
-                    })
-                except Exception as e:
-                    print(f"Error loading session file {file}: {e}")
-    
-    # Sort by date (newest first)
-    sessions.sort(key=lambda x: x['date'], reverse=True)
-    
-    return render_template('session_list.html',
-                         student=student_data.get('profile', {}),
-                         student_id=student_id,
-                         sessions=sessions)
+    except Exception as e:
+        flash(f'Error loading sessions: {str(e)}', 'error')
+        log_error('DATABASE', 'Error loading student sessions', e, student_id=student_id)
+        return render_template('session_list.html', student={}, student_id=student_id, sessions=[])
 
-@app.route('/admin/sessions/<student_id>/<session_file>')
-def view_session_detail(student_id, session_file):
+@app.route('/admin/sessions/<student_id>/<session_id>')
+def view_session_detail(student_id, session_id):
     if not check_auth():
         return redirect(url_for('admin_login'))
     
-    session_path = f'../data/students/{student_id}/sessions/{session_file}'
-    if not os.path.exists(session_path):
-        flash('Session file not found', 'error')
-        return redirect(url_for('view_student_sessions', student_id=student_id))
-    
     try:
-        with open(session_path, 'r', encoding='utf-8') as f:
-            session_data = json.load(f)
+        # Get session from database
+        session_data = session_repository.get_by_id(session_id)
+        if not session_data:
+            flash('Session not found', 'error')
+            return redirect(url_for('view_student_sessions', student_id=student_id))
         
-        # Load transcript if available
-        transcript_file = session_file.replace('_session.json', '_transcript.txt').replace('_summary.json', '_transcript.txt')
-        transcript_path = f'../data/students/{student_id}/sessions/{transcript_file}'
-        transcript = None
-        if os.path.exists(transcript_path):
-            with open(transcript_path, 'r', encoding='utf-8') as f:
-                transcript = f.read()
+        # Get transcript from session data
+        transcript = session_data.get('transcript')
         
-        # Load AI analysis if available
-        analysis_file = session_file.replace('_session.json', '_ai_analysis.json').replace('_summary.json', '_ai_analysis.json')
-        analysis_path = f'../data/students/{student_id}/sessions/{analysis_file}'
+        # Get analysis if available (implement based on your database schema)
         analysis = None
-        if os.path.exists(analysis_path):
-            with open(analysis_path, 'r', encoding='utf-8') as f:
-                analysis = json.load(f)
         
         return render_template('session_detail.html',
                              student_id=student_id,
-                             session_file=session_file,
+                             session_file=f"session_{session_id}",  # For compatibility with template
                              session_data=session_data,
                              transcript=transcript,
                              analysis=analysis)
         
     except Exception as e:
-        flash(f'Error loading session: {e}', 'error')
+        flash(f'Error loading session: {str(e)}', 'error')
+        log_error('DATABASE', 'Error loading session detail', e, student_id=student_id, session_id=session_id)
         return redirect(url_for('view_student_sessions', student_id=student_id))
 
 # AI Post-Processing Routes (POC)
@@ -1408,6 +1478,53 @@ def api_ai_stats():
         return jsonify({'error': 'AI POC not available'}), 503
     
     return jsonify(session_processor.get_processing_stats())
+
+@app.route('/api/v1/logs', methods=['GET'])
+@token_required(['logs:read'])
+def get_logs_api():
+    """API endpoint to retrieve logs from the database"""
+    try:
+        # Get query parameters
+        date = request.args.get('date')
+        level = request.args.get('level')
+        category = request.args.get('category')
+        days = int(request.args.get('days', 7))
+        limit = int(request.args.get('limit', 100))
+        
+        # Initialize the repository
+        log_repository = SystemLogRepository(db.session)
+        
+        if date:
+            # Parse date string to date object
+            try:
+                date_obj = datetime.datetime.strptime(date, '%Y-%m-%d').date()
+                logs = log_repository.get_logs_by_date(date_obj, category, level)
+            except ValueError:
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid date format. Use YYYY-MM-DD'
+                }), 400
+        else:
+            # Get logs for the specified number of days
+            logs = log_repository.get_logs(days, category, level, limit)
+        
+        # Convert logs to dictionaries
+        log_dicts = [log.to_dict() for log in logs]
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'count': len(log_dicts),
+                'logs': log_dicts
+            }
+        })
+        
+    except Exception as e:
+        log_error('API', 'Error retrieving logs', e)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 # VAPI Webhook Routes
 def verify_vapi_signature(payload_body, signature, headers_info):
@@ -1580,37 +1697,9 @@ def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
         print(f"❌ API-driven handler error: {e}")
 
 def save_vapi_session(call_id, student_id, phone, duration, user_transcript, assistant_transcript, full_message):
-    """Save VAPI session data to student directory"""
+    """Save VAPI session data to database"""
     try:
-        # Create student directory if it doesn't exist
-        student_dir = f'../data/students/{student_id}'
-        sessions_dir = f'{student_dir}/sessions'
-        os.makedirs(sessions_dir, exist_ok=True)
-        
-        # Generate session filename with timestamp
-        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        session_file = f'{sessions_dir}/{timestamp}_vapi_session.json'
-        transcript_file = f'{sessions_dir}/{timestamp}_vapi_transcript.txt'
-        
-        # Create session data
-        session_data = {
-            'call_id': call_id,
-            'student_id': student_id,
-            'phone_number': phone,
-            'start_time': datetime.now().isoformat(),
-            'duration_seconds': duration,
-            'session_type': 'vapi_call',
-            'transcript_file': f'{timestamp}_vapi_transcript.txt',
-            'user_transcript_length': len(user_transcript),
-            'assistant_transcript_length': len(assistant_transcript),
-            'vapi_data': full_message  # Store complete VAPI response
-        }
-        
-        # Save session metadata
-        with open(session_file, 'w', encoding='utf-8') as f:
-            json.dump(session_data, f, indent=2, ensure_ascii=False)
-        
-        # Save combined transcript
+        # Combine transcripts
         combined_transcript = f"=== VAPI Call Transcript ===\n"
         combined_transcript += f"Call ID: {call_id}\n"
         combined_transcript += f"Duration: {duration} seconds\n"
@@ -1619,8 +1708,25 @@ def save_vapi_session(call_id, student_id, phone, duration, user_transcript, ass
         combined_transcript += f"=== User Transcript ===\n{user_transcript}\n\n"
         combined_transcript += f"=== Assistant Transcript ===\n{assistant_transcript}\n"
         
-        with open(transcript_file, 'w', encoding='utf-8') as f:
-            f.write(combined_transcript)
+        # Create session data for database
+        session_data = {
+            'student_id': student_id,
+            'call_id': call_id,
+            'session_type': 'phone',
+            'start_datetime': datetime.now().isoformat(),
+            'duration': duration,
+            'transcript': combined_transcript,
+            'summary': ''  # No summary available from webhook
+        }
+        
+        # Save session to database
+        new_session = session_repository.create(session_data)
+        
+        if not new_session:
+            log_error('DATABASE', f"Failed to create session in database", ValueError("Database operation failed"),
+                     call_id=call_id, student_id=student_id)
+            print(f"❌ Failed to save session to database")
+            return
         
         # Analyze transcript and update student profile
         if user_transcript:
@@ -1632,15 +1738,15 @@ def save_vapi_session(call_id, student_id, phone, duration, user_transcript, ass
                 if extracted_info:
                     analyzer.update_student_profile(student_id, extracted_info)
                     log_webhook('profile-updated', f"Updated student profile from webhook session",
-                               call_id=call_id, student_id=student_id,
-                               extracted_info=extracted_info)
+                                call_id=call_id, student_id=student_id,
+                                extracted_info=extracted_info)
                     print(f"👤 Updated profile for student {student_id} with extracted information")
             except Exception as e:
                 log_error('TRANSCRIPT_ANALYSIS', f"Error analyzing webhook session transcript", e,
-                         call_id=call_id, student_id=student_id)
+                          call_id=call_id, student_id=student_id)
                 print(f"⚠️ Error analyzing webhook session transcript: {e}")
         
-        print(f"💾 Saved VAPI session: {session_file}")
+        print(f"💾 Saved VAPI session to database: {new_session.get('id')}")
         
     except Exception as e:
         print(f"❌ Error saving VAPI session: {e}")
@@ -1698,76 +1804,58 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
     return new_student_id
 
 def create_student_from_call(phone: str, call_id: str) -> str:
-    """Create a new student from phone call data"""
-    # Ensure phone is normalized for consistent lookup and storage
-    normalized_phone = normalize_phone_number(phone)
-    
-    # Use last 4 digits of normalized phone for ID creation
-    phone_suffix = normalized_phone[-4:] if normalized_phone else ""
-    student_id = f"student_{phone_suffix}" if phone else f"unknown_{call_id[-6:]}"
-    
-    # Ensure unique ID
-    counter = 1
-    base_id = student_id
-    while os.path.exists(f'../data/students/{student_id}'):
-        student_id = f"{base_id}_{counter}"
-        counter += 1
-    
-    # Create student directories
-    student_dir = f'../data/students/{student_id}'
-    os.makedirs(f'{student_dir}/sessions', exist_ok=True)
-    
-    # Create basic profile
-    profile = {
-        'name': f"Student {phone_suffix}" if phone else f"Unknown Caller",
-        'age': 'Unknown',
-        'grade': 'Unknown',
-        'phone_number': normalized_phone,  # Store normalized phone in profile
-        'created_from_call': call_id,
-        'created_date': datetime.now().isoformat(),
-        'interests': [],
-        'learning_preferences': [],
-        'curriculum': 'To be determined'
-    }
-    
-    with open(f'{student_dir}/profile.json', 'w', encoding='utf-8') as f:
-        json.dump(profile, f, indent=2, ensure_ascii=False)
-    
-    # Create initial progress
-    progress = {
-        'overall_progress': 0,
-        'subjects': {},
-        'goals': ['Complete initial assessment'],
-        'streak_days': 0,
-        'last_updated': datetime.now().isoformat()
-    }
-    
-    with open(f'{student_dir}/progress.json', 'w', encoding='utf-8') as f:
-        json.dump(progress, f, indent=2, ensure_ascii=False)
-    
-    # Add phone mapping using normalized phone number
-    if normalized_phone:
-        # Log the exact phone number being mapped for debugging
-        log_webhook('phone-mapping', f"Adding phone mapping: {normalized_phone} → {student_id}",
-                   phone=normalized_phone, student_id=student_id)
-        phone_manager.add_phone_mapping(normalized_phone, student_id)
-    
-    return student_id
+    """Create a new student from phone call data using database"""
+    try:
+        # Ensure phone is normalized for consistent lookup and storage
+        normalized_phone = normalize_phone_number(phone)
+        
+        # Use last 4 digits of normalized phone for name creation
+        phone_suffix = normalized_phone[-4:] if normalized_phone else ""
+        first_name = f"Student"
+        last_name = phone_suffix if phone else f"Unknown_{call_id[-6:]}"
+        
+        # Create student data
+        student_data = {
+            'first_name': first_name,
+            'last_name': last_name,
+            'date_of_birth': None,
+            'phone_number': normalized_phone,
+            'student_type': 'International',  # Default value
+            'school_id': None,
+            'interests': [],
+            'learning_preferences': []
+        }
+        
+        # Create student in database
+        new_student = student_repository.create(student_data)
+        
+        if not new_student:
+            log_error('DATABASE', f"Failed to create student in database", ValueError("Database operation failed"),
+                     call_id=call_id, phone=normalized_phone)
+            # Return a temporary ID for fallback
+            return f"temp_{call_id[-6:]}"
+        
+        student_id = str(new_student['id'])
+        
+        # Add phone mapping using normalized phone number
+        if normalized_phone:
+            # Log the exact phone number being mapped for debugging
+            log_webhook('phone-mapping', f"Adding phone mapping: {normalized_phone} → {student_id}",
+                        phone=normalized_phone, student_id=student_id)
+            phone_manager.add_phone_mapping(normalized_phone, student_id)
+        
+        return student_id
+        
+    except Exception as e:
+        log_error('DATABASE', f"Error creating student from call", e,
+                 call_id=call_id, phone=phone)
+        # Return a temporary ID for fallback
+        return f"temp_{call_id[-6:]}"
 
 def save_api_driven_session(call_id: str, student_id: str, phone: str,
-                           duration: int, transcript: str, call_data: Dict[Any, Any]):
-    """Save VAPI session data using API-fetched data"""
+                            duration: int, transcript: str, call_data: Dict[Any, Any]):
+    """Save VAPI session data using API-fetched data to database"""
     try:
-        # Create student directory if it doesn't exist
-        student_dir = f'../data/students/{student_id}'
-        sessions_dir = f'{student_dir}/sessions'
-        os.makedirs(sessions_dir, exist_ok=True)
-        
-        # Generate session filename with timestamp
-        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        session_file = f'{sessions_dir}/{timestamp}_vapi_session.json'
-        transcript_file = f'{sessions_dir}/{timestamp}_vapi_transcript.txt'
-        
         # Create session data using API metadata
         metadata = vapi_client.extract_call_metadata(call_data)
         
@@ -1777,76 +1865,67 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
             # Estimate ~10 seconds per 100 characters as a fallback
             effective_duration = len(transcript) // 10
             log_webhook('duration-estimate', f"Estimated duration from transcript length",
-                       call_id=call_id, original_duration=duration,
-                       estimated_duration=effective_duration,
-                       transcript_length=len(transcript))
+                        call_id=call_id, original_duration=duration,
+                        estimated_duration=effective_duration,
+                        transcript_length=len(transcript))
             print(f"⏱️ Estimated duration from transcript: {effective_duration}s (original: {duration}s)")
         
+        # Prepare session data for database
         session_data = {
-            'call_id': call_id,
             'student_id': student_id,
-            'phone_number': phone,
-            'start_time': metadata.get('created_at', datetime.now().isoformat()),
-            'duration_seconds': effective_duration,  # Use the effective duration
-            'original_duration': duration,  # Keep the original for reference
-            'session_type': 'vapi_call_api',
-            'transcript_file': f'{timestamp}_vapi_transcript.txt',
-            'transcript_length': len(transcript) if transcript else 0,
-            'data_source': 'vapi_api',
-            'call_status': metadata.get('status'),
-            'call_cost': metadata.get('cost', 0),
-            'has_recording': metadata.get('has_recording', False),
-            'recording_url': metadata.get('recording_url'),
-            'vapi_metadata': metadata,
-            'analysis_summary': metadata.get('analysis_summary', ''),
-            'analysis_data': metadata.get('analysis_structured_data', {})
+            'call_id': call_id,
+            'session_type': 'phone',
+            'start_datetime': metadata.get('created_at', datetime.now().isoformat()),
+            'duration': effective_duration,
+            'transcript': transcript,
+            'summary': metadata.get('analysis_summary', '')
         }
         
-        # Save session metadata
-        with open(session_file, 'w', encoding='utf-8') as f:
-            json.dump(session_data, f, indent=2, ensure_ascii=False)
+        # Save session to database
+        new_session = session_repository.create(session_data)
         
-        # Save transcript and analyze regardless of duration
-        if transcript:
-            with open(transcript_file, 'w', encoding='utf-8') as f:
-                f.write(transcript)
-            
-            # Always analyze transcript for profile information if there's content
-            if len(transcript) > 100:  # Only analyze if there's meaningful content
-                try:
-                    from transcript_analyzer import TranscriptAnalyzer
-                    analyzer = TranscriptAnalyzer()
-                    log_webhook('transcript-analysis-start', f"Starting transcript analysis for profile extraction",
-                               call_id=call_id, student_id=student_id,
-                               transcript_length=len(transcript))
-                    print(f"🔍 Analyzing transcript for student {student_id} profile information...")
-                    
-                    extracted_info = analyzer.analyze_transcript(transcript, student_id)
-                    if extracted_info:
-                        analyzer.update_student_profile(student_id, extracted_info)
-                        log_webhook('profile-updated', f"Updated student profile from transcript",
-                                   call_id=call_id, student_id=student_id,
-                                   extracted_info=extracted_info)
-                        print(f"👤 Updated profile for student {student_id} with extracted information: {extracted_info}")
-                    else:
-                        log_webhook('profile-no-info', f"No profile information extracted from transcript",
-                                   call_id=call_id, student_id=student_id)
-                        print(f"ℹ️ No profile information extracted from transcript for student {student_id}")
-                except Exception as e:
-                    log_error('TRANSCRIPT_ANALYSIS', f"Error analyzing transcript", e,
-                             call_id=call_id, student_id=student_id)
-                    print(f"⚠️ Error analyzing transcript: {e}")
+        if not new_session:
+            log_error('DATABASE', f"Failed to create session in database", ValueError("Database operation failed"),
+                     call_id=call_id, student_id=student_id)
+            print(f"❌ Failed to save session to database")
+            return
         
-        print(f"💾 Saved API-driven session: {session_file}")
+        # Always analyze transcript for profile information if there's content
+        if transcript and len(transcript) > 100:  # Only analyze if there's meaningful content
+            try:
+                from transcript_analyzer import TranscriptAnalyzer
+                analyzer = TranscriptAnalyzer()
+                log_webhook('transcript-analysis-start', f"Starting transcript analysis for profile extraction",
+                            call_id=call_id, student_id=student_id,
+                            transcript_length=len(transcript))
+                print(f"🔍 Analyzing transcript for student {student_id} profile information...")
+                
+                extracted_info = analyzer.analyze_transcript(transcript, student_id)
+                if extracted_info:
+                    analyzer.update_student_profile(student_id, extracted_info)
+                    log_webhook('profile-updated', f"Updated student profile from transcript",
+                                call_id=call_id, student_id=student_id,
+                                extracted_info=extracted_info)
+                    print(f"👤 Updated profile for student {student_id} with extracted information: {extracted_info}")
+                else:
+                    log_webhook('profile-no-info', f"No profile information extracted from transcript",
+                                call_id=call_id, student_id=student_id)
+                    print(f"ℹ️ No profile information extracted from transcript for student {student_id}")
+            except Exception as e:
+                log_error('TRANSCRIPT_ANALYSIS', f"Error analyzing transcript", e,
+                          call_id=call_id, student_id=student_id)
+                print(f"⚠️ Error analyzing transcript: {e}")
+        
+        print(f"💾 Saved API-driven session to database: {new_session.get('id')}")
         log_webhook('session-saved', f"Saved session for call {call_id}",
-                   call_id=call_id,
-                   student_id=student_id,
-                   session_file=session_file,
-                   transcript_length=len(transcript) if transcript else 0)
+                    call_id=call_id,
+                    student_id=student_id,
+                    session_id=new_session.get('id'),
+                    transcript_length=len(transcript) if transcript else 0)
         
     except Exception as e:
         log_error('WEBHOOK', f"Error saving API-driven session for call {call_id}", e,
-                 call_id=call_id, student_id=student_id)
+                  call_id=call_id, student_id=student_id)
         print(f"❌ Error saving API-driven session: {e}")
 
 def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
@@ -2042,46 +2121,95 @@ def admin_system_logs():
     category = request.args.get('category', '')
     level = request.args.get('level', '')
     
-    # Get logs
-    logs = system_logger.get_logs(days=days, category=category, level=level)
-    
-    # Get log statistics
-    log_stats = system_logger.get_log_statistics()
-    
-    # Get available categories and levels for filtering
-    available_categories = list(log_stats.get('categories', {}).keys())
-    available_levels = list(log_stats.get('levels', {}).keys())
-    
-    log_admin_action('view_logs', session.get('admin_username', 'unknown'),
-                    days_filter=days,
-                    category_filter=category,
-                    level_filter=level,
-                    log_count=len(logs))
-    
-    return render_template('system_logs.html',
-                         logs=logs,
-                         log_stats=log_stats,
-                         available_categories=available_categories,
-                         available_levels=available_levels,
-                         current_filters={
-                             'days': days,
-                             'category': category,
-                             'level': level
-                         })
+    try:
+        # Initialize the repository
+        log_repository = SystemLogRepository(db.session)
+        
+        # Get logs from database
+        logs = log_repository.get_logs(days=days, category=category, level=level)
+        
+        # Convert logs to dictionaries
+        logs = [log.to_dict() for log in logs]
+        
+        # Get log statistics
+        log_stats = log_repository.get_log_statistics()
+        
+        # Get available categories and levels for filtering
+        available_categories = list(log_stats.get('categories', {}).keys())
+        available_levels = list(log_stats.get('levels', {}).keys())
+        
+        log_admin_action('view_logs', session.get('admin_username', 'unknown'),
+                        days_filter=days,
+                        category_filter=category,
+                        level_filter=level,
+                        log_count=len(logs))
+        
+        return render_template('system_logs.html',
+                            logs=logs,
+                            log_stats=log_stats,
+                            available_categories=available_categories,
+                            available_levels=available_levels,
+                            current_filters={
+                                'days': days,
+                                'category': category,
+                                'level': level
+                            })
+    except Exception as e:
+        flash(f'Error retrieving logs: {str(e)}', 'error')
+        log_error('DATABASE', 'Error retrieving logs', e)
+        return render_template('system_logs.html',
+                            logs=[],
+                            log_stats={},
+                            available_categories=[],
+                            available_levels=[],
+                            current_filters={
+                                'days': days,
+                                'category': category,
+                                'level': level
+                            })
 
-@app.route('/admin/logs/download/<log_file>')
-def download_log_file(log_file):
-    """Download a specific log file"""
+@app.route('/admin/logs/export')
+def export_logs():
+    """Export logs as JSON file"""
     if not check_auth():
         return redirect(url_for('admin_login'))
     
-    # Security: Ensure the file is within the logs directory
-    log_path = os.path.join(system_logger.log_dir, log_file)
-    if not os.path.exists(log_path) or not log_path.startswith(system_logger.log_dir):
-        flash('Log file not found or access denied', 'error')
+    try:
+        # Get filter parameters
+        days = int(request.args.get('days', 7))
+        category = request.args.get('category', '')
+        level = request.args.get('level', '')
+        
+        # Initialize the repository
+        log_repository = SystemLogRepository(db.session)
+        
+        # Get logs from database
+        logs = log_repository.get_logs(days=days, category=category, level=level)
+        
+        # Convert logs to dictionaries
+        logs_dict = [log.to_dict() for log in logs]
+        
+        # Create a temporary file
+        import tempfile
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.json')
+        temp_file.write(json.dumps(logs_dict, indent=2).encode('utf-8'))
+        temp_file.close()
+        
+        # Log the export
+        log_admin_action('export_logs', session.get('admin_username', 'unknown'),
+                        days_filter=days,
+                        category_filter=category,
+                        level_filter=level,
+                        log_count=len(logs))
+        
+        # Send the file
+        return send_file(temp_file.name,
+                        as_attachment=True,
+                        download_name=f'logs_{datetime.now().strftime("%Y-%m-%d")}.json')
+    except Exception as e:
+        flash(f'Error exporting logs: {str(e)}', 'error')
+        log_error('DATABASE', 'Error exporting logs', e)
         return redirect(url_for('admin_system_logs'))
-
-    return send_file(log_path, as_attachment=True)
 
 
 @app.route('/admin/logs/cleanup', methods=['POST'])
@@ -2093,9 +2221,15 @@ def cleanup_system_logs():
     log_admin_action('manual_log_cleanup', session.get('admin_username', 'unknown'))
     
     try:
-        cleanup_stats = system_logger.cleanup_old_logs()
-        flash(f"Log cleanup completed: {cleanup_stats['deleted_files']} files deleted", 'success')
-        return jsonify({'success': True, 'stats': cleanup_stats})
+        # Import and use the Celery task for log cleanup
+        from app.tasks.maintenance_tasks import cleanup_old_logs
+        from app.config import Config
+        
+        # Run cleanup task directly (not as a Celery task)
+        deleted_count = cleanup_old_logs(days=Config.LOG_RETENTION_DAYS)
+        
+        flash(f"Log cleanup completed: {deleted_count} log entries deleted", 'success')
+        return jsonify({'success': True, 'stats': {'deleted_entries': deleted_count}})
     except Exception as e:
         log_error('ADMIN', 'Manual log cleanup failed', e)
         return jsonify({'error': str(e)}), 500
@@ -2179,8 +2313,12 @@ def periodic_log_cleanup():
         try:
             time.sleep(24 * 60 * 60)  # Wait 24 hours
             log_system("Running scheduled log cleanup")
-            cleanup_stats = system_logger.cleanup_old_logs()
-            log_system("Scheduled log cleanup completed", **cleanup_stats)
+            
+            # Import and use the Celery task for log cleanup
+            from app.tasks.maintenance_tasks import cleanup_old_logs
+            deleted_count = cleanup_old_logs.delay(days=Config.LOG_RETENTION_DAYS).get()
+            
+            log_system("Scheduled log cleanup completed", deleted_entries=deleted_count)
         except Exception as e:
             log_error('SYSTEM', 'Scheduled log cleanup failed', e)
 
@@ -2205,11 +2343,25 @@ if __name__ == '__main__':
     if ADMIN_PASSWORD == 'admin123':
         print("⚠️  CHANGE DEFAULT PASSWORD IN PRODUCTION!")
     
+    # Initialize database
+    try:
+        # Create database tables if they don't exist
+        db.create_all()
+        print("🗄️  Database tables created/verified")
+    except Exception as e:
+        print(f"⚠️  Database initialization failed: {e}")
+    
     # Run initial cleanup
     try:
-        cleanup_stats = system_logger.cleanup_old_logs()
-        if cleanup_stats['deleted_files'] > 0:
-            print(f"🧹 Initial cleanup: {cleanup_stats['deleted_files']} old log files removed")
+        # Import and use the Celery task for log cleanup
+        from app.tasks.maintenance_tasks import cleanup_old_logs
+        from app.config import Config
+        
+        # Run cleanup task directly (not as a Celery task)
+        deleted_count = cleanup_old_logs(days=Config.LOG_RETENTION_DAYS)
+        
+        if deleted_count > 0:
+            print(f"🧹 Initial cleanup: {deleted_count} old log entries removed")
     except Exception as e:
         print(f"⚠️  Initial cleanup failed: {e}")
     

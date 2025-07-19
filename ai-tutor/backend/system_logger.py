@@ -1,35 +1,39 @@
 #!/usr/bin/env python3
 """
 System Logger for AI Tutor Admin Dashboard
-Handles centralized logging for all backend processes with automatic cleanup
+Handles centralized logging for all backend processes with SQL-based storage
 """
 
-import os
-import json
 import threading
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 
+from sqlalchemy.orm import Session
+from app.models.base import db
+from app.repositories.system_log_repository import SystemLogRepository
+from app.config import Config
+
 class SystemLogger:
-    """Centralized system logger with automatic cleanup and web interface support"""
+    """Centralized system logger with SQL-based storage and web interface support"""
     
-    def __init__(self, log_dir: str = '../data/logs', max_age_days: int = 30):
+    def __init__(self, max_age_days: int = 30):
         """
         Initialize the system logger
         
         Args:
-            log_dir: Directory to store log files
             max_age_days: Maximum age of logs before automatic deletion
         """
-        self.log_dir = log_dir
         self.max_age_days = max_age_days
         self.lock = threading.Lock()
         
-        # Create logs directory
-        os.makedirs(self.log_dir, exist_ok=True)
+        # Create a database session
+        self.db_session = db.session
+        
+        # Initialize the repository
+        self.repository = SystemLogRepository(self.db_session)
         
         # Initialize with startup log
-        self.log('SYSTEM', 'SystemLogger initialized', {'log_dir': log_dir, 'max_age_days': max_age_days})
+        self.log('SYSTEM', 'SystemLogger initialized', {'max_age_days': max_age_days})
     
     def log(self, category: str, message: str, data: Optional[Dict[str, Any]] = None, level: str = 'INFO'):
         """
@@ -41,29 +45,14 @@ class SystemLogger:
             data: Additional structured data
             level: Log level (DEBUG, INFO, WARNING, ERROR)
         """
-        timestamp = datetime.now()
-        
-        log_entry = {
-            'timestamp': timestamp.isoformat(),
-            'category': category.upper(),
-            'level': level.upper(),
-            'message': message,
-            'data': data or {},
-            'date': timestamp.strftime('%Y-%m-%d'),
-            'time': timestamp.strftime('%H:%M:%S')
-        }
-        
-        # Determine log file path (one file per day)
-        log_file = os.path.join(self.log_dir, f"{timestamp.strftime('%Y-%m-%d')}.jsonl")
-        
-        # Thread-safe writing
+        # Thread-safe logging
         with self.lock:
             try:
-                with open(log_file, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+                self.repository.create(category, message, data, level)
             except Exception as e:
-                # Fallback to console if file writing fails
-                print(f"[LOGGER ERROR] Failed to write log: {e}")
+                # Fallback to console if database writing fails
+                timestamp = datetime.now()
+                print(f"[LOGGER ERROR] Failed to write log to database: {e}")
                 print(f"[{timestamp.isoformat()}] {category.upper()}/{level.upper()}: {message}")
     
     def log_webhook(self, event_type: str, message: str, **kwargs):
@@ -95,52 +84,36 @@ class SystemLogger:
     
     def cleanup_old_logs(self) -> Dict[str, int]:
         """
-        Remove log files older than max_age_days
+        Remove log entries older than max_age_days
         
         Returns:
             Dict with cleanup statistics
         """
-        cutoff_date = datetime.now() - timedelta(days=self.max_age_days)
-        deleted_count = 0
-        deleted_size = 0
-        
         with self.lock:
             try:
-                for filename in os.listdir(self.log_dir):
-                    if filename.endswith('.jsonl'):
-                        try:
-                            # Parse date from filename (YYYY-MM-DD.jsonl)
-                            date_str = filename.replace('.jsonl', '')
-                            file_date = datetime.strptime(date_str, '%Y-%m-%d')
-                            
-                            if file_date < cutoff_date:
-                                file_path = os.path.join(self.log_dir, filename)
-                                file_size = os.path.getsize(file_path)
-                                os.remove(file_path)
-                                deleted_count += 1
-                                deleted_size += file_size
-                                
-                        except (ValueError, OSError) as e:
-                            print(f"Error processing log file {filename}: {e}")
-                            
-            except OSError as e:
-                print(f"Error accessing log directory: {e}")
-        
-        # Log the cleanup operation
-        if deleted_count > 0:
-            self.log('SYSTEM', f"Cleaned up {deleted_count} old log files", {
-                'deleted_files': deleted_count,
-                'deleted_bytes': deleted_size,
-                'cutoff_date': cutoff_date.isoformat()
-            })
-        
-        return {
-            'deleted_files': deleted_count,
-            'deleted_bytes': deleted_size,
-            'cutoff_date': cutoff_date.isoformat()
-        }
+                deleted_count = self.repository.cleanup_old_logs(self.max_age_days)
+                
+                # Log the cleanup operation
+                if deleted_count > 0:
+                    cutoff_date = datetime.now() - timedelta(days=self.max_age_days)
+                    self.log('SYSTEM', f"Cleaned up {deleted_count} old log entries", {
+                        'deleted_entries': deleted_count,
+                        'cutoff_date': cutoff_date.isoformat()
+                    })
+                
+                return {
+                    'deleted_entries': deleted_count,
+                    'cutoff_date': (datetime.now() - timedelta(days=self.max_age_days)).isoformat()
+                }
+                
+            except Exception as e:
+                print(f"Error cleaning up old logs: {e}")
+                return {
+                    'deleted_entries': 0,
+                    'error': str(e)
+                }
     
-    def get_logs(self, days: int = 7, category: Optional[str] = None, level: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_logs(self, days: int = 7, category: Optional[str] = None, level: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
         """
         Retrieve logs for display in admin interface
         
@@ -148,112 +121,35 @@ class SystemLogger:
             days: Number of recent days to retrieve
             category: Filter by category (optional)
             level: Filter by log level (optional)
+            limit: Maximum number of logs to retrieve
             
         Returns:
-            List of log entries
+            List of log entries as dictionaries
         """
-        logs = []
-        start_date = datetime.now() - timedelta(days=days)
-        
         with self.lock:
             try:
-                for filename in sorted(os.listdir(self.log_dir), reverse=True):
-                    if filename.endswith('.jsonl'):
-                        try:
-                            date_str = filename.replace('.jsonl', '')
-                            file_date = datetime.strptime(date_str, '%Y-%m-%d')
-                            
-                            if file_date >= start_date:
-                                file_path = os.path.join(self.log_dir, filename)
-                                with open(file_path, 'r', encoding='utf-8') as f:
-                                    for line in f:
-                                        try:
-                                            log_entry = json.loads(line.strip())
-                                            
-                                            # Apply filters
-                                            if category and log_entry.get('category') != category.upper():
-                                                continue
-                                            if level and log_entry.get('level') != level.upper():
-                                                continue
-                                            
-                                            logs.append(log_entry)
-                                            
-                                        except json.JSONDecodeError:
-                                            continue
-                                            
-                        except (ValueError, OSError):
-                            continue
-                            
-            except OSError:
-                pass
-        
-        # Sort by timestamp (newest first)
-        logs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-        return logs
+                logs = self.repository.get_logs(days, category, level, limit)
+                return [log.to_dict() for log in logs]
+            except Exception as e:
+                print(f"Error retrieving logs: {e}")
+                return []
     
     def get_log_statistics(self) -> Dict[str, Any]:
         """Get statistics about the logging system"""
-        stats = {
-            'total_log_files': 0,
-            'total_log_entries': 0,
-            'total_size_bytes': 0,
-            'oldest_log_date': None,
-            'newest_log_date': None,
-            'categories': {},
-            'levels': {}
-        }
-        
         with self.lock:
             try:
-                log_files = [f for f in os.listdir(self.log_dir) if f.endswith('.jsonl')]
-                stats['total_log_files'] = len(log_files)
-                
-                if log_files:
-                    # Get date range
-                    dates = []
-                    for filename in log_files:
-                        try:
-                            date_str = filename.replace('.jsonl', '')
-                            dates.append(datetime.strptime(date_str, '%Y-%m-%d'))
-                        except ValueError:
-                            continue
-                    
-                    if dates:
-                        stats['oldest_log_date'] = min(dates).strftime('%Y-%m-%d')
-                        stats['newest_log_date'] = max(dates).strftime('%Y-%m-%d')
-                    
-                    # Count entries and analyze categories/levels
-                    for filename in log_files:
-                        file_path = os.path.join(self.log_dir, filename)
-                        try:
-                            file_size = os.path.getsize(file_path)
-                            stats['total_size_bytes'] += file_size
-                            
-                            with open(file_path, 'r', encoding='utf-8') as f:
-                                for line in f:
-                                    try:
-                                        log_entry = json.loads(line.strip())
-                                        stats['total_log_entries'] += 1
-                                        
-                                        category = log_entry.get('category', 'UNKNOWN')
-                                        level = log_entry.get('level', 'UNKNOWN')
-                                        
-                                        stats['categories'][category] = stats['categories'].get(category, 0) + 1
-                                        stats['levels'][level] = stats['levels'].get(level, 0) + 1
-                                        
-                                    except json.JSONDecodeError:
-                                        continue
-                                        
-                        except OSError:
-                            continue
-                            
-            except OSError:
-                pass
-        
-        return stats
+                return self.repository.get_log_statistics()
+            except Exception as e:
+                print(f"Error retrieving log statistics: {e}")
+                return {
+                    'error': str(e),
+                    'total_log_entries': 0,
+                    'categories': {},
+                    'levels': {}
+                }
 
 # Global logger instance
-system_logger = SystemLogger()
+system_logger = SystemLogger(max_age_days=Config.LOG_RETENTION_DAYS)
 
 # Convenience functions
 def log_system(message: str, **kwargs):

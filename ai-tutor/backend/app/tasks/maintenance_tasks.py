@@ -31,39 +31,32 @@ def backup_database():
 
 
 @celery.task
-def cleanup_log_files(days=7):
+def cleanup_old_logs(days=7):
     """
-    Clean up old log files.
+    Clean up old system logs from the database.
     
     Args:
         days (int): Number of days to keep logs for
         
     Returns:
-        int: Number of files deleted
+        int: Number of log entries deleted
     """
-    logger.info(f"Cleaning up log files older than {days} days")
+    logger.info(f"Cleaning up system logs older than {days} days")
     
-    log_dir = os.getenv('LOG_DIR', '../data/logs')
-    if not os.path.exists(log_dir):
-        logger.warning(f"Log directory does not exist: {log_dir}")
+    from app.repositories.system_log_repository import SystemLogRepository
+    from app.models.base import db
+    
+    # Create a repository instance
+    repository = SystemLogRepository(db.session)
+    
+    try:
+        # Delete old logs
+        deleted_count = repository.cleanup_old_logs(days)
+        logger.info(f"Deleted {deleted_count} old log entries from database")
+        return deleted_count
+    except Exception as e:
+        logger.error(f"Error cleaning up old logs: {str(e)}")
         return 0
-    
-    cutoff_date = datetime.now() - timedelta(days=days)
-    deleted_count = 0
-    
-    for filename in os.listdir(log_dir):
-        file_path = os.path.join(log_dir, filename)
-        if os.path.isfile(file_path):
-            file_modified = datetime.fromtimestamp(os.path.getmtime(file_path))
-            if file_modified < cutoff_date:
-                try:
-                    os.remove(file_path)
-                    deleted_count += 1
-                except Exception as e:
-                    logger.error(f"Error deleting log file {file_path}: {str(e)}")
-    
-    logger.info(f"Deleted {deleted_count} old log files")
-    return deleted_count
 
 
 @celery.task
