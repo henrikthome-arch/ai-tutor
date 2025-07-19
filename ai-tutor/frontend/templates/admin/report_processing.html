@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Report Processing{% endblock %}
+
+{% block content %}
+<div class="report-processing">
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Report Generation in Progress</h5>
+        </div>
+        <div class="card-body text-center">
+            <div class="spinner-border text-primary mb-4" role="status" style="width: 3rem; height: 3rem;">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            
+            <h4 class="mb-3">Your report is being generated</h4>
+            <p class="mb-4">This may take a few moments. Please wait while we process your request.</p>
+            
+            <div class="progress mb-4">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" 
+                     style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            
+            <p>Task ID: <code>{{ task_id }}</code></p>
+            <p>Days: <code>{{ days }}</code></p>
+            
+            <div class="mt-4">
+                <a href="{{ url_for('main.analytics_dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Analytics
+                </a>
+                <button id="checkStatusBtn" class="btn btn-primary">
+                    <i class="fas fa-sync"></i> Check Status
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Auto-refresh status every 5 seconds
+    const taskId = "{{ task_id }}";
+    const days = "{{ days }}";
+    let checkInterval;
+    
+    function checkTaskStatus() {
+        fetch(`{{ url_for('main.check_task_status', task_id='') }}${taskId}`)
+            .then(response => response.json())
+            .then(data => {
+                console.log('Task status:', data);
+                
+                if (data.status === 'completed') {
+                    // Task completed, redirect to report page
+                    clearInterval(checkInterval);
+                    window.location.href = `{{ url_for('main.system_report') }}?task_id=${taskId}&days=${days}`;
+                } else if (data.status === 'failed') {
+                    // Task failed, show error
+                    clearInterval(checkInterval);
+                    alert(`Report generation failed: ${data.error || 'Unknown error'}`);
+                    window.location.href = `{{ url_for('main.system_report') }}`;
+                }
+                // If still processing, continue checking
+            })
+            .catch(error => {
+                console.error('Error checking task status:', error);
+            });
+    }
+    
+    // Start checking status immediately
+    checkTaskStatus();
+    
+    // Set up interval to check status every 5 seconds
+    checkInterval = setInterval(checkTaskStatus, 5000);
+    
+    // Manual check button
+    document.getElementById('checkStatusBtn').addEventListener('click', function() {
+        checkTaskStatus();
+    });
+</script>
+{% endblock %}

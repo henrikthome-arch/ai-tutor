@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics Dashboard{% endblock %}
+
+{% block content %}
+<div class="analytics-dashboard">
+    <h1 class="mb-4">Session Analytics Dashboard</h1>
+    
+    <div class="time-range-selector mb-4">
+        <div class="btn-group" role="group" aria-label="Time range selector">
+            <a href="{{ url_for('main.analytics_dashboard', range='week') }}" 
+               class="btn {% if data.time_range == 'week' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                Last Week
+            </a>
+            <a href="{{ url_for('main.analytics_dashboard', range='month') }}"
+               class="btn {% if data.time_range == 'month' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                Last Month
+            </a>
+            <a href="{{ url_for('main.analytics_dashboard', range='quarter') }}"
+               class="btn {% if data.time_range == 'quarter' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                Last Quarter
+            </a>
+            <a href="{{ url_for('main.analytics_dashboard', range='year') }}"
+               class="btn {% if data.time_range == 'year' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                Last Year
+            </a>
+        </div>
+    </div>
+    
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Sessions</h5>
+                    <h2 class="card-text">{{ data.performance_metrics.total_sessions }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Unique Students</h5>
+                    <h2 class="card-text">{{ data.performance_metrics.total_users }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Avg. Duration</h5>
+                    <h2 class="card-text">{{ (data.performance_metrics.avg_duration / 60)|round(1) }} min</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <h5 class="card-title">Avg. Satisfaction</h5>
+                    <h2 class="card-text">
+                        {% if data.performance_metrics.avg_satisfaction %}
+                            {{ (data.performance_metrics.avg_satisfaction * 100)|round }}%
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </h2>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Daily Sessions</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="sessionsChart" height="300"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h5>Session Duration Trends</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="durationChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Popular Topics</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="topicsChart" height="300"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h5>Analytics Tools</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{{ url_for('main.system_report') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-file-alt"></i> Generate System Report
+                        </a>
+                        <a href="{{ url_for('main.analytics_tasks') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-tasks"></i> Manage Analytics Tasks
+                        </a>
+                        <button id="runAggregationBtn" class="list-group-item list-group-item-action">
+                            <i class="fas fa-sync"></i> Run Daily Aggregation
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Parse data from server
+    const dailyStats = {{ data.daily_stats|tojson }};
+    const popularTopics = {{ data.popular_topics|tojson }};
+    
+    // Format data for charts
+    const dates = dailyStats.map(stat => stat.date);
+    const sessions = dailyStats.map(stat => stat.total_sessions);
+    const durations = dailyStats.map(stat => stat.avg_duration / 60); // Convert to minutes
+    
+    const topicLabels = Object.keys(popularTopics);
+    const topicCounts = Object.values(popularTopics);
+    
+    // Create charts
+    const sessionsChart = new Chart(
+        document.getElementById('sessionsChart'),
+        {
+            type: 'line',
+            data: {
+                labels: dates,
+                datasets: [{
+                    label: 'Number of Sessions',
+                    data: sessions,
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: 'Daily Session Count'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Sessions'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    }
+                }
+            }
+        }
+    );
+    
+    const topicsChart = new Chart(
+        document.getElementById('topicsChart'),
+        {
+            type: 'doughnut',
+            data: {
+                labels: topicLabels,
+                datasets: [{
+                    label: 'Topic Frequency',
+                    data: topicCounts,
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.6)',
+                        'rgba(54, 162, 235, 0.6)',
+                        'rgba(255, 206, 86, 0.6)',
+                        'rgba(75, 192, 192, 0.6)',
+                        'rgba(153, 102, 255, 0.6)',
+                        'rgba(255, 159, 64, 0.6)',
+                        'rgba(199, 199, 199, 0.6)',
+                        'rgba(83, 102, 255, 0.6)',
+                        'rgba(40, 159, 64, 0.6)',
+                        'rgba(210, 199, 199, 0.6)'
+                    ],
+                    borderColor: [
+                        'rgb(255, 99, 132)',
+                        'rgb(54, 162, 235)',
+                        'rgb(255, 206, 86)',
+                        'rgb(75, 192, 192)',
+                        'rgb(153, 102, 255)',
+                        'rgb(255, 159, 64)',
+                        'rgb(159, 159, 159)',
+                        'rgb(83, 102, 255)',
+                        'rgb(40, 159, 64)',
+                        'rgb(210, 159, 159)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                    },
+                    title: {
+                        display: true,
+                        text: 'Popular Topics'
+                    }
+                }
+            }
+        }
+    );
+    
+    const durationChart = new Chart(
+        document.getElementById('durationChart'),
+        {
+            type: 'line',
+            data: {
+                labels: dates,
+                datasets: [{
+                    label: 'Average Session Duration (minutes)',
+                    data: durations,
+                    borderColor: 'rgb(255, 99, 132)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                    tension: 0.1,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: 'Session Duration Trends'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Minutes'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    }
+                }
+            }
+        }
+    );
+    
+    // Handle aggregation button
+    document.getElementById('runAggregationBtn').addEventListener('click', function() {
+        if (confirm('Run daily stats aggregation task?')) {
+            fetch('{{ url_for("main.run_aggregation_task") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = data.redirect;
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while running the aggregation task.');
+            });
+        }
+    });
+</script>
+{% endblock %}

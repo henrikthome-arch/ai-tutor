@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics Tasks{% endblock %}
+
+{% block content %}
+<div class="analytics-tasks">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Analytics Tasks</h1>
+        <a href="{{ url_for('main.analytics_dashboard') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Analytics
+        </a>
+    </div>
+    
+    <!-- Task Management Card -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Task Management</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">Daily Stats Aggregation</h6>
+                        </div>
+                        <div class="card-body">
+                            <p>
+                                Run the daily stats aggregation task to process session data and 
+                                generate analytics metrics for the dashboard.
+                            </p>
+                            <form id="aggregationForm" method="post" action="{{ url_for('main.run_aggregation_task') }}">
+                                <div class="mb-3">
+                                    <label for="dateInput" class="form-label">Date (Optional)</label>
+                                    <input type="date" class="form-control" id="dateInput" name="date">
+                                    <div class="form-text">
+                                        Leave blank to process yesterday's data (default).
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-sync"></i> Run Aggregation
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">System Report</h6>
+                        </div>
+                        <div class="card-body">
+                            <p>
+                                Generate a comprehensive system report with detailed analytics 
+                                for a specified time period.
+                            </p>
+                            <a href="{{ url_for('main.system_report') }}" class="btn btn-primary">
+                                <i class="fas fa-file-alt"></i> Generate Report
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Task Status Card -->
+    {% if task_id %}
+    <div class="card">
+        <div class="card-header">
+            <h5>Task Status</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Task ID:</strong> <code>{{ task_id }}</code></p>
+                    <p>
+                        <strong>Status:</strong> 
+                        <span id="taskStatus" class="badge 
+                            {% if task_status.status == 'completed' %}bg-success
+                            {% elif task_status.status == 'failed' %}bg-danger
+                            {% else %}bg-warning{% endif %}">
+                            {{ task_status.status|capitalize }}
+                        </span>
+                    </p>
+                    
+                    {% if task_status.status == 'completed' %}
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle"></i> Task completed successfully!
+                            <p class="mb-0 mt-2"><strong>Result:</strong> {{ task_status.result }}</p>
+                        </div>
+                    {% elif task_status.status == 'failed' %}
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-circle"></i> Task failed!
+                            <p class="mb-0 mt-2"><strong>Error:</strong> {{ task_status.error }}</p>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-spinner fa-spin"></i> Task is still processing...
+                        </div>
+                    {% endif %}
+                    
+                    <button id="checkStatusBtn" class="btn btn-primary">
+                        <i class="fas fa-sync"></i> Refresh Status
+                    </button>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">Task Actions</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                {% if task_status.status == 'completed' %}
+                                    <a href="{{ url_for('main.analytics_dashboard') }}" class="btn btn-outline-primary">
+                                        <i class="fas fa-chart-bar"></i> View Analytics Dashboard
+                                    </a>
+                                {% elif task_status.status == 'failed' %}
+                                    <button id="retryTaskBtn" class="btn btn-outline-warning">
+                                        <i class="fas fa-redo"></i> Retry Task
+                                    </button>
+                                {% endif %}
+                                
+                                <a href="{{ url_for('main.analytics_tasks') }}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-plus"></i> Start New Task
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Task Information Card -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5>About Analytics Tasks</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Daily Stats Aggregation</h6>
+                    <p>
+                        This task processes session data to generate daily statistics for the analytics dashboard.
+                        It calculates metrics such as:
+                    </p>
+                    <ul>
+                        <li>Total sessions and unique users</li>
+                        <li>Average session duration</li>
+                        <li>Average student satisfaction and engagement</li>
+                        <li>Popular topics covered in sessions</li>
+                    </ul>
+                    <p>
+                        <strong>Note:</strong> This task runs automatically each day, but you can manually trigger it
+                        if needed (e.g., to reprocess data for a specific date).
+                    </p>
+                </div>
+                
+                <div class="col-md-6">
+                    <h6>System Report Generation</h6>
+                    <p>
+                        This task creates a comprehensive system report for a specified time period.
+                        The report includes:
+                    </p>
+                    <ul>
+                        <li>Detailed daily activity metrics</li>
+                        <li>Student engagement and satisfaction trends</li>
+                        <li>Popular topics and subject areas</li>
+                        <li>System performance indicators</li>
+                    </ul>
+                    <p>
+                        <strong>Note:</strong> Generating reports for long time periods may take several minutes
+                        to complete, especially for systems with large amounts of session data.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Handle aggregation form submission
+    document.getElementById('aggregationForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // Show loading indicator
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Running...';
+        submitBtn.disabled = true;
+        
+        // Submit form via AJAX
+        fetch(this.action, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams(new FormData(this))
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = data.redirect;
+            } else {
+                alert('Error: ' + data.error);
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while running the task.');
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        });
+    });
+    
+    // Handle check status button
+    {% if task_id %}
+    document.getElementById('checkStatusBtn').addEventListener('click', function() {
+        // Show loading indicator
+        this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Checking...';
+        this.disabled = true;
+        
+        // Check task status
+        fetch(`{{ url_for('main.check_task_status', task_id=task_id) }}`)
+            .then(response => response.json())
+            .then(data => {
+                // Update status display
+                const statusBadge = document.getElementById('taskStatus');
+                statusBadge.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+                
+                // Update badge color
+                statusBadge.className = 'badge';
+                if (data.status === 'completed') {
+                    statusBadge.classList.add('bg-success');
+                } else if (data.status === 'failed') {
+                    statusBadge.classList.add('bg-danger');
+                } else {
+                    statusBadge.classList.add('bg-warning');
+                }
+                
+                // Reload page to show updated status
+                window.location.reload();
+            })
+            .catch(error => {
+                console.error('Error checking task status:', error);
+                alert('An error occurred while checking the task status.');
+                
+                // Reset button
+                this.innerHTML = '<i class="fas fa-sync"></i> Refresh Status';
+                this.disabled = false;
+            });
+    });
+    
+    // Handle retry task button
+    const retryTaskBtn = document.getElementById('retryTaskBtn');
+    if (retryTaskBtn) {
+        retryTaskBtn.addEventListener('click', function() {
+            // Redirect to the tasks page to start a new task
+            window.location.href = "{{ url_for('main.analytics_tasks') }}";
+        });
+    }
+    {% endif %}
+</script>
+{% endblock %}

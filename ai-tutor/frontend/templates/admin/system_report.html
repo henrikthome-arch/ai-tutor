@@ -1,0 +1,328 @@
+{% extends "base.html" %}
+
+{% block title %}System Report{% endblock %}
+
+{% block content %}
+<div class="system-report">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>System Report</h1>
+        <a href="{{ url_for('main.analytics_dashboard') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Analytics
+        </a>
+    </div>
+    
+    <!-- Report Info Card -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Report Information</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <p><strong>Period:</strong> {{ report.period.start }} to {{ report.period.end }}</p>
+                </div>
+                <div class="col-md-4">
+                    <p><strong>Days Covered:</strong> {{ report.period.days }}</p>
+                </div>
+                <div class="col-md-4">
+                    <p><strong>Generated:</strong> {{ report.generated_at }}</p>
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-md-12">
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-outline-primary" onclick="window.print()">
+                            <i class="fas fa-print"></i> Print Report
+                        </button>
+                        <button class="btn btn-outline-success" id="exportCsvBtn">
+                            <i class="fas fa-file-csv"></i> Export CSV
+                        </button>
+                        <a href="{{ url_for('main.generate_system_report') }}" class="btn btn-outline-info">
+                            <i class="fas fa-sync"></i> Generate New Report
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Sessions</h5>
+                    <h2 class="card-text">{{ report.summary.total_sessions }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Unique Students</h5>
+                    <h2 class="card-text">{{ report.summary.unique_users }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Avg. Duration</h5>
+                    <h2 class="card-text">{{ (report.summary.avg_duration / 60)|round(1) }} min</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <h5 class="card-title">Avg. Satisfaction</h5>
+                    <h2 class="card-text">
+                        {% if report.summary.avg_satisfaction %}
+                            {{ (report.summary.avg_satisfaction * 100)|round }}%
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </h2>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Charts -->
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Daily Activity</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="dailyActivityChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Popular Topics</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="topicsChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Detailed Data Table -->
+    <div class="card">
+        <div class="card-header">
+            <h5>Daily Data</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped" id="dailyDataTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Sessions</th>
+                            <th>Users</th>
+                            <th>Avg. Duration (min)</th>
+                            <th>Avg. Satisfaction</th>
+                            <th>Avg. Engagement</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for day in report.daily_data %}
+                        <tr>
+                            <td>{{ day.date }}</td>
+                            <td>{{ day.sessions }}</td>
+                            <td>{{ day.users }}</td>
+                            <td>{{ (day.avg_duration / 60)|round(1) }}</td>
+                            <td>
+                                {% if day.avg_satisfaction %}
+                                    {{ (day.avg_satisfaction * 100)|round }}%
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if day.avg_engagement %}
+                                    {{ (day.avg_engagement * 100)|round }}%
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Parse data from server
+    const dailyData = {{ report.daily_data|tojson }};
+    const topTopics = {{ report.top_topics|tojson }};
+    
+    // Format data for charts
+    const dates = dailyData.map(day => day.date);
+    const sessions = dailyData.map(day => day.sessions);
+    const users = dailyData.map(day => day.users);
+    
+    const topicLabels = Object.keys(topTopics);
+    const topicCounts = Object.values(topTopics);
+    
+    // Create daily activity chart
+    const dailyActivityChart = new Chart(
+        document.getElementById('dailyActivityChart'),
+        {
+            type: 'bar',
+            data: {
+                labels: dates,
+                datasets: [
+                    {
+                        label: 'Sessions',
+                        data: sessions,
+                        backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                        borderColor: 'rgb(75, 192, 192)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Unique Users',
+                        data: users,
+                        backgroundColor: 'rgba(153, 102, 255, 0.6)',
+                        borderColor: 'rgb(153, 102, 255)',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: 'Daily Activity'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Count'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    }
+                }
+            }
+        }
+    );
+    
+    // Create topics chart
+    const topicsChart = new Chart(
+        document.getElementById('topicsChart'),
+        {
+            type: 'doughnut',
+            data: {
+                labels: topicLabels,
+                datasets: [{
+                    label: 'Topic Frequency',
+                    data: topicCounts,
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.6)',
+                        'rgba(54, 162, 235, 0.6)',
+                        'rgba(255, 206, 86, 0.6)',
+                        'rgba(75, 192, 192, 0.6)',
+                        'rgba(153, 102, 255, 0.6)',
+                        'rgba(255, 159, 64, 0.6)',
+                        'rgba(199, 199, 199, 0.6)',
+                        'rgba(83, 102, 255, 0.6)',
+                        'rgba(40, 159, 64, 0.6)',
+                        'rgba(210, 199, 199, 0.6)'
+                    ],
+                    borderColor: [
+                        'rgb(255, 99, 132)',
+                        'rgb(54, 162, 235)',
+                        'rgb(255, 206, 86)',
+                        'rgb(75, 192, 192)',
+                        'rgb(153, 102, 255)',
+                        'rgb(255, 159, 64)',
+                        'rgb(159, 159, 159)',
+                        'rgb(83, 102, 255)',
+                        'rgb(40, 159, 64)',
+                        'rgb(210, 159, 159)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                    },
+                    title: {
+                        display: true,
+                        text: 'Popular Topics'
+                    }
+                }
+            }
+        }
+    );
+    
+    // Export to CSV functionality
+    document.getElementById('exportCsvBtn').addEventListener('click', function() {
+        // Get table data
+        const table = document.getElementById('dailyDataTable');
+        let csv = [];
+        
+        // Get headers
+        const headers = [];
+        const headerCells = table.querySelectorAll('thead th');
+        headerCells.forEach(cell => {
+            headers.push(cell.textContent.trim());
+        });
+        csv.push(headers.join(','));
+        
+        // Get rows
+        const rows = table.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            const rowData = [];
+            const cells = row.querySelectorAll('td');
+            cells.forEach(cell => {
+                // Wrap in quotes to handle commas in data
+                rowData.push('"' + cell.textContent.trim() + '"');
+            });
+            csv.push(rowData.join(','));
+        });
+        
+        // Create CSV file
+        const csvContent = csv.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        
+        // Create download link
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'system_report_{{ report.period.start }}_to_{{ report.period.end }}.csv');
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+</script>
+{% endblock %}

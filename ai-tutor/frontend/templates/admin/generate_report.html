@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Generate System Report{% endblock %}
+
+{% block content %}
+<div class="generate-report">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Generate System Report</h1>
+        <a href="{{ url_for('main.analytics_dashboard') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Analytics
+        </a>
+    </div>
+    
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Report Parameters</h5>
+        </div>
+        <div class="card-body">
+            <form id="reportForm" method="post" action="{{ url_for('main.generate_system_report') }}">
+                <div class="mb-3">
+                    <label for="daysInput" class="form-label">Time Period (days)</label>
+                    <input type="number" class="form-control" id="daysInput" name="days" 
+                           value="{{ days }}" min="1" max="365" required>
+                    <div class="form-text">
+                        Select the number of days to include in the report (1-365).
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Preset Periods</label>
+                    <div class="btn-group w-100" role="group">
+                        <button type="button" class="btn btn-outline-secondary preset-btn" data-days="7">Last Week</button>
+                        <button type="button" class="btn btn-outline-secondary preset-btn" data-days="30">Last Month</button>
+                        <button type="button" class="btn btn-outline-secondary preset-btn" data-days="90">Last Quarter</button>
+                        <button type="button" class="btn btn-outline-secondary preset-btn" data-days="365">Last Year</button>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> 
+                    Generating a report will analyze all session data for the selected time period.
+                    This may take a few moments to complete, especially for longer time periods.
+                </div>
+                
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-file-alt"></i> Generate Report
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5>Previous Reports</h5>
+        </div>
+        <div class="card-body">
+            <p>
+                Reports are generated on-demand and not stored permanently. 
+                To view a previous report, you'll need to regenerate it with the same parameters.
+            </p>
+            
+            <div class="d-grid gap-2">
+                <a href="{{ url_for('main.analytics_dashboard') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-chart-bar"></i> View Analytics Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Handle preset period buttons
+    document.querySelectorAll('.preset-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            // Update days input
+            document.getElementById('daysInput').value = this.dataset.days;
+            
+            // Update active button
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-outline-secondary');
+            });
+            this.classList.remove('btn-outline-secondary');
+            this.classList.add('btn-primary');
+        });
+    });
+    
+    // Set initial active button based on current days value
+    document.addEventListener('DOMContentLoaded', function() {
+        const currentDays = parseInt(document.getElementById('daysInput').value);
+        const presetValues = [7, 30, 90, 365];
+        
+        // Find the closest preset value
+        if (presetValues.includes(currentDays)) {
+            document.querySelector(`.preset-btn[data-days="${currentDays}"]`).click();
+        }
+    });
+    
+    // Handle form submission
+    document.getElementById('reportForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const days = document.getElementById('daysInput').value;
+        
+        // Show loading indicator
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Generating...';
+        submitBtn.disabled = true;
+        
+        // Submit form via AJAX
+        fetch(this.action, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams(new FormData(this))
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = data.redirect;
+            } else {
+                alert('Error: ' + data.error);
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while generating the report.');
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        });
+    });
+</script>
+{% endblock %}

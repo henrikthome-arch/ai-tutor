@@ -28,6 +28,7 @@ except ImportError as e:
 # Import services and repositories
 from backend.app.services.student_service import StudentService
 from backend.app.services.session_service import SessionService
+from backend.app.services.analytics_service import AnalyticsService
 
 # Create blueprint
 main = Blueprint('main', __name__)
@@ -35,6 +36,7 @@ main = Blueprint('main', __name__)
 # Initialize services
 student_service = StudentService()
 session_service = SessionService()
+analytics_service = AnalyticsService(None)  # Will be initialized with db session in each request
 
 # Authentication helper
 def check_auth():
@@ -777,3 +779,188 @@ def cleanup_system_logs():
     except Exception as e:
         log_error('ADMIN', 'Manual log cleanup failed', e)
         return jsonify({'error': str(e)}), 500
+
+# Analytics Dashboard Routes
+@main.route('/admin/analytics')
+def analytics_dashboard():
+    """Analytics dashboard with system-wide metrics"""
+    if not check_auth():
+        return redirect(url_for('main.admin_login'))
+    
+    # Initialize analytics service with db session
+    from app import db
+    analytics_service.repository.session = db.session
+    
+    # Get time range from query parameters
+    time_range = request.args.get('range', 'week')
+    
+    # Get dashboard data
+    dashboard_data = analytics_service.get_dashboard_data(time_range)
+    
+    log_admin_action('view_analytics', session.get('admin_username', 'unknown'),
+                    time_range=time_range)
+    
+    return render_template('admin/analytics.html',
+                         data=dashboard_data,
+                         time_range=time_range)
+
+@main.route('/admin/analytics/student/<student_id>')
+def student_analytics(student_id):
+    """Analytics for a specific student"""
+    if not check_auth():
+        return redirect(url_for('main.admin_login'))
+    
+    # Initialize analytics service with db session
+    from app import db
+    analytics_service.repository.session = db.session
+    
+    # Check if student exists
+    if not student_service.student_exists(student_id):
+        flash(f'Student {student_id} not found', 'error')
+        return redirect(url_for('main.admin_students'))
+    
+    # Get student data
+    student_data = student_service.get_student_data(student_id)
+    
+    # Get analytics data
+    analytics_data = analytics_service.get_student_analytics(student_id)
+    
+    log_admin_action('view_student_analytics', session.get('admin_username', 'unknown'),
+                    student_id=student_id)
+    
+    return render_template('admin/student_analytics.html',
+                         student=student_data.get('profile', {}),
+                         student_id=student_id,
+                         analytics=analytics_data)
+
+@main.route('/admin/analytics/report')
+def system_report():
+    """Generate and view system reports"""
+    if not check_auth():
+        return redirect(url_for('main.admin_login'))
+    
+    # Initialize analytics service with db session
+    from app import db
+    analytics_service.repository.session = db.session
+    
+    # Get days parameter
+    days = int(request.args.get('days', 30))
+    
+    # Check if there's a task ID for a report generation
+    task_id = request.args.get('task_id')
+    
+    if task_id:
+        # Check task status
+        task_status = analytics_service.get_aggregation_task_status(task_id)
+        
+        if task_status['status'] == 'completed':
+            # Task completed, show the report
+            report_data = task_status['result']
+            return render_template('admin/system_report.html',
+                                 report=report_data,
+                                 days=days,
+                                 task_id=None)
+        elif task_status['status'] == 'processing':
+            # Task still processing, show waiting page
+            flash('Report generation in progress...', 'info')
+            return render_template('admin/report_processing.html',
+                                 task_id=task_id,
+                                 days=days)
+        else:
+            # Task failed
+            flash(f'Report generation failed: {task_status.get("error", "Unknown error")}', 'error')
+    
+    # No task ID or task failed, show form to generate a new report
+    return render_template('admin/generate_report.html', days=days)
+
+@main.route('/admin/analytics/report/generate', methods=['POST'])
+def generate_system_report():
+    """Generate a new system report"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Initialize analytics service with db session
+    from app import db
+    analytics_service.repository.session = db.session
+    
+    # Get days parameter
+    days = int(request.form.get('days', 30))
+    
+    # Import the task directly
+    from app.tasks.analytics_tasks import generate_system_report
+    
+    # Start the task
+    task = generate_system_report.delay(days=days)
+    
+    log_admin_action('generate_system_report', session.get('admin_username', 'unknown'),
+                    days=days,
+                    task_id=task.id)
+    
+    return jsonify({
+        'success': True,
+        'task_id': task.id,
+        'redirect': url_for('main.system_report', task_id=task.id, days=days)
+    })
+
+@main.route('/admin/analytics/tasks')
+def analytics_tasks():
+    """Manage analytics tasks"""
+    if not check_auth():
+        return redirect(url_for('main.admin_login'))
+    
+    # Initialize analytics service with db session
+    from app import db
+    analytics_service.repository.session = db.session
+    
+    # Get task ID if provided
+    task_id = request.args.get('task_id')
+    task_status = None
+    
+    if task_id:
+        # Get task status
+        task_status = analytics_service.get_aggregation_task_status(task_id)
+    
+    return render_template('admin/analytics_tasks.html',
+                         task_id=task_id,
+                         task_status=task_status)
+
+@main.route('/admin/analytics/tasks/aggregate', methods=['POST'])
+def run_aggregation_task():
+    """Run daily stats aggregation task"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Initialize analytics service with db session
+    from app import db
+    analytics_service.repository.session = db.session
+    
+    # Get date parameter if provided
+    date = request.form.get('date')
+    
+    # Schedule the task
+    task_id = analytics_service.schedule_metrics_aggregation()
+    
+    log_admin_action('run_aggregation_task', session.get('admin_username', 'unknown'),
+                    date=date,
+                    task_id=task_id)
+    
+    return jsonify({
+        'success': True,
+        'task_id': task_id,
+        'redirect': url_for('main.analytics_tasks', task_id=task_id)
+    })
+
+@main.route('/admin/analytics/tasks/status/<task_id>')
+def check_task_status(task_id):
+    """Check the status of an analytics task"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Initialize analytics service with db session
+    from app import db
+    analytics_service.repository.session = db.session
+    
+    # Get task status
+    task_status = analytics_service.get_aggregation_task_status(task_id)
+    
+    return jsonify(task_status)
