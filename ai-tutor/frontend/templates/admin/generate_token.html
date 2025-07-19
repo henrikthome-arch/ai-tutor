@@ -18,7 +18,7 @@
             <h5 class="mb-0">Token Generator</h5>
         </div>
         <div class="card-body">
-            <form method="POST" action="{{ url_for('main.generate_token') }}">
+            <form method="POST" action="{{ url_for('generate_token') }}">
                 <div class="mb-3">
                     <label for="token_name" class="form-label">Token Name/Description</label>
                     <input type="text" class="form-control" id="token_name" name="token_name" required
@@ -166,7 +166,7 @@ print(response.json())</textarea>
                             <td>{{ token.created_at }}</td>
                             <td>{{ token.expires_at }}</td>
                             <td>
-                                <form method="POST" action="{{ url_for('main.revoke_token', token_id=token.id) }}" class="d-inline">
+                                <form method="POST" action="{{ url_for('revoke_token', token_id=token.id) }}" class="d-inline">
                                     <button type="submit" class="btn btn-sm btn-danger">Revoke</button>
                                 </form>
                             </td>
