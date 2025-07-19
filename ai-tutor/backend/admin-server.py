@@ -139,6 +139,54 @@ except ImportError:
                 return True
             return False
 
+# Token authentication decorator
+def token_required(required_scopes=None):
+    """
+    Decorator for routes that require token authentication.
+    Verifies the token and checks if it has the required scopes.
+    
+    Args:
+        required_scopes: List of scopes required for this endpoint
+    """
+    def decorator(f):
+        from functools import wraps
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # Get token from Authorization header
+            auth_header = request.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return jsonify({'error': 'Missing or invalid Authorization header'}), 401
+            
+            token = auth_header.split(' ')[1]
+            
+            # Verify token
+            for token_id, token_data in token_service.tokens.items():
+                if not token_data.get('is_active', False):
+                    continue
+                
+                # Check if token matches
+                if token_data.get('token') == token:
+                    # Check if token is expired
+                    expires_at = datetime.fromisoformat(token_data['expires_at'])
+                    if expires_at < datetime.utcnow():
+                        return jsonify({'error': 'Token expired'}), 401
+                    
+                    # Check if token has required scopes
+                    if required_scopes:
+                        token_scopes = token_data.get('scopes', [])
+                        if not all(scope in token_scopes for scope in required_scopes):
+                            return jsonify({'error': 'Token does not have required scopes'}), 403
+                    
+                    # Token is valid
+                    return f(*args, **kwargs)
+            
+            # No matching token found
+            return jsonify({'error': 'Invalid token'}), 401
+        
+        return decorated_function
+    
+    return decorator
+
 # Import AI POC components
 try:
     from ai_poc.session_processor import session_processor
