@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 
 from sqlalchemy.orm import Session
-from app.models.base import db
+from app import db
 from app.repositories.system_log_repository import SystemLogRepository
 from app.config import Config
 
