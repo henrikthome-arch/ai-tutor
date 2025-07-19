@@ -20,6 +20,14 @@ class Config:
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
     ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
     
+    # Celery Configuration
+    CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+    CELERY_RESULT_BACKEND = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+    CELERY_ACCEPT_CONTENT = ['json']
+    CELERY_TASK_SERIALIZER = 'json'
+    CELERY_RESULT_SERIALIZER = 'json'
+    CELERY_TIMEZONE = 'UTC'
+    
     # Logging Configuration
     LOG_DIR = os.getenv('LOG_DIR', '../data/logs')
     LOG_MAX_AGE_DAYS = int(os.getenv('LOG_MAX_AGE_DAYS', 30))

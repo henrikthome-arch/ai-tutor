@@ -29,6 +29,7 @@ except ImportError as e:
 # Import services and repositories
 from backend.app.services.student_service import StudentService
 from backend.app.services.session_service import SessionService
+from backend.app.services.ai_service import AIService
 
 # Create blueprint
 api = Blueprint('api', __name__)
@@ -36,6 +37,7 @@ api = Blueprint('api', __name__)
 # Initialize services
 student_service = StudentService()
 session_service = SessionService()
+ai_service = AIService()
 
 # Authentication helper
 def check_auth():
@@ -60,6 +62,15 @@ def api_ai_stats():
         return jsonify({'error': 'AI POC not available'}), 503
     
     return jsonify(session_processor.get_processing_stats())
+
+@api.route('/admin/api/task/<task_id>')
+def api_task_status(task_id):
+    """Get the status of a Celery task"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    task_status = ai_service.get_task_status(task_id)
+    return jsonify(task_status)
 
 # VAPI Webhook Routes
 def verify_vapi_signature(payload_body, signature, headers_info):
@@ -555,7 +566,7 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
         print(f"❌ Webhook fallback error: {e}")
 
 def trigger_ai_analysis_async(student_id, transcript, call_id):
-    """Trigger AI analysis for VAPI transcript (async)"""
+    """Trigger AI analysis for VAPI transcript using Celery tasks"""
     if not AI_POC_AVAILABLE:
         log_ai_analysis("AI POC not available for analysis",
                        call_id=call_id,
@@ -564,7 +575,7 @@ def trigger_ai_analysis_async(student_id, transcript, call_id):
         return
     
     try:
-        log_ai_analysis("Starting AI analysis for VAPI transcript",
+        log_ai_analysis("Starting AI analysis for VAPI transcript using Celery",
                        call_id=call_id,
                        student_id=student_id,
                        transcript_length=len(transcript))
@@ -595,48 +606,20 @@ def trigger_ai_analysis_async(student_id, transcript, call_id):
                 'motivational_triggers': 'Unknown'
             }
         
-        # Run async analysis in background
-        def run_analysis():
-            try:
-                log_ai_analysis("Running AI analysis in background thread",
-                               call_id=call_id,
-                               student_id=student_id)
-                
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                # Construct the correct path for the analysis results
-                analysis_filename = f"ai_analysis_{call_id}.json"
-                analysis_path = os.path.join('data/students', student_id, 'sessions', analysis_filename)
-
-                analysis, validation = loop.run_until_complete(
-                    session_processor.process_session_transcript(
-                        transcript=transcript,
-                        student_context=student_context,
-                        save_results=True,
-                        session_file_path=analysis_path
-                    )
-                )
-                
-                loop.close()
-                
-                log_ai_analysis("AI analysis completed successfully",
-                               call_id=call_id,
-                               student_id=student_id,
-                               analysis_summary=analysis.conceptual_understanding if analysis else 'No analysis')
-                print(f"✅ AI analysis completed for call {call_id}")
-                
-            except Exception as e:
-                log_error('AI_ANALYSIS', f"AI analysis failed for call {call_id}", e,
-                         call_id=call_id,
-                         student_id=student_id)
-                print(f"❌ AI analysis failed for call {call_id}: {e}")
+        # Construct model parameters
+        model_params = {
+            'student_context': student_context,
+            'call_id': call_id
+        }
         
-        # Run in background thread to not block webhook response
-        import threading
-        thread = threading.Thread(target=run_analysis)
-        thread.daemon = True
-        thread.start()
+        # Use the AIService to process the transcript asynchronously
+        result = ai_service.analyze_transcript(transcript, session_id=call_id, async_mode=True)
+        
+        log_ai_analysis("AI analysis task queued successfully",
+                       call_id=call_id,
+                       student_id=student_id,
+                       task_id=result.get('task_id'))
+        print(f"✅ AI analysis task queued for call {call_id}: {result.get('task_id')}")
         
     except Exception as e:
         log_error('AI_ANALYSIS', f"Error triggering AI analysis for call {call_id}", e,

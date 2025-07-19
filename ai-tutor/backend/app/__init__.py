@@ -7,11 +7,13 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
+from app.celery_app import create_celery_app
 
 # Initialize extensions
 db = SQLAlchemy()
 migrate = Migrate()
 jwt = JWTManager()
+celery = None
 
 def create_app(config_name=None):
     """Create and configure the Flask application"""
@@ -35,6 +37,11 @@ def create_app(config_name=None):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+    
+    # Initialize Celery
+    global celery
+    celery = create_celery_app(app)
+    app.celery = celery
     
     # Register blueprints
     from app.main import bp as main_bp
