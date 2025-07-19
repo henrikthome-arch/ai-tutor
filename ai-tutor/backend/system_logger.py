@@ -10,17 +10,126 @@ from typing import Dict, List, Optional, Any
 
 from sqlalchemy.orm import Session
 from app import db
-# Import SystemLogRepository with a more robust approach
-try:
-    from app.repositories.system_log_repository import SystemLogRepository
-except ImportError:
-    # Try relative import for deployment environment
-    import sys
-    import os
-    sys.path.append(os.path.join(os.path.dirname(__file__), 'app', 'repositories'))
-    from system_log_repository import SystemLogRepository
-
 from app.config import Config
+
+# Define a simplified SystemLogRepository class directly in this file
+# to avoid import issues in different environments
+class SystemLogRepository:
+    """Repository for managing system logs in the database"""
+    
+    def __init__(self, db_session: Session):
+        """Initialize with a database session"""
+        self.db_session = db_session
+    
+    def create(self, category: str, message: str, data=None, level: str = 'INFO'):
+        """Create a new system log entry"""
+        try:
+            # Import here to avoid circular imports
+            from app.models.system_log import SystemLog
+            
+            log = SystemLog(
+                timestamp=datetime.now(),
+                category=category.upper(),
+                level=level.upper(),
+                message=message,
+                data=data or {}
+            )
+            
+            self.db_session.add(log)
+            self.db_session.commit()
+            return log
+        except Exception as e:
+            print(f"Error creating log entry: {e}")
+            return None
+    
+    def get_logs(self, days=7, category=None, level=None, limit=100):
+        """Get logs filtered by various criteria"""
+        try:
+            # Import here to avoid circular imports
+            from app.models.system_log import SystemLog
+            
+            start_date = datetime.now() - timedelta(days=days)
+            
+            query = self.db_session.query(SystemLog).filter(SystemLog.timestamp >= start_date)
+            
+            if category:
+                query = query.filter(SystemLog.category == category.upper())
+            
+            if level:
+                query = query.filter(SystemLog.level == level.upper())
+            
+            return query.order_by(SystemLog.timestamp.desc()).limit(limit).all()
+        except Exception as e:
+            print(f"Error retrieving logs: {e}")
+            return []
+    
+    def cleanup_old_logs(self, days=30):
+        """Remove log entries older than the specified number of days"""
+        try:
+            # Import here to avoid circular imports
+            from app.models.system_log import SystemLog
+            
+            cutoff_date = datetime.now() - timedelta(days=days)
+            deleted = self.db_session.query(SystemLog).filter(SystemLog.timestamp < cutoff_date).delete()
+            self.db_session.commit()
+            return deleted
+        except Exception as e:
+            print(f"Error cleaning up old logs: {e}")
+            return 0
+    
+    def get_log_statistics(self):
+        """Get statistics about the logging system"""
+        try:
+            # Import here to avoid circular imports
+            from app.models.system_log import SystemLog
+            from sqlalchemy.sql import func
+            
+            stats = {
+                'total_log_entries': 0,
+                'oldest_log_date': None,
+                'newest_log_date': None,
+                'categories': {},
+                'levels': {}
+            }
+            
+            # Get total count
+            stats['total_log_entries'] = self.db_session.query(SystemLog).count()
+            
+            # Get date range
+            oldest = self.db_session.query(func.min(SystemLog.timestamp)).scalar()
+            newest = self.db_session.query(func.max(SystemLog.timestamp)).scalar()
+            
+            if oldest:
+                stats['oldest_log_date'] = oldest.strftime('%Y-%m-%d')
+            
+            if newest:
+                stats['newest_log_date'] = newest.strftime('%Y-%m-%d')
+            
+            # Get category counts
+            category_counts = self.db_session.query(
+                SystemLog.category, func.count(SystemLog.id)
+            ).group_by(SystemLog.category).all()
+            
+            for category, count in category_counts:
+                stats['categories'][category] = count
+            
+            # Get level counts
+            level_counts = self.db_session.query(
+                SystemLog.level, func.count(SystemLog.id)
+            ).group_by(SystemLog.level).all()
+            
+            for level, count in level_counts:
+                stats['levels'][level] = count
+            
+            return stats
+        except Exception as e:
+            print(f"Error retrieving log statistics: {e}")
+            return {
+                'error': str(e),
+                'total_log_entries': 0,
+                'categories': {},
+                'levels': {}
+            }
 
 class SystemLogger:
     """Centralized system logger with SQL-based storage and web interface support"""
