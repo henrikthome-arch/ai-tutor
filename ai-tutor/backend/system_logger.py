@@ -10,7 +10,16 @@ from typing import Dict, List, Optional, Any
 
 from sqlalchemy.orm import Session
 from app import db
-from app.repositories.system_log_repository import SystemLogRepository
+# Import SystemLogRepository with a more robust approach
+try:
+    from app.repositories.system_log_repository import SystemLogRepository
+except ImportError:
+    # Try relative import for deployment environment
+    import sys
+    import os
+    sys.path.append(os.path.join(os.path.dirname(__file__), 'app', 'repositories'))
+    from system_log_repository import SystemLogRepository
+
 from app.config import Config
 
 class SystemLogger:
