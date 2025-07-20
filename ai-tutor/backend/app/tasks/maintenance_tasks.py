@@ -6,6 +6,7 @@ from app import celery, db
 import logging
 import os
 from datetime import datetime, timedelta
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ def check_system_health():
     
     # Check database connection
     try:
-        db.session.execute("SELECT 1")
+        db.session.execute(text("SELECT 1"))
         health_status["database"] = "healthy"
     except Exception as e:
         logger.error(f"Database health check failed: {str(e)}")

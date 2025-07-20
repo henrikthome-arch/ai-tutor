@@ -1426,7 +1426,8 @@ def admin_system():
             try:
                 with app.app_context():
                     # Try a simple query to test connection
-                    db.session.execute('SELECT 1').fetchall()
+                    from sqlalchemy import text
+                    db.session.execute(text('SELECT 1')).fetchall()
                     db_connection_status = 'connected'
             except Exception as e:
                 db_connection_status = 'error'
