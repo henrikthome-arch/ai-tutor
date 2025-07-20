@@ -203,6 +203,13 @@ app = Flask(__name__,
             template_folder='../frontend/templates',
             static_folder='../frontend/static')
 
+# Initialize the database with the app
+try:
+    db.init_app(app)
+    print("🗄️ Database initialized with app")
+except Exception as e:
+    print(f"⚠️ Error initializing database with app: {e}")
+
 # Security Configuration with Environment Variables
 ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')  # Default for development only
@@ -336,12 +343,17 @@ def get_student_data(student_id):
 def get_system_stats():
     """Get system statistics for dashboard from database"""
     try:
-        # Get counts from database
+        # Get counts from database - ensure we're in an app context
+        # for all database operations
+        total_students = 0
+        sessions_today = 0
+        total_sessions = 0
+        
+        # Count students
         try:
             total_students = Student.query.count()
         except Exception as e:
             log_error('DATABASE', 'Error counting students', e)
-            total_students = 0
         
         # Count sessions today - handle datetime format issues
         try:
@@ -383,14 +395,12 @@ def get_system_stats():
                         pass
         except Exception as e:
             log_error('DATABASE', 'Error counting sessions today', e)
-            sessions_today = 0
         
         # Get total sessions
         try:
             total_sessions = Session.query.count()
         except Exception as e:
             log_error('DATABASE', 'Error counting total sessions', e)
-            total_sessions = 0
         
         # Get server status
         server_status = "Online"  # Assume online if we can query the database
@@ -999,16 +1009,42 @@ def admin_database():
         return redirect(url_for('admin_login'))
     
     try:
-        # Use app context without reinitializing db
+        # Use app context for all database operations
         with app.app_context():
-            # Get counts of each model
+            # Initialize stats with default values
             stats = {
-                'students': Student.query.count(),
-                'schools': School.query.count(),
-                'curriculums': Curriculum.query.count(),
-                'sessions': Session.query.count(),
-                'assessments': Assessment.query.count()
+                'students': 0,
+                'schools': 0,
+                'curriculums': 0,
+                'sessions': 0,
+                'assessments': 0
             }
+            
+            # Get counts of each model with error handling for each query
+            try:
+                stats['students'] = Student.query.count()
+            except Exception as e:
+                log_error('DATABASE', 'Error counting students in database browser', e)
+                
+            try:
+                stats['schools'] = School.query.count()
+            except Exception as e:
+                log_error('DATABASE', 'Error counting schools in database browser', e)
+                
+            try:
+                stats['curriculums'] = Curriculum.query.count()
+            except Exception as e:
+                log_error('DATABASE', 'Error counting curriculums in database browser', e)
+                
+            try:
+                stats['sessions'] = Session.query.count()
+            except Exception as e:
+                log_error('DATABASE', 'Error counting sessions in database browser', e)
+                
+            try:
+                stats['assessments'] = Assessment.query.count()
+            except Exception as e:
+                log_error('DATABASE', 'Error counting assessments in database browser', e)
         
             # Get list of tables
             tables = [
@@ -1033,27 +1069,33 @@ def admin_database_table(table):
         return redirect(url_for('admin_login'))
     
     try:
-        # Use app context without reinitializing db
+        # Use app context for all database operations
         with app.app_context():
-            # Get table data based on table name
-            if table == 'students':
-                items = Student.query.all()
-                items = [item.to_dict() for item in items]
-            elif table == 'schools':
-                items = School.query.all()
-                items = [item.to_dict() for item in items]
-            elif table == 'curriculums':
-                items = Curriculum.query.all()
-                items = [item.to_dict() for item in items]
-            elif table == 'sessions':
-                items = Session.query.all()
-                items = [item.to_dict() for item in items]
-            elif table == 'assessments':
-                items = Assessment.query.all()
-                items = [item.to_dict() for item in items]
-            else:
-                flash(f'Unknown table: {table}', 'error')
-                return redirect(url_for('admin_database'))
+            items = []
+            
+            # Get table data based on table name with error handling
+            try:
+                if table == 'students':
+                    query_items = Student.query.all()
+                    items = [item.to_dict() for item in query_items]
+                elif table == 'schools':
+                    query_items = School.query.all()
+                    items = [item.to_dict() for item in query_items]
+                elif table == 'curriculums':
+                    query_items = Curriculum.query.all()
+                    items = [item.to_dict() for item in query_items]
+                elif table == 'sessions':
+                    query_items = Session.query.all()
+                    items = [item.to_dict() for item in query_items]
+                elif table == 'assessments':
+                    query_items = Assessment.query.all()
+                    items = [item.to_dict() for item in query_items]
+                else:
+                    flash(f'Unknown table: {table}', 'error')
+                    return redirect(url_for('admin_database'))
+            except Exception as query_error:
+                log_error('DATABASE', f'Error querying {table} table', query_error)
+                flash(f'Error querying {table} table: {str(query_error)}', 'error')
         
         # Get column names from first item
         columns = []
@@ -1075,27 +1117,37 @@ def admin_database_view(table, item_id):
         return redirect(url_for('admin_login'))
     
     try:
-        # Use app context without reinitializing db
+        # Use app context for all database operations
         with app.app_context():
-            # Get item data based on table name and ID
+            # Get item data based on table name and ID with error handling
             item = None
-            if table == 'students':
-                item = Student.query.get(item_id)
-            elif table == 'schools':
-                item = School.query.get(item_id)
-            elif table == 'curriculums':
-                item = Curriculum.query.get(item_id)
-            elif table == 'sessions':
-                item = Session.query.get(item_id)
-            elif table == 'assessments':
-                item = Assessment.query.get(item_id)
-        
-        if not item:
-            flash(f'Item not found: {table}/{item_id}', 'error')
-            return redirect(url_for('admin_database_table', table=table))
-        
-        # Convert to dictionary
-        item_data = item.to_dict()
+            try:
+                if table == 'students':
+                    item = Student.query.get(item_id)
+                elif table == 'schools':
+                    item = School.query.get(item_id)
+                elif table == 'curriculums':
+                    item = Curriculum.query.get(item_id)
+                elif table == 'sessions':
+                    item = Session.query.get(item_id)
+                elif table == 'assessments':
+                    item = Assessment.query.get(item_id)
+            except Exception as query_error:
+                log_error('DATABASE', f'Error querying {table}/{item_id}', query_error)
+                flash(f'Error querying {table}/{item_id}: {str(query_error)}', 'error')
+                return redirect(url_for('admin_database_table', table=table))
+            
+            if not item:
+                flash(f'Item not found: {table}/{item_id}', 'error')
+                return redirect(url_for('admin_database_table', table=table))
+            
+            # Convert to dictionary with error handling
+            try:
+                item_data = item.to_dict()
+            except Exception as dict_error:
+                log_error('DATABASE', f'Error converting {table}/{item_id} to dictionary', dict_error)
+                flash(f'Error converting item to dictionary: {str(dict_error)}', 'error')
+                return redirect(url_for('admin_database_table', table=table))
         
         # Format as JSON for display
         content = json.dumps(item_data, indent=2, ensure_ascii=False)
@@ -1116,9 +1168,9 @@ def admin_system():
         return redirect(url_for('admin_login'))
     
     try:
-        # Get system stats directly without using app context
-        # This avoids SQLAlchemy registration issues
-        stats = get_system_stats()
+        # Get system stats using app context to ensure SQLAlchemy is properly registered
+        with app.app_context():
+            stats = get_system_stats()
         
         # Get the phone mappings with error handling
         try:
@@ -1184,7 +1236,20 @@ def admin_system():
             stats['server_status'] = 'Online'
         
         # Add status attribute for compatibility with template
-        stats['status'] = stats.get('server_status', 'Online')
+        # Make sure stats is a dictionary before accessing it
+        if isinstance(stats, dict):
+            stats['status'] = stats.get('server_status', 'Online')
+        else:
+            # If stats is not a dictionary, create a new one with required fields
+            print(f"⚠️ Stats is not a dictionary: {type(stats)}")
+            stats = {
+                'total_students': 0,
+                'sessions_today': 0,
+                'total_sessions': 0,
+                'server_status': 'Error',
+                'status': 'Error',
+                'phone_mappings': 0
+            }
         
         return render_template('system.html',
                             stats=stats,
@@ -1527,109 +1592,113 @@ def admin_all_sessions():
         # This avoids SQLAlchemy registration issues
         all_sessions = []
         try:
-            all_sessions = session_repository.get_all()
+            # Use app context to ensure SQLAlchemy is properly registered
+            with app.app_context():
+                all_sessions = session_repository.get_all()
         except Exception as db_error:
             log_error('DATABASE', f'Error getting sessions from repository: {str(db_error)}', db_error)
             flash(f'Error getting sessions from database: {str(db_error)}', 'error')
         
         # Get all students for additional information
-            students = []
-            try:
+        students = []
+        try:
+            # Use app context to ensure SQLAlchemy is properly registered
+            with app.app_context():
                 students = get_all_students()
-            except Exception as student_error:
-                log_error('DATABASE', f'Error getting students: {str(student_error)}', student_error)
-                flash(f'Error getting student information: {str(student_error)}', 'warning')
+        except Exception as student_error:
+            log_error('DATABASE', f'Error getting students: {str(student_error)}', student_error)
+            flash(f'Error getting student information: {str(student_error)}', 'warning')
             
-            students_dict = {s['id']: s for s in students}
+        students_dict = {s['id']: s for s in students}
+        
+        # Enhance session data with student information
+        for session in all_sessions:
+            student_id = session.get('student_id')
+            student = students_dict.get(student_id, {})
             
-            # Enhance session data with student information
-            for session in all_sessions:
-                student_id = session.get('student_id')
-                student = students_dict.get(student_id, {})
-                
-                # Create full name from first_name and last_name
-                first_name = student.get('first_name', '')
-                last_name = student.get('last_name', '')
-                full_name = f"{first_name} {last_name}".strip() or 'Unknown'
-                
-                # Safely assign student name
-                session['student_name'] = full_name if full_name else 'Unknown'
-                session['student_grade'] = student.get('grade', 'Unknown')
-                
-                # Ensure session ID is set
-                if 'id' not in session and session.get('_id'):
-                    session['id'] = session.get('_id')
-                
-                # Format date and time - handle different datetime formats safely
-                start_datetime = session.get('start_datetime', '')
-                try:
-                    if start_datetime:
-                        # Convert to string if it's not already
-                        start_datetime_str = str(start_datetime) if not isinstance(start_datetime, str) else start_datetime
-                        
-                        # Handle ISO format with T separator
-                        if 'T' in start_datetime_str:
-                            session['date'] = start_datetime_str.split('T')[0]
-                            session['time'] = start_datetime_str.split('T')[1][:8]
-                        # Handle space separator
-                        elif ' ' in start_datetime_str:
-                            parts = start_datetime_str.split(' ')
-                            session['date'] = parts[0]
-                            session['time'] = parts[1][:8] if len(parts) > 1 else ''
-                        # Handle date-only string
-                        else:
-                            session['date'] = start_datetime_str[:10]
-                            session['time'] = ''
-                    else:
-                        session['date'] = 'Unknown'
-                        session['time'] = ''
-                except Exception as e:
-                    # Fallback for any datetime parsing errors
-                    session['date'] = str(start_datetime)[:10] if start_datetime else 'Unknown'
-                    session['time'] = ''
-                    log_error('ADMIN', f'Error formatting session datetime: {e}', e,
-                             session_id=session.get('id'), datetime_value=str(start_datetime))
-                
-                # Set session type
-                session['type'] = 'VAPI Call' if session.get('session_type') == 'phone' else 'Regular Session'
-                
-                # Set duration - handle different duration formats safely
-                try:
-                    if session.get('duration_minutes') is not None:
-                        session['duration'] = session.get('duration_minutes')
-                    elif session.get('duration') is not None:
-                        # Convert seconds to minutes if needed
-                        session['duration'] = session.get('duration') // 60
-                    else:
-                        session['duration'] = 'Unknown'
-                except Exception:
-                    session['duration'] = 'Unknown'
-                
-                # Set transcript and analysis flags
-                session['has_transcript'] = bool(session.get('transcript'))
-                session['has_analysis'] = False  # Set based on your database schema
+            # Create full name from first_name and last_name
+            first_name = student.get('first_name', '')
+            last_name = student.get('last_name', '')
+            full_name = f"{first_name} {last_name}".strip() or 'Unknown'
             
-            # Sort by date and time (newest first) - with error handling
+            # Safely assign student name
+            session['student_name'] = full_name if full_name else 'Unknown'
+            session['student_grade'] = student.get('grade', 'Unknown')
+            
+            # Ensure session ID is set
+            if 'id' not in session and session.get('_id'):
+                session['id'] = session.get('_id')
+            
+            # Format date and time - handle different datetime formats safely
+            start_datetime = session.get('start_datetime', '')
             try:
-                all_sessions.sort(key=lambda x: (x.get('date', ''), x.get('time', '')), reverse=True)
+                if start_datetime:
+                    # Convert to string if it's not already
+                    start_datetime_str = str(start_datetime) if not isinstance(start_datetime, str) else start_datetime
+                    
+                    # Handle ISO format with T separator
+                    if 'T' in start_datetime_str:
+                        session['date'] = start_datetime_str.split('T')[0]
+                        session['time'] = start_datetime_str.split('T')[1][:8]
+                    # Handle space separator
+                    elif ' ' in start_datetime_str:
+                        parts = start_datetime_str.split(' ')
+                        session['date'] = parts[0]
+                        session['time'] = parts[1][:8] if len(parts) > 1 else ''
+                    # Handle date-only string
+                    else:
+                        session['date'] = start_datetime_str[:10]
+                        session['time'] = ''
+                else:
+                    session['date'] = 'Unknown'
+                    session['time'] = ''
             except Exception as e:
-                log_error('ADMIN', f'Error sorting sessions: {e}', e)
-                # Alternative sorting by ID if date sorting fails
-                all_sessions.sort(key=lambda x: x.get('id', 0), reverse=True)
+                # Fallback for any datetime parsing errors
+                session['date'] = str(start_datetime)[:10] if start_datetime else 'Unknown'
+                session['time'] = ''
+                log_error('ADMIN', f'Error formatting session datetime: {e}', e,
+                         session_id=session.get('id'), datetime_value=str(start_datetime))
             
-            # Calculate session statistics
-            session_stats = {
-                'total_sessions': len(all_sessions),
-                'vapi_sessions': len([s for s in all_sessions if s.get('type') == 'VAPI Call']),
-                'regular_sessions': len([s for s in all_sessions if s.get('type') == 'Regular Session']),
-                'with_transcripts': len([s for s in all_sessions if s.get('has_transcript')]),
-                'with_analysis': len([s for s in all_sessions if s.get('has_analysis')]),
-                'total_students': len(students)
-            }
+            # Set session type
+            session['type'] = 'VAPI Call' if session.get('session_type') == 'phone' else 'Regular Session'
             
-            return render_template('all_sessions.html',
-                                 sessions=all_sessions,
-                                 session_stats=session_stats)
+            # Set duration - handle different duration formats safely
+            try:
+                if session.get('duration_minutes') is not None:
+                    session['duration'] = session.get('duration_minutes')
+                elif session.get('duration') is not None:
+                    # Convert seconds to minutes if needed
+                    session['duration'] = session.get('duration') // 60
+                else:
+                    session['duration'] = 'Unknown'
+            except Exception:
+                session['duration'] = 'Unknown'
+            
+            # Set transcript and analysis flags
+            session['has_transcript'] = bool(session.get('transcript'))
+            session['has_analysis'] = False  # Set based on your database schema
+        
+        # Sort by date and time (newest first) - with error handling
+        try:
+            all_sessions.sort(key=lambda x: (x.get('date', ''), x.get('time', '')), reverse=True)
+        except Exception as e:
+            log_error('ADMIN', f'Error sorting sessions: {e}', e)
+            # Alternative sorting by ID if date sorting fails
+            all_sessions.sort(key=lambda x: x.get('id', 0), reverse=True)
+        
+        # Calculate session statistics
+        session_stats = {
+            'total_sessions': len(all_sessions),
+            'vapi_sessions': len([s for s in all_sessions if s.get('type') == 'VAPI Call']),
+            'regular_sessions': len([s for s in all_sessions if s.get('type') == 'Regular Session']),
+            'with_transcripts': len([s for s in all_sessions if s.get('has_transcript')]),
+            'with_analysis': len([s for s in all_sessions if s.get('has_analysis')]),
+            'total_students': len(students)
+        }
+        
+        return render_template('all_sessions.html',
+                             sessions=all_sessions,
+                             session_stats=session_stats)
     
     except Exception as e:
         flash(f'Error loading sessions: {str(e)}', 'error')
