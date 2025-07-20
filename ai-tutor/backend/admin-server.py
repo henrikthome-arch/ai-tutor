@@ -206,10 +206,17 @@ app = Flask(__name__,
 
 # Set SQLAlchemy configuration
 # Get database URL from environment variable, with a fallback for local development
-database_url = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/ai_tutor')
-# Ensure the URL starts with postgresql:// (Render might provide postgres://)
-if database_url.startswith('postgres://'):
-    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+database_url = os.getenv('DATABASE_URL')
+if not database_url:
+    print("⚠️ DATABASE_URL environment variable not found. Using default SQLite database.")
+    database_url = 'sqlite:///:memory:'  # Fallback to in-memory SQLite for local development
+else:
+    print(f"🗄️ Using database URL from environment: {database_url[:10]}...")
+    # Ensure the URL starts with postgresql:// (Render might provide postgres://)
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+        print("🔄 Converted postgres:// to postgresql:// in database URL")
+
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -1247,24 +1254,23 @@ def admin_system():
         }
         
         # Make sure server_status and status are set in stats
-        if 'server_status' not in stats:
-            stats['server_status'] = 'Online'
-        
-        # Add status attribute for compatibility with template
-        # Make sure stats is a dictionary before accessing it
-        if isinstance(stats, dict):
-            stats['status'] = stats.get('server_status', 'Online')
-        else:
-            # If stats is not a dictionary, create a new one with required fields
+        # First ensure stats is a dictionary
+        if not isinstance(stats, dict):
             print(f"⚠️ Stats is not a dictionary: {type(stats)}")
             stats = {
                 'total_students': 0,
                 'sessions_today': 0,
                 'total_sessions': 0,
                 'server_status': 'Error',
-                'status': 'Error',
                 'phone_mappings': 0
             }
+            
+        # Now we can safely set the server_status and status fields
+        if 'server_status' not in stats:
+            stats['server_status'] = 'Online'
+            
+        # Add status attribute for compatibility with template
+        stats['status'] = stats.get('server_status', 'Online')
         
         return render_template('system.html',
                             stats=stats,
