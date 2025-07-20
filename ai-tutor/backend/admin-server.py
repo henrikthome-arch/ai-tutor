@@ -303,11 +303,39 @@ try:
                     print("🔄 Creating initial migration")
                     with app.app_context():
                         migrate_cmd(directory=migrations_dir, message="Initial migration")
-                
-                # Run migrations
-                print("🗄️ Running database migrations")
-                upgrade(directory=migrations_dir)
-                print("🗄️ Database migrations completed")
+                        
+                        # Run migrations - but don't specify a revision when we've just created a fresh migration
+                        print("🗄️ Running database migrations with fresh migration directory")
+                        upgrade(directory=migrations_dir)
+                        print("🗄️ Database migrations completed")
+                else:
+                    # For existing migrations directory, check if there are any versions
+                    versions_files = os.listdir(versions_dir) if os.path.exists(versions_dir) else []
+                    if len(versions_files) > 0:
+                        # Run migrations with existing versions
+                        print(f"🗄️ Running database migrations with {len(versions_files)} existing versions")
+                        try:
+                            upgrade(directory=migrations_dir)
+                            print("🗄️ Database migrations completed")
+                        except Exception as revision_error:
+                            # Handle the specific error about missing revision
+                            if "Can't locate revision" in str(revision_error):
+                                print(f"⚠️ Migration revision error: {revision_error}")
+                                print("⚠️ Creating a new migration instead of trying to use existing one")
+                                # Create a new migration that represents current state
+                                migrate_cmd(directory=migrations_dir, message="Fresh state migration")
+                                # Run the new migration
+                                upgrade(directory=migrations_dir)
+                                print("🗄️ Database migrations completed with fresh state")
+                            else:
+                                # Re-raise other errors
+                                raise
+                    else:
+                        # Empty versions directory but migrations dir exists
+                        print("⚠️ Migrations directory exists but no versions found")
+                        migrate_cmd(directory=migrations_dir, message="Initial migration")
+                        upgrade(directory=migrations_dir)
+                        print("🗄️ Database migrations completed")
                 
                 # Verify tables exist
                 print("🔍 Verifying database tables...")
