@@ -199,15 +199,21 @@ except ImportError as e:
     AI_POC_AVAILABLE = False
     print(f"⚠️  AI POC not available: {e}")
 
-# Create the Flask app using the app factory pattern
-from app import create_app
-app = create_app()
+# Create Flask app directly
+app = Flask(__name__,
+            template_folder='../frontend/templates',
+            static_folder='../frontend/static')
 
-# Override template and static folders
-app.template_folder = '../frontend/templates'
-app.static_folder = '../frontend/static'
+# Set SQLAlchemy configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'  # Use in-memory SQLite
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-print("🗄️ Flask app created using app factory pattern")
+# Initialize the database with the app
+try:
+    db.init_app(app)
+    print("🗄️ Database initialized with app")
+except Exception as e:
+    print(f"⚠️ Error initializing database with app: {e}")
 
 # Security Configuration with Environment Variables
 ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
