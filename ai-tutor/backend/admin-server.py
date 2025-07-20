@@ -249,19 +249,34 @@ def get_all_students():
         # Get all students from repository
         students = student_repository.get_all()
         
-        # Get phone mappings from memory instead of disk
-        phone_mappings = phone_manager.phone_mapping
+        # Get phone mappings with error handling
+        try:
+            # Try to get phone mappings from memory first
+            phone_mappings = dict(phone_manager.phone_mapping)
+        except Exception as e:
+            # If that fails, try to load from disk
+            try:
+                phone_mappings = phone_manager.load_phone_mapping()
+            except Exception as load_error:
+                # If both fail, use an empty dictionary
+                log_error('DATABASE', f'Error loading phone mappings for students: {str(load_error)}', load_error)
+                print(f"⚠️ Error loading phone mappings: {load_error}")
+                phone_mappings = {}
         
-        # Add phone numbers to students
+        # Add phone numbers to students with error handling
         for student in students:
-            student_id = str(student['id'])
-            # Find phone number for this student
-            phone = None
-            for phone_num, sid in phone_mappings.items():
-                if sid == student_id:
-                    phone = phone_num
-                    break
-            student['phone'] = phone
+            try:
+                student_id = str(student['id'])
+                # Find phone number for this student
+                phone = None
+                for phone_num, sid in phone_mappings.items():
+                    if sid == student_id:
+                        phone = phone_num
+                        break
+                student['phone'] = phone
+            except Exception as e:
+                log_error('DATABASE', f'Error processing phone mapping for student', e, student_id=student.get('id'))
+                student['phone'] = None
             
             # Get session count
             student_sessions = session_repository.get_by_student_id(student_id)
@@ -377,7 +392,7 @@ def get_system_stats():
             'sessions_today': sessions_today,
             'total_sessions': total_sessions,
             'server_status': server_status,
-            'phone_mappings': len(phone_manager.phone_mapping)
+            'phone_mappings': len(phone_manager.phone_mapping) if hasattr(phone_manager, 'phone_mapping') else 0
         }
     except Exception as e:
         print(f"Error getting system stats from database: {e}")
@@ -387,7 +402,7 @@ def get_system_stats():
             'sessions_today': 0,
             'total_sessions': 0,
             'server_status': "Error",
-            'phone_mappings': 0
+            'phone_mappings': 0  # Default to 0 on error
         }
 
 def get_all_schools():
@@ -1075,8 +1090,18 @@ def admin_system():
     try:
         stats = get_system_stats()
         
-        # Get the phone mappings from memory instead of disk
-        phone_mappings = dict(phone_manager.phone_mapping)
+        # Get the phone mappings with error handling
+        try:
+            # Try to get phone mappings from memory first
+            phone_mappings = dict(phone_manager.phone_mapping)
+        except Exception as e:
+            # If that fails, try to load from disk
+            try:
+                phone_mappings = phone_manager.load_phone_mapping()
+            except Exception as load_error:
+                # If both fail, use an empty dictionary
+                log_error('ADMIN', f'Error loading phone mappings: {str(load_error)}', load_error)
+                phone_mappings = {}
         
         # Get students info for phone mapping display with proper field access
         students = get_all_students()
@@ -1127,12 +1152,19 @@ def remove_phone_mapping():
     if not phone_number:
         return jsonify({'error': 'Phone number is required'}), 400
     
-    # Get the latest mapping from disk
-    current_mapping = phone_manager.load_phone_mapping()
+    # Get the latest mapping with error handling
+    try:
+        current_mapping = phone_manager.load_phone_mapping()
+    except Exception as e:
+        log_error('ADMIN', f'Error loading phone mappings for removal: {str(e)}', e)
+        current_mapping = {}
     
     if phone_number in current_mapping:
         # Update the in-memory mapping with the latest from disk
-        phone_manager.phone_mapping = current_mapping
+        try:
+            phone_manager.phone_mapping = current_mapping
+        except Exception as e:
+            log_error('ADMIN', f'Error updating in-memory phone mapping: {str(e)}', e)
         # Remove the mapping
         del phone_manager.phone_mapping[phone_number]
         phone_manager.save_phone_mapping()
@@ -1157,11 +1189,16 @@ def add_phone_mapping():
     if not student:
         return jsonify({'error': 'Student not found'}), 404
     
-    # Use the add_phone_mapping method which handles loading the latest mapping
-    phone_manager.add_phone_mapping(phone_number, student_id)
-    
-    flash(f'Phone mapping added: {phone_number} → {student_id}', 'success')
-    return jsonify({'success': True, 'message': 'Phone mapping added'})
+    # Use the add_phone_mapping method with error handling
+    try:
+        phone_manager.add_phone_mapping(phone_number, student_id)
+        flash(f'Phone mapping added: {phone_number} → {student_id}', 'success')
+        return jsonify({'success': True, 'message': 'Phone mapping added'})
+    except Exception as e:
+        log_error('ADMIN', f'Error adding phone mapping: {str(e)}', e,
+                 phone_number=phone_number, student_id=student_id)
+        flash(f'Error adding phone mapping: {str(e)}', 'error')
+        return jsonify({'error': f'Failed to add phone mapping: {str(e)}'}), 500
 
 # Student CRUD Operations
 @app.route('/admin/students/add', methods=['GET', 'POST'])
@@ -1210,10 +1247,15 @@ def add_student():
             
             student_id = new_student['id']
             
-            # Add phone mapping if provided
+            # Add phone mapping if provided with error handling
             if phone:
-                phone_manager.phone_mapping[phone] = str(student_id)
-                phone_manager.save_phone_mapping()
+                try:
+                    phone_manager.add_phone_mapping(phone, str(student_id))
+                    print(f"📱 Added phone mapping: {phone} → {student_id}")
+                except Exception as e:
+                    log_error('DATABASE', 'Error adding phone mapping for new student', e,
+                             student_id=student_id, phone=phone)
+                    print(f"⚠️ Error adding phone mapping: {e}")
             
             flash(f'Student {first_name} {last_name} added successfully!', 'success')
             return redirect(url_for('admin_student_detail', student_id=student_id))
@@ -1272,19 +1314,44 @@ def edit_student(student_id):
                 return render_template('edit_student.html', student=student, student_id=student_id, phone=phone, schools=schools)
             
             # Update phone mapping
-            # Remove old phone mapping for this student
+            # Remove old phone mapping for this student with error handling
             old_phone = None
-            for phone_num, sid in list(phone_manager.phone_mapping.items()):
-                if sid == student_id:
-                    old_phone = phone_num
-                    del phone_manager.phone_mapping[phone_num]
-                    break
+            try:
+                # First find the old phone number
+                for phone_num, sid in list(phone_manager.phone_mapping.items()):
+                    if sid == student_id:
+                        old_phone = phone_num
+                        break
+                
+                # If found, remove it
+                if old_phone:
+                    try:
+                        del phone_manager.phone_mapping[old_phone]
+                        print(f"📱 Removed old phone mapping: {old_phone} → {student_id}")
+                    except Exception as e:
+                        log_error('DATABASE', 'Error removing old phone mapping', e,
+                                 student_id=student_id, phone=old_phone)
+                        print(f"⚠️ Error removing old phone mapping: {e}")
+            except Exception as e:
+                log_error('DATABASE', 'Error accessing phone mappings', e, student_id=student_id)
+                print(f"⚠️ Error accessing phone mappings: {e}")
             
-            # Add new phone mapping
+            # Add new phone mapping with error handling
             if phone:
-                phone_manager.phone_mapping[phone] = student_id
+                try:
+                    phone_manager.add_phone_mapping(phone, student_id)
+                    print(f"📱 Added new phone mapping: {phone} → {student_id}")
+                except Exception as e:
+                    log_error('DATABASE', 'Error adding new phone mapping', e,
+                             student_id=student_id, phone=phone)
+                    print(f"⚠️ Error adding new phone mapping: {e}")
             
-            phone_manager.save_phone_mapping()
+            # Save phone mappings with error handling
+            try:
+                phone_manager.save_phone_mapping()
+            except Exception as e:
+                log_error('DATABASE', 'Error saving phone mappings', e, student_id=student_id)
+                print(f"⚠️ Error saving phone mappings: {e}")
             
             flash(f'Student {first_name} {last_name} updated successfully!', 'success')
             return redirect(url_for('admin_student_detail', student_id=student_id))
@@ -1294,13 +1361,16 @@ def edit_student(student_id):
             log_error('DATABASE', 'Error updating student', e, student_id=student_id)
             return render_template('edit_student.html', student=student, student_id=student_id, phone=phone, schools=schools)
     
-    # Get current phone from the latest mapping
+    # Get current phone from the latest mapping with error handling
     phone = None
-    current_mapping = phone_manager.load_phone_mapping()
-    for phone_num, sid in current_mapping.items():
-        if sid == student_id:
-            phone = phone_num
-            break
+    try:
+        current_mapping = phone_manager.load_phone_mapping()
+        for phone_num, sid in current_mapping.items():
+            if sid == student_id:
+                phone = phone_num
+                break
+    except Exception as e:
+        log_error('ADMIN', f'Error loading phone mappings for student: {str(e)}', e, student_id=student_id)
     
     # Format student data for template
     student_display = {
@@ -1332,17 +1402,23 @@ def delete_student(student_id):
         
         student_name = f"{student.get('first_name', '')} {student.get('last_name', '')}".strip()
         
-        # Remove phone mapping for this student
+        # Remove phone mapping for this student with error handling
         phone_to_remove = None
-        current_mapping = phone_manager.load_phone_mapping()
-        
-        for phone_num, sid in list(current_mapping.items()):
-            if sid == student_id:
-                phone_to_remove = phone_num
-                # Update the in-memory mapping with the latest from disk
-                phone_manager.phone_mapping = current_mapping
-                del phone_manager.phone_mapping[phone_num]
-                break
+        try:
+            current_mapping = phone_manager.load_phone_mapping()
+            
+            for phone_num, sid in list(current_mapping.items()):
+                if sid == student_id:
+                    phone_to_remove = phone_num
+                    # Update the in-memory mapping with the latest from disk
+                    try:
+                        phone_manager.phone_mapping = current_mapping
+                        del phone_manager.phone_mapping[phone_num]
+                    except Exception as e:
+                        log_error('ADMIN', f'Error updating in-memory phone mapping for deletion: {str(e)}', e, student_id=student_id)
+                    break
+        except Exception as e:
+            log_error('ADMIN', f'Error loading phone mappings for student deletion: {str(e)}', e, student_id=student_id)
         
         if phone_to_remove:
             phone_manager.save_phone_mapping()
@@ -2544,7 +2620,7 @@ def admin_tokens():
     # Get active tokens
     active_tokens = token_service.get_active_tokens()
     
-    return render_template('admin/generate_token.html',
+    return render_template('tokens.html',
                          active_tokens=active_tokens)
 
 @app.route('/admin/tokens/generate', methods=['POST'])
@@ -2580,7 +2656,7 @@ def generate_token():
     # Get active tokens for display
     active_tokens = token_service.get_active_tokens()
     
-    return render_template('admin/generate_token.html',
+    return render_template('tokens.html',
                          token=token_data['token'],
                          token_name=token_name,
                          token_scopes=scopes,
