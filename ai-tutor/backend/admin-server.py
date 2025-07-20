@@ -212,6 +212,11 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 try:
     db.init_app(app)
     print("🗄️ Database initialized with app")
+    
+    # Create database tables if they don't exist
+    with app.app_context():
+        db.create_all()
+        print("🗄️ Database tables created/verified")
 except Exception as e:
     print(f"⚠️ Error initializing database with app: {e}")
 
