@@ -267,112 +267,115 @@ try:
             db.create_all()
             print("🗄️ Database tables created using create_all() (SQLite)")
         else:
-            # For PostgreSQL, we should use migrations
+            # For PostgreSQL, check for the problematic revision immediately and bypass migrations entirely if found
+            print("🗄️ Setting up PostgreSQL database...")
+            
+            # First, check if the known problematic revision error would occur
+            use_migrations = True
+            
             try:
-                # Import Flask-Migrate components
+                # Try importing Flask-Migrate first
                 from flask_migrate import Migrate, upgrade, init, migrate as migrate_cmd
                 
-                # Initialize Flask-Migrate
-                migrate = Migrate(app, db)
-                
-                # Check if migrations directory exists and has proper structure
+                # Check for the known revision issue by testing a simple migration command
                 migrations_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../migrations')
-                versions_dir = os.path.join(migrations_dir, 'versions')
                 
-                # Check if migrations need to be initialized or reset
-                migration_needs_init = (
-                    not os.path.exists(migrations_dir) or
-                    not os.path.exists(versions_dir) or
-                    len(os.listdir(versions_dir) if os.path.exists(versions_dir) else []) == 0
-                )
-                
-                if migration_needs_init:
-                    print("⚠️ Migrations directory not properly initialized, creating fresh migration")
-                    
-                    # If migrations directory exists but is incomplete, remove it
-                    if os.path.exists(migrations_dir):
-                        import shutil
-                        print(f"🗑️ Removing incomplete migrations directory: {migrations_dir}")
-                        shutil.rmtree(migrations_dir)
-                    
-                    # Initialize migrations
-                    print("🔄 Initializing migrations directory")
-                    init(directory=migrations_dir)
-                    
-                    # Create initial migration
-                    print("🔄 Creating initial migration")
-                    with app.app_context():
-                        migrate_cmd(directory=migrations_dir, message="Initial migration")
+                # If migrations directory exists, check if the problematic revision is referenced
+                if os.path.exists(migrations_dir):
+                    try:
+                        # Quick test to see if the revision error would occur
+                        # This is a lightweight check before committing to the full migration process
+                        import subprocess
+                        import tempfile
                         
-                        # Run migrations - but don't specify a revision when we've just created a fresh migration
-                        print("🗄️ Running database migrations with fresh migration directory")
-                        try:
-                            # Try to run the upgrade without specifying a revision
-                            upgrade(directory=migrations_dir)
-                            print("🗄️ Database migrations completed successfully")
-                        except Exception as upgrade_error:
-                            # If we get the specific error about missing revision '7af00b8120d1'
-                            if "Can't locate revision identified by '7af00b8120d1'" in str(upgrade_error):
-                                print(f"⚠️ Known migration revision error: {upgrade_error}")
-                                print("⚠️ This is a known issue with a specific revision ID")
-                                print("⚠️ Falling back to direct database creation")
-                                
-                                # Skip the migration and use create_all directly
-                                db.create_all()
-                                print("🗄️ Database tables created using create_all() (fallback after revision error)")
-                            else:
-                                # For other errors, try to create a new migration
-                                print(f"⚠️ Migration error (not the known revision issue): {upgrade_error}")
-                                print("⚠️ Falling back to direct database creation")
-                                db.create_all()
-                                print("🗄️ Database tables created using create_all() (fallback)")
-                else:
-                    # For existing migrations directory, check if there are any versions
-                    versions_files = os.listdir(versions_dir) if os.path.exists(versions_dir) else []
-                    if len(versions_files) > 0:
-                        # Run migrations with existing versions
-                        print(f"🗄️ Running database migrations with {len(versions_files)} existing versions")
-                        try:
-                            # Try to run the upgrade without specifying a revision
-                            upgrade(directory=migrations_dir)
-                            print("🗄️ Database migrations completed successfully")
-                        except Exception as revision_error:
-                            # Handle the specific error about missing revision
-                            if "Can't locate revision" in str(revision_error):
-                                print(f"⚠️ Migration revision error: {revision_error}")
-                                print("⚠️ Creating a new migration instead of trying to use existing one")
-                                
-                                # First try to create a new migration
-                                try:
-                                    # Create a new migration that represents current state
-                                    migrate_cmd(directory=migrations_dir, message="Fresh state migration")
-                                    # Run the new migration
-                                    upgrade(directory=migrations_dir)
-                                    print("🗄️ Database migrations completed with fresh state")
-                                except Exception as migrate_cmd_error:
-                                    # If that fails too, fall back to create_all
-                                    print(f"⚠️ Error creating new migration: {migrate_cmd_error}")
-                                    print("⚠️ Falling back to direct database creation")
-                                    db.create_all()
-                                    print("🗄️ Database tables created using create_all() (fallback after migration error)")
-                            else:
-                                # For other errors, fall back to create_all
-                                print(f"⚠️ Unknown migration error: {revision_error}")
-                                print("⚠️ Falling back to direct database creation")
-                                db.create_all()
-                                print("🗄️ Database tables created using create_all() (fallback)")
-                    else:
-                        # Empty versions directory but migrations dir exists
-                        print("⚠️ Migrations directory exists but no versions found")
-                        try:
-                            migrate_cmd(directory=migrations_dir, message="Initial migration")
-                            upgrade(directory=migrations_dir)
-                            print("🗄️ Database migrations completed")
-                        except Exception as empty_dir_error:
-                            print(f"⚠️ Error with empty migrations directory: {empty_dir_error}")
-                            print("⚠️ Falling back to direct database creation")
-                            db.create_all()
-                            print("🗄️ Database tables created using create_all() (fallback)")
+                        # Create a simple alembic command to test for the revision error
+                        test_result = subprocess.run(
+                            ['python', '-c', f"""
+import os
+os.chdir('{os.path.dirname(migrations_dir)}')
+try:
+    from flask_migrate import current
+    from {os.path.basename(__file__)[:-3]} import app
+    with app.app_context():
+        current(directory='{migrations_dir}')
+except Exception as e:
+    if "Can't locate revision identified by '7af00b8120d1'" in str(e):
+        print("REVISION_ERROR_DETECTED")
+    else:
+        print("OTHER_ERROR")
+"""],
+                            capture_output=True, text=True, timeout=10, cwd=os.path.dirname(os.path.abspath(__file__))
+                        )
+                        
+                        if "REVISION_ERROR_DETECTED" in test_result.stdout:
+                            print("⚠️ Detected known revision error in existing migrations")
+                            print("⚠️ Bypassing Flask-Migrate entirely and using direct table creation")
+                            use_migrations = False
+                    except (subprocess.TimeoutExpired, subprocess.SubprocessError, Exception) as e:
+                        print(f"⚠️ Migration test failed: {e}")
+                        print("⚠️ Being cautious and bypassing migrations")
+                        use_migrations = False
+                
+                if use_migrations:
+                    print("🔄 Attempting to use Flask-Migrate")
+                    
+                    # Initialize Flask-Migrate
+                    migrate = Migrate(app, db)
+                    
+                    # Check if migrations need to be initialized or reset
+                    versions_dir = os.path.join(migrations_dir, 'versions')
+                    migration_needs_init = (
+                        not os.path.exists(migrations_dir) or
+                        not os.path.exists(versions_dir) or
+                        len(os.listdir(versions_dir) if os.path.exists(versions_dir) else []) == 0
+                    )
+                    
+                    if migration_needs_init:
+                        print("⚠️ Migrations directory not properly initialized, creating fresh migration")
+                        
+                        # If migrations directory exists but is incomplete, remove it
+                        if os.path.exists(migrations_dir):
+                            import shutil
+                            print(f"🗑️ Removing incomplete migrations directory: {migrations_dir}")
+                            shutil.rmtree(migrations_dir)
+                        
+                        # Initialize migrations
+                        print("🔄 Initializing migrations directory")
+                        init(directory=migrations_dir)
+                        
+                        # Create initial migration
+                        print("🔄 Creating initial migration")
+                        migrate_cmd(directory=migrations_dir, message="Initial migration")
+                    
+                    # Try to run migrations with comprehensive error handling
+                    print("🗄️ Running database migrations")
+                    try:
+                        upgrade(directory=migrations_dir)
+                        print("✅ Database migrations completed successfully")
+                    except Exception as upgrade_error:
+                        # Check for the specific revision error
+                        if "Can't locate revision identified by '7af00b8120d1'" in str(upgrade_error):
+                            print(f"⚠️ Known migration revision error detected: {upgrade_error}")
+                            print("⚠️ Bypassing Flask-Migrate and using direct table creation")
+                            use_migrations = False
+                        else:
+                            print(f"⚠️ Other migration error: {upgrade_error}")
+                            print("⚠️ Bypassing Flask-Migrate and using direct table creation")
+                            use_migrations = False
+                
+            except ImportError:
+                print("⚠️ Flask-Migrate not installed, using direct table creation")
+                use_migrations = False
+            except Exception as migration_error:
+                print(f"⚠️ Error with migration system: {migration_error}")
+                print("⚠️ Bypassing Flask-Migrate and using direct table creation")
+                use_migrations = False
+            
+            # If migrations failed or are bypassed, use direct table creation
+            if not use_migrations:
+                print("🗄️ Using direct table creation (bypassing migrations)")
+                db.create_all()
+                print("✅ Database tables created using create_all()")
                 
                 # Verify tables exist
                 print("🔍 Verifying database tables...")
