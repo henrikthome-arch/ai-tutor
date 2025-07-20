@@ -1,0 +1,263 @@
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">VAPI Webhook Integration Test</h5>
+    </div>
+    <div class="card-body">
+        <p>Test the VAPI webhook integration to ensure it's working correctly.</p>
+        
+        <button id="run-vapi-test" class="btn btn-primary mb-3">Run VAPI Integration Test</button>
+        
+        <div id="vapi-test-results" class="d-none">
+            <h6 class="mt-3">Test Results:</h6>
+            
+            <div class="alert" id="overall-result-alert" role="alert">
+                <strong id="overall-result-text">Running test...</strong>
+            </div>
+            
+            <div class="accordion" id="vapiTestAccordion">
+                <!-- System Logs Table Check -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingSystemLogs">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseSystemLogs" aria-expanded="false" aria-controls="collapseSystemLogs">
+                            <span id="system-logs-status" class="badge bg-secondary me-2">Pending</span>
+                            System Logs Table Check
+                        </button>
+                    </h2>
+                    <div id="collapseSystemLogs" class="accordion-collapse collapse" aria-labelledby="headingSystemLogs" data-bs-parent="#vapiTestAccordion">
+                        <div class="accordion-body" id="system-logs-details">
+                            Checking if the system_logs table exists...
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Test Webhook -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingTestWebhook">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTestWebhook" aria-expanded="false" aria-controls="collapseTestWebhook">
+                            <span id="test-webhook-status" class="badge bg-secondary me-2">Pending</span>
+                            Test Webhook
+                        </button>
+                    </h2>
+                    <div id="collapseTestWebhook" class="accordion-collapse collapse" aria-labelledby="headingTestWebhook" data-bs-parent="#vapiTestAccordion">
+                        <div class="accordion-body" id="test-webhook-details">
+                            Sending test webhook...
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Webhook Logs -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingWebhookLogs">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseWebhookLogs" aria-expanded="false" aria-controls="collapseWebhookLogs">
+                            <span id="webhook-logs-status" class="badge bg-secondary me-2">Pending</span>
+                            Webhook Logs
+                        </button>
+                    </h2>
+                    <div id="collapseWebhookLogs" class="accordion-collapse collapse" aria-labelledby="headingWebhookLogs" data-bs-parent="#vapiTestAccordion">
+                        <div class="accordion-body" id="webhook-logs-details">
+                            Checking if webhook logs were created...
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Test Student -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingTestStudent">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTestStudent" aria-expanded="false" aria-controls="collapseTestStudent">
+                            <span id="test-student-status" class="badge bg-secondary me-2">Pending</span>
+                            Test Student
+                        </button>
+                    </h2>
+                    <div id="collapseTestStudent" class="accordion-collapse collapse" aria-labelledby="headingTestStudent" data-bs-parent="#vapiTestAccordion">
+                        <div class="accordion-body" id="test-student-details">
+                            Checking if test student was created...
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Test Session -->
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingTestSession">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTestSession" aria-expanded="false" aria-controls="collapseTestSession">
+                            <span id="test-session-status" class="badge bg-secondary me-2">Pending</span>
+                            Test Session
+                        </button>
+                    </h2>
+                    <div id="collapseTestSession" class="accordion-collapse collapse" aria-labelledby="headingTestSession" data-bs-parent="#vapiTestAccordion">
+                        <div class="accordion-body" id="test-session-details">
+                            Checking if test session was created...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const runVapiTestBtn = document.getElementById('run-vapi-test');
+    const vapiTestResults = document.getElementById('vapi-test-results');
+    const overallResultAlert = document.getElementById('overall-result-alert');
+    const overallResultText = document.getElementById('overall-result-text');
+    
+    // Status badges
+    const systemLogsStatus = document.getElementById('system-logs-status');
+    const testWebhookStatus = document.getElementById('test-webhook-status');
+    const webhookLogsStatus = document.getElementById('webhook-logs-status');
+    const testStudentStatus = document.getElementById('test-student-status');
+    const testSessionStatus = document.getElementById('test-session-status');
+    
+    // Details sections
+    const systemLogsDetails = document.getElementById('system-logs-details');
+    const testWebhookDetails = document.getElementById('test-webhook-details');
+    const webhookLogsDetails = document.getElementById('webhook-logs-details');
+    const testStudentDetails = document.getElementById('test-student-details');
+    const testSessionDetails = document.getElementById('test-session-details');
+    
+    runVapiTestBtn.addEventListener('click', function() {
+        // Show the results section
+        vapiTestResults.classList.remove('d-none');
+        
+        // Reset all statuses to pending
+        systemLogsStatus.className = 'badge bg-secondary me-2';
+        systemLogsStatus.textContent = 'Pending';
+        testWebhookStatus.className = 'badge bg-secondary me-2';
+        testWebhookStatus.textContent = 'Pending';
+        webhookLogsStatus.className = 'badge bg-secondary me-2';
+        webhookLogsStatus.textContent = 'Pending';
+        testStudentStatus.className = 'badge bg-secondary me-2';
+        testStudentStatus.textContent = 'Pending';
+        testSessionStatus.className = 'badge bg-secondary me-2';
+        testSessionStatus.textContent = 'Pending';
+        
+        // Reset all details
+        systemLogsDetails.textContent = 'Checking if the system_logs table exists...';
+        testWebhookDetails.textContent = 'Sending test webhook...';
+        webhookLogsDetails.textContent = 'Checking if webhook logs were created...';
+        testStudentDetails.textContent = 'Checking if test student was created...';
+        testSessionDetails.textContent = 'Checking if test session was created...';
+        
+        // Set overall result to running
+        overallResultAlert.className = 'alert alert-info';
+        overallResultText.textContent = 'Running test...';
+        
+        // Disable the button while the test is running
+        runVapiTestBtn.disabled = true;
+        
+        // Send the request to the server
+        fetch('/admin/vapi-test', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Update the overall result
+            if (data.overall_success) {
+                overallResultAlert.className = 'alert alert-success';
+                overallResultText.textContent = 'All tests passed! VAPI webhook integration is working correctly.';
+            } else {
+                overallResultAlert.className = 'alert alert-danger';
+                overallResultText.textContent = 'Some tests failed. See details below.';
+            }
+            
+            // Update system logs table status
+            if (data.system_logs_table.exists) {
+                systemLogsStatus.className = 'badge bg-success me-2';
+                systemLogsStatus.textContent = 'Success';
+                systemLogsDetails.textContent = data.system_logs_table.message;
+            } else {
+                systemLogsStatus.className = 'badge bg-danger me-2';
+                systemLogsStatus.textContent = 'Failed';
+                systemLogsDetails.innerHTML = `<div class="text-danger">${data.system_logs_table.message}</div>`;
+                if (data.system_logs_table.trace) {
+                    systemLogsDetails.innerHTML += `<pre class="mt-2 bg-light p-2 small">${data.system_logs_table.trace}</pre>`;
+                }
+            }
+            
+            // Update test webhook status
+            if (data.test_webhook.success) {
+                testWebhookStatus.className = 'badge bg-success me-2';
+                testWebhookStatus.textContent = 'Success';
+                testWebhookDetails.innerHTML = `<div>Webhook sent successfully to ${data.test_webhook.webhook_url}</div>`;
+                testWebhookDetails.innerHTML += `<div class="mt-2">Status code: ${data.test_webhook.status_code}</div>`;
+                testWebhookDetails.innerHTML += `<div class="mt-2">Response: ${data.test_webhook.response}</div>`;
+                testWebhookDetails.innerHTML += `<div class="mt-2">Payload:</div>`;
+                testWebhookDetails.innerHTML += `<pre class="mt-2 bg-light p-2 small">${JSON.stringify(data.test_webhook.payload, null, 2)}</pre>`;
+            } else {
+                testWebhookStatus.className = 'badge bg-danger me-2';
+                testWebhookStatus.textContent = 'Failed';
+                testWebhookDetails.innerHTML = `<div class="text-danger">${data.test_webhook.message || 'Failed to send webhook'}</div>`;
+                if (data.test_webhook.trace) {
+                    testWebhookDetails.innerHTML += `<pre class="mt-2 bg-light p-2 small">${data.test_webhook.trace}</pre>`;
+                }
+            }
+            
+            // Only update the rest if webhook logs, test student, and test session data exists
+            if (data.webhook_logs) {
+                // Update webhook logs status
+                if (data.webhook_logs.success) {
+                    webhookLogsStatus.className = 'badge bg-success me-2';
+                    webhookLogsStatus.textContent = 'Success';
+                    webhookLogsDetails.textContent = data.webhook_logs.message;
+                } else {
+                    webhookLogsStatus.className = 'badge bg-danger me-2';
+                    webhookLogsStatus.textContent = 'Failed';
+                    webhookLogsDetails.innerHTML = `<div class="text-danger">${data.webhook_logs.message}</div>`;
+                    if (data.webhook_logs.trace) {
+                        webhookLogsDetails.innerHTML += `<pre class="mt-2 bg-light p-2 small">${data.webhook_logs.trace}</pre>`;
+                    }
+                }
+            }
+            
+            if (data.test_student) {
+                // Update test student status
+                if (data.test_student.success) {
+                    testStudentStatus.className = 'badge bg-success me-2';
+                    testStudentStatus.textContent = 'Success';
+                    testStudentDetails.textContent = data.test_student.message;
+                } else {
+                    testStudentStatus.className = 'badge bg-danger me-2';
+                    testStudentStatus.textContent = 'Failed';
+                    testStudentDetails.innerHTML = `<div class="text-danger">${data.test_student.message}</div>`;
+                    if (data.test_student.trace) {
+                        testStudentDetails.innerHTML += `<pre class="mt-2 bg-light p-2 small">${data.test_student.trace}</pre>`;
+                    }
+                }
+            }
+            
+            if (data.test_session) {
+                // Update test session status
+                if (data.test_session.success) {
+                    testSessionStatus.className = 'badge bg-success me-2';
+                    testSessionStatus.textContent = 'Success';
+                    testSessionDetails.textContent = data.test_session.message;
+                } else {
+                    testSessionStatus.className = 'badge bg-danger me-2';
+                    testSessionStatus.textContent = 'Failed';
+                    testSessionDetails.innerHTML = `<div class="text-danger">${data.test_session.message}</div>`;
+                    if (data.test_session.trace) {
+                        testSessionDetails.innerHTML += `<pre class="mt-2 bg-light p-2 small">${data.test_session.trace}</pre>`;
+                    }
+                }
+            }
+            
+            // Re-enable the button
+            runVapiTestBtn.disabled = false;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            
+            // Update the overall result
+            overallResultAlert.className = 'alert alert-danger';
+            overallResultText.textContent = 'Error running test: ' + error.message;
+            
+            // Re-enable the button
+            runVapiTestBtn.disabled = false;
+        });
+    });
+});
+</script>
