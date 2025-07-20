@@ -29,14 +29,20 @@ def check_system_logs_table():
 def generate_test_webhook_payload():
     """Generate a test webhook payload for VAPI."""
     current_time = datetime.now().isoformat()
+    call_id = f"test_call_{current_time.replace(':', '').replace('-', '').replace('.', '')[:20]}"
     return {
-        "call_id": f"test_call_{current_time}",
-        "phone_number": "+1234567890",
-        "student_name": "Test Student",
-        "transcript": "This is a test transcript for VAPI webhook testing.",
-        "summary": "Test summary",
-        "duration": 60,
-        "timestamp": current_time,
+        "message": {
+            "type": "end-of-call-report",
+            "call": {
+                "id": call_id
+            }
+        },
+        "phoneNumber": "+1234567890",
+        "durationSeconds": 60,
+        "transcript": {
+            "user": "Hello, this is a test call for VAPI webhook testing.",
+            "assistant": "Hello! I'm your AI tutor. How can I help you today?"
+        },
         "test": True
     }
 
@@ -51,7 +57,7 @@ def send_test_webhook(base_url=None):
         if base_url.endswith('/'):
             base_url = base_url[:-1]
             
-        webhook_url = f"{base_url}/api/vapi/webhook"
+        webhook_url = f"{base_url}/vapi/webhook"
         payload = generate_test_webhook_payload()
         
         # Log the test webhook
