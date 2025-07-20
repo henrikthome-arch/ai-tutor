@@ -10,6 +10,9 @@ import logging
 import asyncio
 from typing import Dict, Any, Optional
 
+# Import database models and repositories
+from app import db
+
 # Import AI POC components
 from ai_poc.session_processor import session_processor
 from ai_poc.prompts import prompt_manager
@@ -310,87 +313,93 @@ IMPORTANT:
             return {}
     
     def update_student_profile(self, student_id, extracted_info):
-        """Update student profile with extracted information"""
+        """Update student profile with extracted information using SQL database"""
         if not extracted_info:
             return False
         
-        # Try multiple path options to handle different working directory contexts
-        possible_paths = [
-            f'../data/students/{student_id}/profile.json',  # Relative from backend/
-            f'data/students/{student_id}/profile.json',     # Relative from project root
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        'data', 'students', student_id, 'profile.json')  # Absolute path
-        ]
-        
-        profile_path = None
-        for path in possible_paths:
-            if os.path.exists(path):
-                profile_path = path
-                logger.info(f"Found student profile at: {path}")
-                break
-        
-        if not profile_path:
-            logger.warning(f"Profile not found for student {student_id}. Tried paths: {possible_paths}")
-            return False
-        
         try:
-            # Read existing profile
-            with open(profile_path, 'r', encoding='utf-8') as f:
-                profile = json.load(f)
+            # Import student repository
+            from app.repositories import student_repository
+            from app.models.profile import Profile
             
-            # Update profile with extracted info
-            updated = False
+            # Get student from database
+            student_data = student_repository.get_by_id(student_id)
+            if not student_data:
+                logger.warning(f"Student {student_id} not found in database")
+                return False
             
-            if 'age' in extracted_info and (not profile.get('age') or profile.get('age') == 'Unknown'):
-                profile['age'] = extracted_info['age']
-                updated = True
+            # Prepare update data
+            update_data = {}
             
-            if 'grade' in extracted_info and (not profile.get('grade') or profile.get('grade') == 'Unknown'):
-                profile['grade'] = extracted_info['grade']
-                updated = True
+            # Add basic profile fields
+            if 'age' in extracted_info and (not student_data.get('age') or student_data.get('age') == 'Unknown'):
+                update_data['age'] = extracted_info['age']
             
+            if 'grade' in extracted_info and (not student_data.get('grade') or student_data.get('grade') == 'Unknown'):
+                update_data['grade'] = extracted_info['grade']
+            
+            # Handle profile-specific fields
+            profile_data = {}
+            
+            # Handle interests
             if 'interests' in extracted_info:
-                current_interests = profile.get('interests', [])
+                # Get current interests from profile
+                current_interests = student_data.get('interests', [])
+                # Add new interests
                 for interest in extracted_info['interests']:
                     if interest not in current_interests:
                         current_interests.append(interest)
-                        updated = True
-                profile['interests'] = current_interests
+                profile_data['interests'] = current_interests
             
+            # Handle learning preferences
             if 'learning_preferences' in extracted_info:
-                current_prefs = profile.get('learning_preferences', [])
+                current_prefs = student_data.get('learning_preferences', [])
                 for pref in extracted_info['learning_preferences']:
                     if pref not in current_prefs:
                         current_prefs.append(pref)
-                        updated = True
-                profile['learning_preferences'] = current_prefs
+                profile_data['learning_preferences'] = current_prefs
             
+            # Handle subjects
             if 'subjects' in extracted_info:
                 if 'favorite' in extracted_info['subjects']:
-                    current_favorites = profile.get('favorite_subjects', [])
+                    current_favorites = student_data.get('favorite_subjects', [])
                     for subj in extracted_info['subjects']['favorite']:
                         if subj not in current_favorites:
                             current_favorites.append(subj)
-                            updated = True
-                    profile['favorite_subjects'] = current_favorites
+                    profile_data['favorite_subjects'] = current_favorites
                 
                 if 'challenging' in extracted_info['subjects']:
-                    current_challenging = profile.get('challenging_subjects', [])
+                    current_challenging = student_data.get('challenging_subjects', [])
                     for subj in extracted_info['subjects']['challenging']:
                         if subj not in current_challenging:
                             current_challenging.append(subj)
-                            updated = True
-                    profile['challenging_subjects'] = current_challenging
+                    profile_data['challenging_subjects'] = current_challenging
             
-            if updated:
-                # Save updated profile
-                with open(profile_path, 'w', encoding='utf-8') as f:
-                    json.dump(profile, f, indent=2, ensure_ascii=False)
-                logger.info(f"Updated profile for student {student_id} with {extracted_info}")
-                return True
+            # Add profile data to update data if it exists
+            if profile_data:
+                update_data['interests'] = profile_data.get('interests', [])
+                update_data['learning_preferences'] = profile_data.get('learning_preferences', [])
+            
+            # Update student in database if there are changes
+            if update_data:
+                updated_student = student_repository.update(student_id, update_data)
+                if updated_student:
+                    logger.info(f"Updated profile for student {student_id} with {extracted_info}")
+                    
+                    # Log successful update to system logger
+                    from system_logger import log_ai_analysis
+                    log_ai_analysis("Successfully updated student profile in database",
+                                   updated_fields=list(update_data.keys()),
+                                   student_id=student_id)
+                    return True
             
             return False
             
         except Exception as e:
             logger.error(f"Error updating profile for student {student_id}: {e}")
+            
+            # Log error to system logger
+            from system_logger import log_error
+            log_error('TRANSCRIPT_ANALYSIS', f"Error updating student profile in database", e,
+                     student_id=student_id)
             return False
