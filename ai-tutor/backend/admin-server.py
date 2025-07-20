@@ -1475,6 +1475,10 @@ def admin_all_sessions():
             session['student_name'] = full_name if full_name else 'Unknown'
             session['student_grade'] = student.get('grade', 'Unknown')
             
+            # Ensure session ID is set
+            if 'id' not in session and session.get('_id'):
+                session['id'] = session.get('_id')
+            
             # Format date and time - handle different datetime formats safely
             start_datetime = session.get('start_datetime', '')
             try:
