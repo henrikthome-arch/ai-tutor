@@ -306,8 +306,26 @@ try:
                         
                         # Run migrations - but don't specify a revision when we've just created a fresh migration
                         print("🗄️ Running database migrations with fresh migration directory")
-                        upgrade(directory=migrations_dir)
-                        print("🗄️ Database migrations completed")
+                        try:
+                            # Try to run the upgrade without specifying a revision
+                            upgrade(directory=migrations_dir)
+                            print("🗄️ Database migrations completed successfully")
+                        except Exception as upgrade_error:
+                            # If we get the specific error about missing revision '7af00b8120d1'
+                            if "Can't locate revision identified by '7af00b8120d1'" in str(upgrade_error):
+                                print(f"⚠️ Known migration revision error: {upgrade_error}")
+                                print("⚠️ This is a known issue with a specific revision ID")
+                                print("⚠️ Falling back to direct database creation")
+                                
+                                # Skip the migration and use create_all directly
+                                db.create_all()
+                                print("🗄️ Database tables created using create_all() (fallback after revision error)")
+                            else:
+                                # For other errors, try to create a new migration
+                                print(f"⚠️ Migration error (not the known revision issue): {upgrade_error}")
+                                print("⚠️ Falling back to direct database creation")
+                                db.create_all()
+                                print("🗄️ Database tables created using create_all() (fallback)")
                 else:
                     # For existing migrations directory, check if there are any versions
                     versions_files = os.listdir(versions_dir) if os.path.exists(versions_dir) else []
@@ -315,27 +333,46 @@ try:
                         # Run migrations with existing versions
                         print(f"🗄️ Running database migrations with {len(versions_files)} existing versions")
                         try:
+                            # Try to run the upgrade without specifying a revision
                             upgrade(directory=migrations_dir)
-                            print("🗄️ Database migrations completed")
+                            print("🗄️ Database migrations completed successfully")
                         except Exception as revision_error:
                             # Handle the specific error about missing revision
                             if "Can't locate revision" in str(revision_error):
                                 print(f"⚠️ Migration revision error: {revision_error}")
                                 print("⚠️ Creating a new migration instead of trying to use existing one")
-                                # Create a new migration that represents current state
-                                migrate_cmd(directory=migrations_dir, message="Fresh state migration")
-                                # Run the new migration
-                                upgrade(directory=migrations_dir)
-                                print("🗄️ Database migrations completed with fresh state")
+                                
+                                # First try to create a new migration
+                                try:
+                                    # Create a new migration that represents current state
+                                    migrate_cmd(directory=migrations_dir, message="Fresh state migration")
+                                    # Run the new migration
+                                    upgrade(directory=migrations_dir)
+                                    print("🗄️ Database migrations completed with fresh state")
+                                except Exception as migrate_cmd_error:
+                                    # If that fails too, fall back to create_all
+                                    print(f"⚠️ Error creating new migration: {migrate_cmd_error}")
+                                    print("⚠️ Falling back to direct database creation")
+                                    db.create_all()
+                                    print("🗄️ Database tables created using create_all() (fallback after migration error)")
                             else:
-                                # Re-raise other errors
-                                raise
+                                # For other errors, fall back to create_all
+                                print(f"⚠️ Unknown migration error: {revision_error}")
+                                print("⚠️ Falling back to direct database creation")
+                                db.create_all()
+                                print("🗄️ Database tables created using create_all() (fallback)")
                     else:
                         # Empty versions directory but migrations dir exists
                         print("⚠️ Migrations directory exists but no versions found")
-                        migrate_cmd(directory=migrations_dir, message="Initial migration")
-                        upgrade(directory=migrations_dir)
-                        print("🗄️ Database migrations completed")
+                        try:
+                            migrate_cmd(directory=migrations_dir, message="Initial migration")
+                            upgrade(directory=migrations_dir)
+                            print("🗄️ Database migrations completed")
+                        except Exception as empty_dir_error:
+                            print(f"⚠️ Error with empty migrations directory: {empty_dir_error}")
+                            print("⚠️ Falling back to direct database creation")
+                            db.create_all()
+                            print("🗄️ Database tables created using create_all() (fallback)")
                 
                 # Verify tables exist
                 print("🔍 Verifying database tables...")
