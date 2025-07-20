@@ -689,7 +689,8 @@ def health_check():
         try:
             with app.app_context():
                 # Try a simple query to test connection
-                db.session.execute('SELECT 1').fetchall()
+                from sqlalchemy import text
+                db.session.execute(text('SELECT 1')).fetchall()
                 health_data['database']['connection_status'] = 'connected'
         except Exception as db_error:
             health_data['database']['connection_status'] = 'error'
