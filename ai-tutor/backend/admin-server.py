@@ -249,8 +249,8 @@ def get_all_students():
         # Get all students from repository
         students = student_repository.get_all()
         
-        # Get phone mappings
-        phone_mappings = phone_manager.load_phone_mapping()
+        # Get phone mappings from memory instead of disk
+        phone_mappings = phone_manager.phone_mapping
         
         # Add phone numbers to students
         for student in students:
@@ -266,8 +266,14 @@ def get_all_students():
             # Get session count
             student_sessions = session_repository.get_by_student_id(student_id)
             student['session_count'] = len(student_sessions)
+            
+            # Create display name for templates
+            first_name = student.get('first_name', '')
+            last_name = student.get('last_name', '')
+            student['display_name'] = f"{first_name} {last_name}".strip() or 'Unknown'
         
-        return sorted(students, key=lambda x: x.get('full_name', ''))
+        # Sort by ID (most recent first) instead of name
+        return sorted(students, key=lambda x: x.get('id', 0), reverse=True)
     except Exception as e:
         print(f"Error getting students from database: {e}")
         log_error('DATABASE', 'Error getting students', e)
@@ -318,12 +324,47 @@ def get_system_stats():
         # Get counts from database
         total_students = Student.query.count()
         
-        # Count sessions today
-        today = datetime.now().date()
-        sessions_today = Session.query.filter(
-            Session.start_datetime >= today,
-            Session.start_datetime < today + timedelta(days=1)
-        ).count()
+        # Count sessions today - handle datetime format issues
+        try:
+            today = datetime.now().date()
+            today_str = today.isoformat()
+            
+            # Try multiple approaches to filter by date
+            try:
+                # First try with string comparison (most reliable with SQL)
+                sessions_today = Session.query.filter(
+                    Session.start_datetime.like(f"{today_str}%")
+                ).count()
+                
+                # If no results, try with datetime objects
+                if sessions_today == 0:
+                    # Convert strings to datetime objects for comparison
+                    today_start = datetime.combine(today, datetime.min.time())
+                    today_end = datetime.combine(today, datetime.max.time())
+                    
+                    sessions_today = Session.query.filter(
+                        Session.start_datetime >= today_start.isoformat(),
+                        Session.start_datetime <= today_end.isoformat()
+                    ).count()
+                    
+                    if sessions_today > 0:
+                        log_system('Used datetime object comparison for sessions_today', count=sessions_today)
+            except Exception as date_error:
+                # Last resort: manual filtering
+                log_error('DATABASE', 'Using manual filtering for sessions_today', date_error)
+                all_sessions = Session.query.all()
+                sessions_today = 0
+                
+                for session in all_sessions:
+                    try:
+                        session_date_str = str(session.start_datetime).split('T')[0].split(' ')[0]
+                        if session_date_str == today_str:
+                            sessions_today += 1
+                    except:
+                        pass
+        except Exception as e:
+            log_error('DATABASE', 'Error counting sessions today', e)
+            sessions_today = 0
         
         # Get total sessions
         total_sessions = Session.query.count()
@@ -531,9 +572,11 @@ def admin_dashboard():
         return redirect(url_for('admin_login'))
     
     try:
-        # Get system stats with error handling
+        # Get system stats with error handling - force refresh from database
         try:
+            # Force refresh of stats from database
             stats = get_system_stats()
+            print(f"Dashboard stats: {stats}")
         except Exception as e:
             log_error('ADMIN', 'Error getting system stats for dashboard', e)
             print(f"Dashboard error: Failed to get system stats: {e}")
@@ -547,16 +590,42 @@ def admin_dashboard():
         
         # Get students with error handling
         try:
+            # Get all students from database
             all_students = get_all_students()
+            
+            # Sort by most recently added (highest ID first)
+            all_students.sort(key=lambda s: s.get('id', 0), reverse=True)
             recent_students = all_students[:5] if all_students else []  # Get 5 most recent
-            students_info = {s['id']: s for s in all_students}
+            
+            # Create students_info with proper field access
+            students_info = {}
+            for student in all_students:
+                # Create proper name from first_name and last_name
+                first_name = student.get('first_name', '')
+                last_name = student.get('last_name', '')
+                full_name = f"{first_name} {last_name}".strip() or 'Unknown'
+                
+                # Add session count if available
+                session_count = student.get('session_count', 0)
+                
+                students_info[student['id']] = {
+                    'name': full_name,
+                    'id': student['id'],
+                    'grade': student.get('grade', 'Unknown'),
+                    'phone': student.get('phone', 'None'),
+                    'session_count': session_count
+                }
+                
+                # Update display name in recent_students for template
+                if student in recent_students:
+                    student['display_name'] = full_name
         except Exception as e:
             log_error('ADMIN', 'Error getting students for dashboard', e)
             print(f"Dashboard error: Failed to get students: {e}")
             recent_students = []
             students_info = {}
         
-        # Get phone mappings safely
+        # Get phone mappings safely - use in-memory mapping
         try:
             phone_mappings = dict(phone_manager.phone_mapping)
         except Exception as e:
@@ -1003,29 +1072,50 @@ def admin_system():
     if not check_auth():
         return redirect(url_for('admin_login'))
     
-    stats = get_system_stats()
-    
-    # Get the latest phone mappings from disk to ensure we have the most up-to-date data
-    phone_mappings = dict(phone_manager.load_phone_mapping())
-    
-    # Get students info for phone mapping display
-    students = get_all_students()
-    students_info = {}
-    for student in students:
-        students_info[student['id']] = {
-            'name': student['name'],
-            'id': student['id'],
-            'grade': student['grade']
-        }
-    
-    return render_template('system.html',
-                         stats=stats,
-                         phone_mappings=phone_mappings,
-                         students_info=students_info,
-                         system_stats=stats,
-                         mcp_port=3001,
-                         vapi_status=vapi_client.is_configured(),
-                         system_events=[])
+    try:
+        stats = get_system_stats()
+        
+        # Get the phone mappings from memory instead of disk
+        phone_mappings = dict(phone_manager.phone_mapping)
+        
+        # Get students info for phone mapping display with proper field access
+        students = get_all_students()
+        students_info = {}
+        for student in students:
+            # Create proper name from first_name and last_name
+            first_name = student.get('first_name', '')
+            last_name = student.get('last_name', '')
+            full_name = f"{first_name} {last_name}".strip() or 'Unknown'
+            
+            students_info[student['id']] = {
+                'name': full_name,
+                'id': student['id'],
+                'grade': student.get('grade', 'Unknown')
+            }
+        
+        return render_template('system.html',
+                             stats=stats,
+                             phone_mappings=phone_mappings,
+                             students_info=students_info,
+                             system_stats=stats,
+                             mcp_port=3001,
+                             vapi_status=vapi_client.is_configured(),
+                             system_events=[])
+    except Exception as e:
+        log_error('ADMIN', 'Error loading system page', e)
+        flash(f'Error loading system information: {str(e)}', 'error')
+        # Return a simple error page instead of trying to render the full system page
+        return f"""
+        <html>
+            <head><title>System Information - Error</title></head>
+            <body>
+                <h1>System Information Error</h1>
+                <p>There was an error loading the system information. Please check the server logs.</p>
+                <p>Error: {str(e)}</p>
+                <p><a href="/admin">Return to dashboard</a></p>
+            </body>
+        </html>
+        """, 500
 
 # Phone Mapping Management
 @app.route('/admin/phone-mappings/remove', methods=['POST'])
@@ -1062,8 +1152,9 @@ def add_phone_mapping():
     if not phone_number or not student_id:
         return jsonify({'error': 'Phone number and student ID are required'}), 400
     
-    # Check if student exists
-    if not os.path.exists(f'../data/students/{student_id}'):
+    # Check if student exists in database
+    student = student_repository.get_by_id(student_id)
+    if not student:
         return jsonify({'error': 'Student not found'}), 404
     
     # Use the add_phone_mapping method which handles loading the latest mapping
@@ -1299,34 +1390,71 @@ def admin_all_sessions():
             student_id = session.get('student_id')
             student = students_dict.get(student_id, {})
             
-            session['student_name'] = student.get('full_name', 'Unknown')
+            # Create full name from first_name and last_name
+            first_name = student.get('first_name', '')
+            last_name = student.get('last_name', '')
+            full_name = f"{first_name} {last_name}".strip() or 'Unknown'
+            
+            # Safely assign student name
+            session['student_name'] = full_name if full_name else 'Unknown'
             session['student_grade'] = student.get('grade', 'Unknown')
             
-            # Format date and time
+            # Format date and time - handle different datetime formats safely
             start_datetime = session.get('start_datetime', '')
-            if start_datetime:
-                if isinstance(start_datetime, str) and 'T' in start_datetime:
-                    session['date'] = start_datetime.split('T')[0]
-                    session['time'] = start_datetime.split('T')[1][:8]
+            try:
+                if start_datetime:
+                    # Convert to string if it's not already
+                    start_datetime_str = str(start_datetime) if not isinstance(start_datetime, str) else start_datetime
+                    
+                    # Handle ISO format with T separator
+                    if 'T' in start_datetime_str:
+                        session['date'] = start_datetime_str.split('T')[0]
+                        session['time'] = start_datetime_str.split('T')[1][:8]
+                    # Handle space separator
+                    elif ' ' in start_datetime_str:
+                        parts = start_datetime_str.split(' ')
+                        session['date'] = parts[0]
+                        session['time'] = parts[1][:8] if len(parts) > 1 else ''
+                    # Handle date-only string
+                    else:
+                        session['date'] = start_datetime_str[:10]
+                        session['time'] = ''
                 else:
-                    session['date'] = str(start_datetime).split(' ')[0]
-                    session['time'] = str(start_datetime).split(' ')[1][:8] if ' ' in str(start_datetime) else ''
-            else:
-                session['date'] = 'Unknown'
+                    session['date'] = 'Unknown'
+                    session['time'] = ''
+            except Exception as e:
+                # Fallback for any datetime parsing errors
+                session['date'] = str(start_datetime)[:10] if start_datetime else 'Unknown'
                 session['time'] = ''
+                log_error('ADMIN', f'Error formatting session datetime: {e}', e,
+                         session_id=session.get('id'), datetime_value=str(start_datetime))
             
             # Set session type
             session['type'] = 'VAPI Call' if session.get('session_type') == 'phone' else 'Regular Session'
             
-            # Set duration
-            session['duration'] = session.get('duration_minutes', session.get('duration', 0) // 60 if session.get('duration') else 'Unknown')
+            # Set duration - handle different duration formats safely
+            try:
+                if session.get('duration_minutes') is not None:
+                    session['duration'] = session.get('duration_minutes')
+                elif session.get('duration') is not None:
+                    # Convert seconds to minutes if needed
+                    session['duration'] = session.get('duration') // 60
+                else:
+                    session['duration'] = 'Unknown'
+            except Exception:
+                session['duration'] = 'Unknown'
             
             # Set transcript and analysis flags
             session['has_transcript'] = bool(session.get('transcript'))
             session['has_analysis'] = False  # Set based on your database schema
         
-        # Sort by date and time (newest first)
-        all_sessions.sort(key=lambda x: (x.get('date', ''), x.get('time', '')), reverse=True)
+        # Sort by date and time (newest first) - with error handling
+        try:
+            all_sessions.sort(key=lambda x: (x.get('date', ''), x.get('time', '')), reverse=True)
+        except Exception as e:
+            log_error('ADMIN', f'Error sorting sessions: {e}', e)
+            # Alternative sorting by ID if date sorting fails
+            all_sessions.sort(key=lambda x: x.get('id', 0), reverse=True)
         
         # Calculate session statistics
         session_stats = {
@@ -1845,11 +1973,13 @@ def save_vapi_session(call_id, student_id, phone, duration, user_transcript, ass
                 # Use only the user transcript for profile extraction
                 extracted_info = analyzer.analyze_transcript(user_transcript, student_id)
                 if extracted_info:
-                    analyzer.update_student_profile(student_id, extracted_info)
+                    # Ensure student_id is a string
+                    student_id_str = str(student_id)
+                    analyzer.update_student_profile(student_id_str, extracted_info)
                     log_webhook('profile-updated', f"Updated student profile from webhook session",
-                                call_id=call_id, student_id=student_id,
+                                call_id=call_id, student_id=student_id_str,
                                 extracted_info=extracted_info)
-                    print(f"👤 Updated profile for student {student_id} with extracted information")
+                    print(f"👤 Updated profile for student {student_id_str} with extracted information")
             except Exception as e:
                 log_error('TRANSCRIPT_ANALYSIS', f"Error analyzing webhook session transcript", e,
                           call_id=call_id, student_id=student_id)
@@ -1894,12 +2024,46 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
     log_webhook('phone-lookup', f"Looking up student by phone: {clean_phone}",
                call_id=call_id, phone=clean_phone, original_phone=phone_number)
     
-    # The phone manager now handles normalization and ensures fresh data
+    # First check if we have a mapping in memory
     student_id = phone_manager.get_student_by_phone(clean_phone)
+    
+    # If found, verify the student exists in the database
     if student_id:
-        log_webhook('student-identified', f"Found student {student_id}",
-                   call_id=call_id, student_id=student_id, phone=clean_phone)
-        return student_id
+        try:
+            # Verify student exists in database - ensure student_id is a string
+            student_id_str = str(student_id)
+            student = student_repository.get_by_id(student_id_str)
+            
+            if student:
+                log_webhook('student-identified', f"Found student {student_id_str} in database",
+                           call_id=call_id, student_id=student_id_str, phone=clean_phone)
+                
+                # Get student name for logging
+                first_name = student.get('first_name', '')
+                last_name = student.get('last_name', '')
+                full_name = f"{first_name} {last_name}".strip() or 'Unknown'
+                
+                print(f"👤 Found existing student: {full_name} (ID: {student_id_str})")
+                return student_id_str
+            else:
+                # Student mapping exists but student doesn't exist in database
+                log_webhook('student-mapping-orphaned', f"Phone mapping exists but student {student_id_str} not found in database",
+                           call_id=call_id, student_id=student_id_str, phone=clean_phone)
+                print(f"⚠️ Phone mapping exists but student {student_id_str} not found in database")
+                
+                # Remove orphaned mapping
+                if clean_phone in phone_manager.phone_mapping:
+                    del phone_manager.phone_mapping[clean_phone]
+                    phone_manager.save_phone_mapping()
+        except Exception as e:
+            log_error('DATABASE', f"Error verifying student in database", e,
+                     call_id=call_id, student_id=student_id, phone=clean_phone)
+            print(f"⚠️ Error verifying student {student_id}: {e}")
+            
+            # Remove potentially problematic mapping
+            if clean_phone in phone_manager.phone_mapping:
+                del phone_manager.phone_mapping[clean_phone]
+                phone_manager.save_phone_mapping()
     
     # Create new student if not found
     log_webhook('student-not-found', f"No student found for phone: {clean_phone}",
@@ -1923,7 +2087,10 @@ def create_student_from_call(phone: str, call_id: str) -> str:
         first_name = f"Student"
         last_name = phone_suffix if phone else f"Unknown_{call_id[-6:]}"
         
-        # Create student data
+        # Get current timestamp for created_at field
+        current_time = datetime.now().isoformat()
+        
+        # Create student data with SQL-compatible fields
         student_data = {
             'first_name': first_name,
             'last_name': last_name,
@@ -1932,7 +2099,11 @@ def create_student_from_call(phone: str, call_id: str) -> str:
             'student_type': 'International',  # Default value
             'school_id': None,
             'interests': [],
-            'learning_preferences': []
+            'learning_preferences': [],
+            'created_at': current_time,
+            'updated_at': current_time,
+            'grade': 'Unknown',  # Default grade
+            'age': None  # Default age
         }
         
         # Create student in database
@@ -1944,6 +2115,7 @@ def create_student_from_call(phone: str, call_id: str) -> str:
             # Return a temporary ID for fallback
             return f"temp_{call_id[-6:]}"
         
+        # Ensure student_id is a string
         student_id = str(new_student['id'])
         
         # Add phone mapping using normalized phone number
@@ -1951,7 +2123,14 @@ def create_student_from_call(phone: str, call_id: str) -> str:
             # Log the exact phone number being mapped for debugging
             log_webhook('phone-mapping', f"Adding phone mapping: {normalized_phone} → {student_id}",
                         phone=normalized_phone, student_id=student_id)
+            
+            # Explicitly use string ID for phone mapping
             phone_manager.add_phone_mapping(normalized_phone, student_id)
+            
+            # Log student creation for debugging
+            log_webhook('student-created', f"Created new student in database: {first_name} {last_name}",
+                       call_id=call_id, student_id=student_id, phone=normalized_phone)
+            print(f"👤 Created new student in database: {first_name} {last_name} (ID: {student_id})")
         
         return student_id
         
@@ -1962,7 +2141,7 @@ def create_student_from_call(phone: str, call_id: str) -> str:
         return f"temp_{call_id[-6:]}"
 
 def save_api_driven_session(call_id: str, student_id: str, phone: str,
-                            duration: int, transcript: str, call_data: Dict[Any, Any]):
+                             duration: int, transcript: str, call_data: Dict[Any, Any]):
     """Save VAPI session data using API-fetched data to database"""
     try:
         # Create session data using API metadata
@@ -1979,15 +2158,36 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
                         transcript_length=len(transcript))
             print(f"⏱️ Estimated duration from transcript: {effective_duration}s (original: {duration}s)")
         
-        # Prepare session data for database
+        # Get current timestamp for created_at field
+        current_time = datetime.now()
+        
+        # Format start_datetime properly for SQL storage
+        try:
+            start_time = metadata.get('created_at')
+            if start_time and isinstance(start_time, str):
+                # Try to parse the datetime string
+                start_datetime = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+            else:
+                # Use current time if no valid start time
+                start_datetime = current_time
+        except Exception as e:
+            log_error('WEBHOOK', f"Error parsing start_datetime, using current time", e,
+                     call_id=call_id, start_time=metadata.get('created_at'))
+            start_datetime = current_time
+        
+        # Prepare session data for database with SQL-compatible fields
         session_data = {
             'student_id': student_id,
             'call_id': call_id,
             'session_type': 'phone',
-            'start_datetime': metadata.get('created_at', datetime.now().isoformat()),
+            'start_datetime': start_datetime.isoformat(),
             'duration': effective_duration,
             'transcript': transcript,
-            'summary': metadata.get('analysis_summary', '')
+            'summary': metadata.get('analysis_summary', ''),
+            'created_at': current_time.isoformat(),
+            'updated_at': current_time.isoformat(),
+            'topics_covered': ['Phone Call'],  # Default topics
+            'engagement_score': 75  # Default engagement score
         }
         
         # Save session to database
@@ -2143,14 +2343,17 @@ def trigger_ai_analysis_async(student_id, transcript, call_id):
                        student_id=student_id,
                        transcript_length=len(transcript))
         
+        # Ensure student_id is a string
+        student_id_str = str(student_id)
+        
         # Get student context
-        student_data = get_student_data(student_id)
+        student_data = get_student_data(student_id_str)
         student_context = {}
         
         if student_data and student_data.get('profile'):
             profile = student_data['profile']
             student_context = {
-                'name': profile.get('name', 'Unknown'),
+                'name': profile.get('name', profile.get('first_name', '') + ' ' + profile.get('last_name', '')).strip() or 'Unknown',
                 'age': profile.get('age', 'Unknown'),
                 'grade': profile.get('grade', 'Unknown'),
                 'curriculum': profile.get('curriculum', 'Unknown'),
