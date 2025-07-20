@@ -977,14 +977,16 @@ def admin_database():
         return redirect(url_for('admin_login'))
     
     try:
-        # Get counts of each model
-        stats = {
-            'students': Student.query.count(),
-            'schools': School.query.count(),
-            'curriculums': Curriculum.query.count(),
-            'sessions': Session.query.count(),
-            'assessments': Assessment.query.count()
-        }
+        # Ensure we're in an app context for all database operations
+        with app.app_context():
+            # Get counts of each model
+            stats = {
+                'students': Student.query.count(),
+                'schools': School.query.count(),
+                'curriculums': Curriculum.query.count(),
+                'sessions': Session.query.count(),
+                'assessments': Assessment.query.count()
+            }
         
         # Get list of tables
         tables = [
@@ -1009,25 +1011,27 @@ def admin_database_table(table):
         return redirect(url_for('admin_login'))
     
     try:
-        # Get table data based on table name
-        if table == 'students':
-            items = Student.query.all()
-            items = [item.to_dict() for item in items]
-        elif table == 'schools':
-            items = School.query.all()
-            items = [item.to_dict() for item in items]
-        elif table == 'curriculums':
-            items = Curriculum.query.all()
-            items = [item.to_dict() for item in items]
-        elif table == 'sessions':
-            items = Session.query.all()
-            items = [item.to_dict() for item in items]
-        elif table == 'assessments':
-            items = Assessment.query.all()
-            items = [item.to_dict() for item in items]
-        else:
-            flash(f'Unknown table: {table}', 'error')
-            return redirect(url_for('admin_database'))
+        # Ensure we're in an app context for all database operations
+        with app.app_context():
+            # Get table data based on table name
+            if table == 'students':
+                items = Student.query.all()
+                items = [item.to_dict() for item in items]
+            elif table == 'schools':
+                items = School.query.all()
+                items = [item.to_dict() for item in items]
+            elif table == 'curriculums':
+                items = Curriculum.query.all()
+                items = [item.to_dict() for item in items]
+            elif table == 'sessions':
+                items = Session.query.all()
+                items = [item.to_dict() for item in items]
+            elif table == 'assessments':
+                items = Assessment.query.all()
+                items = [item.to_dict() for item in items]
+            else:
+                flash(f'Unknown table: {table}', 'error')
+                return redirect(url_for('admin_database'))
         
         # Get column names from first item
         columns = []
@@ -1049,18 +1053,20 @@ def admin_database_view(table, item_id):
         return redirect(url_for('admin_login'))
     
     try:
-        # Get item data based on table name and ID
-        item = None
-        if table == 'students':
-            item = Student.query.get(item_id)
-        elif table == 'schools':
-            item = School.query.get(item_id)
-        elif table == 'curriculums':
-            item = Curriculum.query.get(item_id)
-        elif table == 'sessions':
-            item = Session.query.get(item_id)
-        elif table == 'assessments':
-            item = Assessment.query.get(item_id)
+        # Ensure we're in an app context for all database operations
+        with app.app_context():
+            # Get item data based on table name and ID
+            item = None
+            if table == 'students':
+                item = Student.query.get(item_id)
+            elif table == 'schools':
+                item = School.query.get(item_id)
+            elif table == 'curriculums':
+                item = Curriculum.query.get(item_id)
+            elif table == 'sessions':
+                item = Session.query.get(item_id)
+            elif table == 'assessments':
+                item = Assessment.query.get(item_id)
         
         if not item:
             flash(f'Item not found: {table}/{item_id}', 'error')
@@ -1454,12 +1460,14 @@ def admin_all_sessions():
         return redirect(url_for('admin_login'))
     
     try:
-        # Get all sessions from database
-        all_sessions = session_repository.get_all()
-        
-        # Get all students for additional information
-        students = get_all_students()
-        students_dict = {s['id']: s for s in students}
+        # Ensure we're in an app context for all database operations
+        with app.app_context():
+            # Get all sessions from database
+            all_sessions = session_repository.get_all()
+            
+            # Get all students for additional information
+            students = get_all_students()
+            students_dict = {s['id']: s for s in students}
         
         # Enhance session data with student information
         for session in all_sessions:
@@ -2621,11 +2629,27 @@ def admin_tokens():
     if not check_auth():
         return redirect(url_for('admin_login'))
     
-    # Get active tokens
-    active_tokens = token_service.get_active_tokens()
-    
-    return render_template('tokens.html',
-                         active_tokens=active_tokens)
+    try:
+        # Get active tokens
+        active_tokens = token_service.get_active_tokens()
+        
+        return render_template('tokens.html',
+                             active_tokens=active_tokens)
+    except Exception as e:
+        log_error('ADMIN', f'Error loading tokens page: {str(e)}', e)
+        flash(f'Error loading tokens page: {str(e)}', 'error')
+        # Return a simple error page instead of trying to render the full tokens page
+        return f"""
+        <html>
+            <head><title>Tokens - Error</title></head>
+            <body>
+                <h1>Tokens Page Error</h1>
+                <p>There was an error loading the tokens page. Please check the server logs.</p>
+                <p>Error: {str(e)}</p>
+                <p><a href="/admin">Return to dashboard</a></p>
+            </body>
+        </html>
+        """, 500
 
 @app.route('/admin/tokens/generate', methods=['POST'])
 def generate_token():
@@ -2633,21 +2657,26 @@ def generate_token():
     if not check_auth():
         return redirect(url_for('admin_login'))
     
-    # Get form data
-    token_name = request.form.get('token_name', 'Unnamed Token')
-    scopes = request.form.getlist('scopes')
-    expiration_hours = int(request.form.get('expiration', 4))
-    
-    if not scopes:
-        flash('At least one scope must be selected', 'error')
+    try:
+        # Get form data
+        token_name = request.form.get('token_name', 'Unnamed Token')
+        scopes = request.form.getlist('scopes')
+        expiration_hours = int(request.form.get('expiration', 4))
+        
+        if not scopes:
+            flash('At least one scope must be selected', 'error')
+            return redirect(url_for('admin_tokens'))
+        
+        # Generate token
+        token_data = token_service.generate_token(
+            name=token_name,
+            scopes=scopes,
+            expiration_hours=expiration_hours
+        )
+    except Exception as e:
+        log_error('ADMIN', f'Error generating token: {str(e)}', e)
+        flash(f'Error generating token: {str(e)}', 'error')
         return redirect(url_for('admin_tokens'))
-    
-    # Generate token
-    token_data = token_service.generate_token(
-        name=token_name,
-        scopes=scopes,
-        expiration_hours=expiration_hours
-    )
     
     log_admin_action('generate_token', session.get('admin_username', 'unknown'),
                     token_name=token_name,
