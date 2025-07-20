@@ -988,18 +988,18 @@ def admin_database():
                 'assessments': Assessment.query.count()
             }
         
-        # Get list of tables
-        tables = [
-            {'name': 'Students', 'count': stats['students'], 'url': url_for('admin_database_table', table='students')},
-            {'name': 'Schools', 'count': stats['schools'], 'url': url_for('admin_database_table', table='schools')},
-            {'name': 'Curriculums', 'count': stats['curriculums'], 'url': url_for('admin_database_table', table='curriculums')},
-            {'name': 'Sessions', 'count': stats['sessions'], 'url': url_for('admin_database_table', table='sessions')},
-            {'name': 'Assessments', 'count': stats['assessments'], 'url': url_for('admin_database_table', table='assessments')}
-        ]
-        
-        return render_template('database.html',
-                             tables=tables,
-                             stats=stats)
+            # Get list of tables
+            tables = [
+                {'name': 'Students', 'count': stats['students'], 'url': url_for('admin_database_table', table='students')},
+                {'name': 'Schools', 'count': stats['schools'], 'url': url_for('admin_database_table', table='schools')},
+                {'name': 'Curriculums', 'count': stats['curriculums'], 'url': url_for('admin_database_table', table='curriculums')},
+                {'name': 'Sessions', 'count': stats['sessions'], 'url': url_for('admin_database_table', table='sessions')},
+                {'name': 'Assessments', 'count': stats['assessments'], 'url': url_for('admin_database_table', table='assessments')}
+            ]
+            
+            return render_template('database.html',
+                                tables=tables,
+                                stats=stats)
     except Exception as e:
         flash(f'Error accessing database: {str(e)}', 'error')
         log_error('DATABASE', 'Error accessing database browser', e)
@@ -1094,44 +1094,53 @@ def admin_system():
         return redirect(url_for('admin_login'))
     
     try:
-        stats = get_system_stats()
-        
-        # Get the phone mappings with error handling
-        try:
-            # Try to get phone mappings from memory first
-            phone_mappings = dict(phone_manager.phone_mapping)
-        except Exception as e:
-            # If that fails, try to load from disk
-            try:
-                phone_mappings = phone_manager.load_phone_mapping()
-            except Exception as load_error:
-                # If both fail, use an empty dictionary
-                log_error('ADMIN', f'Error loading phone mappings: {str(load_error)}', load_error)
-                phone_mappings = {}
-        
-        # Get students info for phone mapping display with proper field access
-        students = get_all_students()
-        students_info = {}
-        for student in students:
-            # Create proper name from first_name and last_name
-            first_name = student.get('first_name', '')
-            last_name = student.get('last_name', '')
-            full_name = f"{first_name} {last_name}".strip() or 'Unknown'
+        # Ensure we're in an app context for all operations
+        with app.app_context():
+            stats = get_system_stats()
             
-            students_info[student['id']] = {
-                'name': full_name,
-                'id': student['id'],
-                'grade': student.get('grade', 'Unknown')
+            # Get the phone mappings with error handling
+            try:
+                # Try to get phone mappings from memory first
+                phone_mappings = dict(phone_manager.phone_mapping)
+            except Exception as e:
+                # If that fails, try to load from disk
+                try:
+                    phone_mappings = phone_manager.load_phone_mapping()
+                except Exception as load_error:
+                    # If both fail, use an empty dictionary
+                    log_error('ADMIN', f'Error loading phone mappings: {str(load_error)}', load_error)
+                    phone_mappings = {}
+            
+            # Get students info for phone mapping display with proper field access
+            students = get_all_students()
+            students_info = {}
+            for student in students:
+                # Create proper name from first_name and last_name
+                first_name = student.get('first_name', '')
+                last_name = student.get('last_name', '')
+                full_name = f"{first_name} {last_name}".strip() or 'Unknown'
+                
+                students_info[student['id']] = {
+                    'name': full_name,
+                    'id': student['id'],
+                    'grade': student.get('grade', 'Unknown')
+                }
+            
+            # Set feature flags for buttons that should be disabled
+            feature_flags = {
+                'clear_logs_enabled': False,  # Disable Clear Sessions Log button
+                'backup_enabled': False,      # Disable backup options
             }
-        
-        return render_template('system.html',
-                             stats=stats,
-                             phone_mappings=phone_mappings,
-                             students_info=students_info,
-                             system_stats=stats,
-                             mcp_port=3001,
-                             vapi_status=vapi_client.is_configured(),
-                             system_events=[])
+            
+            return render_template('system.html',
+                                stats=stats,
+                                phone_mappings=phone_mappings,
+                                students_info=students_info,
+                                system_stats=stats,
+                                mcp_port=3001,
+                                vapi_status=vapi_client.is_configured(),
+                                system_events=[],
+                                feature_flags=feature_flags)  # Pass feature flags to template
     except Exception as e:
         log_error('ADMIN', 'Error loading system page', e)
         flash(f'Error loading system information: {str(e)}', 'error')
@@ -1661,23 +1670,30 @@ def ai_analysis_dashboard():
         flash('AI Post-Processing POC is not available', 'error')
         return redirect(url_for('admin_dashboard'))
     
-    # Get provider status
-    current_provider = provider_manager.get_current_provider()
-    available_providers = provider_manager.get_available_providers()
-    provider_info = {}
-    
-    for provider_name in available_providers:
-        provider_info[provider_name] = provider_manager.get_provider_info(provider_name)
-    
-    # Get processing stats
-    processing_stats = session_processor.get_processing_stats()
-    
-    return render_template('ai_analysis.html',
-                         current_provider=current_provider,
-                         available_providers=available_providers,
-                         provider_info=provider_info,
-                         processing_stats=processing_stats,
-                         ai_poc_available=AI_POC_AVAILABLE)
+    try:
+        # Ensure we're in an app context for all operations
+        with app.app_context():
+            # Get provider status
+            current_provider = provider_manager.get_current_provider()
+            available_providers = provider_manager.get_available_providers()
+            provider_info = {}
+            
+            for provider_name in available_providers:
+                provider_info[provider_name] = provider_manager.get_provider_info(provider_name)
+            
+            # Get processing stats
+            processing_stats = session_processor.get_processing_stats()
+            
+            return render_template('ai_analysis.html',
+                                current_provider=current_provider,
+                                available_providers=available_providers,
+                                provider_info=provider_info,
+                                processing_stats=processing_stats,
+                                ai_poc_available=AI_POC_AVAILABLE)
+    except Exception as e:
+        log_error('ADMIN', f'Error loading AI analysis dashboard: {str(e)}', e)
+        flash(f'Error loading AI analysis dashboard: {str(e)}', 'error')
+        return redirect(url_for('admin_dashboard'))
 
 @app.route('/admin/ai-analysis/switch-provider', methods=['POST'])
 def switch_ai_provider():
@@ -2522,32 +2538,34 @@ def admin_system_logs():
     level = request.args.get('level', '')
     
     try:
-        # Use the system_logger directly instead of creating a new repository
-        logs = system_logger.get_logs(days=days, category=category, level=level)
-        
-        # Get log statistics
-        log_stats = system_logger.get_log_statistics()
-        
-        # Get available categories and levels for filtering
-        available_categories = list(log_stats.get('categories', {}).keys())
-        available_levels = list(log_stats.get('levels', {}).keys())
-        
-        log_admin_action('view_logs', session.get('admin_username', 'unknown'),
-                        days_filter=days,
-                        category_filter=category,
-                        level_filter=level,
-                        log_count=len(logs))
-        
-        return render_template('system_logs.html',
-                            logs=logs,
-                            log_stats=log_stats,
-                            available_categories=available_categories,
-                            available_levels=available_levels,
-                            current_filters={
-                                'days': days,
-                                'category': category,
-                                'level': level
-                            })
+        # Ensure we're in an app context for all operations
+        with app.app_context():
+            # Use the system_logger directly instead of creating a new repository
+            logs = system_logger.get_logs(days=days, category=category, level=level)
+            
+            # Get log statistics
+            log_stats = system_logger.get_log_statistics()
+            
+            # Get available categories and levels for filtering
+            available_categories = list(log_stats.get('categories', {}).keys())
+            available_levels = list(log_stats.get('levels', {}).keys())
+            
+            log_admin_action('view_logs', session.get('admin_username', 'unknown'),
+                            days_filter=days,
+                            category_filter=category,
+                            level_filter=level,
+                            log_count=len(logs))
+            
+            return render_template('system_logs.html',
+                                logs=logs,
+                                log_stats=log_stats,
+                                available_categories=available_categories,
+                                available_levels=available_levels,
+                                current_filters={
+                                    'days': days,
+                                    'category': category,
+                                    'level': level
+                                })
     except Exception as e:
         flash(f'Error retrieving logs: {str(e)}', 'error')
         log_error('DATABASE', 'Error retrieving logs', e)
@@ -2630,11 +2648,20 @@ def admin_tokens():
         return redirect(url_for('admin_login'))
     
     try:
-        # Get active tokens
-        active_tokens = token_service.get_active_tokens()
-        
-        return render_template('tokens.html',
-                             active_tokens=active_tokens)
+        # Ensure we're in an app context for all operations
+        with app.app_context():
+            # Get active tokens - handle the case where get_active_tokens might not exist
+            if hasattr(token_service, 'get_active_tokens'):
+                active_tokens = token_service.get_active_tokens()
+            else:
+                # Fallback implementation if get_active_tokens doesn't exist
+                active_tokens = []
+                # Log the issue
+                log_error('ADMIN', 'TokenService missing get_active_tokens method, using empty list',
+                         ValueError('Method not found'))
+                
+            return render_template('tokens.html',
+                                active_tokens=active_tokens)
     except Exception as e:
         log_error('ADMIN', f'Error loading tokens page: {str(e)}', e)
         flash(f'Error loading tokens page: {str(e)}', 'error')
@@ -2658,43 +2685,52 @@ def generate_token():
         return redirect(url_for('admin_login'))
     
     try:
-        # Get form data
-        token_name = request.form.get('token_name', 'Unnamed Token')
-        scopes = request.form.getlist('scopes')
-        expiration_hours = int(request.form.get('expiration', 4))
-        
-        if not scopes:
-            flash('At least one scope must be selected', 'error')
-            return redirect(url_for('admin_tokens'))
-        
-        # Generate token
-        token_data = token_service.generate_token(
-            name=token_name,
-            scopes=scopes,
-            expiration_hours=expiration_hours
-        )
+        # Ensure we're in an app context for all operations
+        with app.app_context():
+            # Get form data
+            token_name = request.form.get('token_name', 'Unnamed Token')
+            scopes = request.form.getlist('scopes')
+            expiration_hours = int(request.form.get('expiration', 4))
+            
+            if not scopes:
+                flash('At least one scope must be selected', 'error')
+                return redirect(url_for('admin_tokens'))
+            
+            # Generate token
+            token_data = token_service.generate_token(
+                name=token_name,
+                scopes=scopes,
+                expiration_hours=expiration_hours
+            )
+            
+            log_admin_action('generate_token', session.get('admin_username', 'unknown'),
+                            token_name=token_name,
+                            scopes=scopes,
+                            expiration_hours=expiration_hours,
+                            token_id=token_data['id'])
+            
+            flash('Token generated successfully', 'success')
+            
+            # Get active tokens for display - handle the case where get_active_tokens might not exist
+            if hasattr(token_service, 'get_active_tokens'):
+                active_tokens = token_service.get_active_tokens()
+            else:
+                # Fallback implementation if get_active_tokens doesn't exist
+                active_tokens = []
+                # Log the issue
+                log_error('ADMIN', 'TokenService missing get_active_tokens method, using empty list',
+                         ValueError('Method not found'))
+            
+            return render_template('tokens.html',
+                                token=token_data['token'],
+                                token_name=token_name,
+                                token_scopes=scopes,
+                                token_expires=token_data['expires_at'],
+                                active_tokens=active_tokens)
     except Exception as e:
         log_error('ADMIN', f'Error generating token: {str(e)}', e)
         flash(f'Error generating token: {str(e)}', 'error')
         return redirect(url_for('admin_tokens'))
-    
-    log_admin_action('generate_token', session.get('admin_username', 'unknown'),
-                    token_name=token_name,
-                    scopes=scopes,
-                    expiration_hours=expiration_hours,
-                    token_id=token_data['id'])
-    
-    flash('Token generated successfully', 'success')
-    
-    # Get active tokens for display
-    active_tokens = token_service.get_active_tokens()
-    
-    return render_template('tokens.html',
-                         token=token_data['token'],
-                         token_name=token_name,
-                         token_scopes=scopes,
-                         token_expires=token_data['expires_at'],
-                         active_tokens=active_tokens)
 
 @app.route('/admin/tokens/revoke/<token_id>', methods=['POST'])
 def revoke_token(token_id):
@@ -2702,13 +2738,19 @@ def revoke_token(token_id):
     if not check_auth():
         return redirect(url_for('admin_login'))
     
-    # Revoke token
-    if token_service.revoke_token(token_id):
-        log_admin_action('revoke_token', session.get('admin_username', 'unknown'),
-                        token_id=token_id)
-        flash('Token revoked successfully', 'success')
-    else:
-        flash('Token not found or already revoked', 'error')
+    try:
+        # Ensure we're in an app context for all operations
+        with app.app_context():
+            # Revoke token
+            if token_service.revoke_token(token_id):
+                log_admin_action('revoke_token', session.get('admin_username', 'unknown'),
+                                token_id=token_id)
+                flash('Token revoked successfully', 'success')
+            else:
+                flash('Token not found or already revoked', 'error')
+    except Exception as e:
+        log_error('ADMIN', f'Error revoking token: {str(e)}', e)
+        flash(f'Error revoking token: {str(e)}', 'error')
     
     return redirect(url_for('admin_tokens'))
 
