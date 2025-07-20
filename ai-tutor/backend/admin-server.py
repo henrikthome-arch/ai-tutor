@@ -8,6 +8,7 @@ import os
 import json
 import hashlib
 import hmac
+import re
 from datetime import datetime, timedelta
 from typing import Dict, Any
 from flask import Flask, render_template, session, redirect, request, flash, url_for, jsonify, send_file
@@ -209,6 +210,16 @@ app = Flask(__name__,
 database_url = os.getenv('DATABASE_URL')
 if not database_url:
     print("⚠️ DATABASE_URL environment variable not found. Using default SQLite database.")
+    print("⚠️ This is only for local development. In production, set DATABASE_URL to a PostgreSQL connection string.")
+    log_system("DATABASE_URL environment variable not found", level="ERROR")
+    
+    # In production, we should never use SQLite
+    if FLASK_ENV == 'production':
+        print("🚨 CRITICAL ERROR: Running in production mode but DATABASE_URL is not set!")
+        print("🚨 PostgreSQL is required for production. SQLite should not be used.")
+        log_system("Production environment detected but DATABASE_URL not set", level="CRITICAL")
+        # Still use SQLite as fallback to allow startup, but log the error
+    
     database_url = 'sqlite:///:memory:'  # Fallback to in-memory SQLite for local development
 else:
     print(f"🗄️ Using database URL from environment: {database_url[:10]}...")
@@ -216,6 +227,20 @@ else:
     if database_url.startswith('postgres://'):
         database_url = database_url.replace('postgres://', 'postgresql://', 1)
         print("🔄 Converted postgres:// to postgresql:// in database URL")
+    
+    # Verify this is a PostgreSQL URL in production
+    if FLASK_ENV == 'production' and not database_url.startswith('postgresql://'):
+        print(f"🚨 WARNING: Production environment but DATABASE_URL doesn't start with postgresql://")
+        print(f"🚨 Current prefix: {database_url.split('://')[0] if '://' in database_url else 'unknown'}://")
+        log_system(f"Invalid DATABASE_URL format in production",
+                  prefix=database_url.split('://')[0] if '://' in database_url else 'unknown',
+                  level="WARNING")
+
+# Log the database configuration
+log_system("Database configuration",
+          database_type=database_url.split('://')[0] if '://' in database_url else 'unknown',
+          is_production=(FLASK_ENV == 'production'),
+          flask_env=FLASK_ENV)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -227,7 +252,50 @@ try:
     
     # Create database tables if they don't exist
     with app.app_context():
-        db.create_all()
+        # Check if we're using SQLite (development) or PostgreSQL (production)
+        if database_url.startswith('sqlite'):
+            # For SQLite, we can use create_all() directly
+            db.create_all()
+            print("🗄️ Database tables created using create_all() (SQLite)")
+        else:
+            # For PostgreSQL, we should use migrations
+            try:
+                # Import Flask-Migrate components
+                from flask_migrate import Migrate, upgrade
+                
+                # Initialize Flask-Migrate
+                migrate = Migrate(app, db)
+                
+                # Check if migrations directory exists
+                migrations_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../migrations')
+                if not os.path.exists(migrations_dir):
+                    print("⚠️ Migrations directory not found, creating initial migration")
+                    # Import commands to create initial migration
+                    from flask_migrate import init, migrate as migrate_cmd
+                    
+                    # Initialize migrations
+                    init(directory=migrations_dir)
+                    
+                    # Create initial migration
+                    with app.app_context():
+                        migrate_cmd(directory=migrations_dir, message="Initial migration")
+                
+                # Run migrations
+                print("🗄️ Running database migrations")
+                upgrade(directory=migrations_dir)
+                print("🗄️ Database migrations completed")
+            except ImportError:
+                print("⚠️ Flask-Migrate not installed, falling back to create_all()")
+                # Fallback to create_all if Flask-Migrate is not available
+                db.create_all()
+                print("🗄️ Database tables created using create_all() (fallback)")
+            except Exception as migration_error:
+                print(f"⚠️ Error running migrations: {migration_error}")
+                print("⚠️ Falling back to create_all()")
+                # Fallback to create_all if migrations fail
+                db.create_all()
+                print("🗄️ Database tables created using create_all() (fallback)")
+        
         print("🗄️ Database tables created/verified")
 except Exception as e:
     print(f"⚠️ Error initializing database with app: {e}")
@@ -578,14 +646,63 @@ def index():
 
 @app.route('/health')
 def health_check():
-    """Simple health check that doesn't depend on database"""
+    """Enhanced health check that provides detailed information about the database connection"""
     try:
-        return jsonify({
+        # Basic health data
+        health_data = {
             'status': 'ok',
             'timestamp': datetime.now().isoformat(),
             'environment': FLASK_ENV,
-            'server': 'AI Tutor Admin Server'
-        })
+            'server': 'AI Tutor Admin Server',
+            'database': {
+                'type': 'unknown',
+                'connection_status': 'unknown',
+                'url_info': 'unknown'
+            }
+        }
+        
+        # Get database URL from app config
+        db_url = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+        
+        # Determine database type
+        if db_url.startswith('sqlite'):
+            health_data['database']['type'] = 'sqlite'
+            health_data['database']['url_info'] = 'sqlite database'
+        elif db_url.startswith('postgresql'):
+            health_data['database']['type'] = 'postgresql'
+            # Mask sensitive information in the URL
+            url_parts = db_url.split('@')
+            if len(url_parts) > 1:
+                # Only show host and database name, not credentials
+                masked_url = f"postgresql://****:****@{url_parts[1]}"
+                health_data['database']['url_info'] = masked_url
+            else:
+                health_data['database']['url_info'] = 'postgresql database (url format error)'
+        else:
+            health_data['database']['type'] = 'unknown'
+            health_data['database']['url_info'] = 'unknown database type'
+        
+        # Test database connection
+        try:
+            with app.app_context():
+                # Try a simple query to test connection
+                db.session.execute('SELECT 1').fetchall()
+                health_data['database']['connection_status'] = 'connected'
+        except Exception as db_error:
+            health_data['database']['connection_status'] = 'error'
+            health_data['database']['error'] = str(db_error)
+            log_error('HEALTH', 'Database connection test failed', db_error)
+        
+        # Add environment variables status (without exposing values)
+        health_data['environment_variables'] = {
+            'DATABASE_URL': 'set' if os.getenv('DATABASE_URL') else 'not set',
+            'FLASK_ENV': FLASK_ENV,
+            'ADMIN_USERNAME': 'set' if ADMIN_USERNAME != 'admin' else 'default',
+            'ADMIN_PASSWORD': 'secure' if ADMIN_PASSWORD != 'admin123' else 'default (insecure)',
+            'FLASK_SECRET_KEY': 'set' if FLASK_SECRET_KEY != secrets.token_hex(32) else 'default'
+        }
+        
+        return jsonify(health_data)
     except Exception as e:
         log_error('HEALTH', 'Health check failed', e)
         return jsonify({
@@ -1183,6 +1300,89 @@ def admin_database_view(table, item_id):
         log_error('DATABASE', f'Error viewing database item {table}/{item_id}', e)
         return redirect(url_for('admin_database_table', table=table))
 
+def check_environmental_issues():
+    """
+    Check for common environmental issues that might affect the application.
+    Returns a list of issues with severity and instructions on how to fix them.
+    """
+    issues = []
+    
+    # Check database configuration
+    database_url = os.getenv('DATABASE_URL')
+    if FLASK_ENV == 'production':
+        if not database_url:
+            issues.append({
+                'severity': 'critical',
+                'title': 'Missing DATABASE_URL in Production',
+                'description': 'The DATABASE_URL environment variable is not set in production environment.',
+                'fix': 'Set the DATABASE_URL environment variable to a PostgreSQL connection string in your deployment environment.',
+                'docs_link': '/DATABASE_CONFIGURATION_GUIDE.md'
+            })
+        elif not database_url.startswith('postgresql://'):
+            issues.append({
+                'severity': 'critical',
+                'title': 'Invalid Database URL Format',
+                'description': f'The DATABASE_URL does not use the postgresql:// prefix: {database_url.split("://")[0] if "://" in database_url else "unknown"}://',
+                'fix': 'Update the DATABASE_URL to use the postgresql:// prefix instead of postgres:// or other prefixes.',
+                'docs_link': '/DATABASE_CONFIGURATION_GUIDE.md'
+            })
+    
+    # Check security configuration
+    if ADMIN_PASSWORD == 'admin123':
+        issues.append({
+            'severity': 'high',
+            'title': 'Default Admin Password',
+            'description': 'The application is using the default admin password.',
+            'fix': 'Set the ADMIN_PASSWORD environment variable to a secure password.',
+            'docs_link': '/PRODUCTION_DEPLOYMENT_GUIDE.md'
+        })
+    
+    if FLASK_SECRET_KEY == secrets.token_hex(32):
+        issues.append({
+            'severity': 'medium',
+            'title': 'Default Flask Secret Key',
+            'description': 'The application is using a dynamically generated Flask secret key, which will change on restart.',
+            'fix': 'Set the FLASK_SECRET_KEY environment variable to a static secure value.',
+            'docs_link': '/PRODUCTION_DEPLOYMENT_GUIDE.md'
+        })
+    
+    # Check VAPI configuration
+    if VAPI_SECRET == 'your_vapi_secret_here':
+        issues.append({
+            'severity': 'medium',
+            'title': 'Missing VAPI Secret',
+            'description': 'The VAPI_SECRET environment variable is not set or is using the default value.',
+            'fix': 'Set the VAPI_SECRET environment variable to your VAPI webhook secret for secure webhook verification.',
+            'docs_link': '/VAPI_WEBHOOK_INTEGRATION_GUIDE.md'
+        })
+    
+    # Check Flask-Migrate installation
+    try:
+        import flask_migrate
+    except ImportError:
+        if FLASK_ENV == 'production':
+            issues.append({
+                'severity': 'high',
+                'title': 'Flask-Migrate Not Installed',
+                'description': 'Flask-Migrate is not installed, which is required for database migrations in production.',
+                'fix': 'Install Flask-Migrate using pip: pip install Flask-Migrate',
+                'docs_link': '/RENDER_DEPLOYMENT_GUIDE.md'
+            })
+    
+    # Check for SQLAlchemy installation
+    try:
+        import flask_sqlalchemy
+    except ImportError:
+        issues.append({
+            'severity': 'critical',
+            'title': 'Flask-SQLAlchemy Not Installed',
+            'description': 'Flask-SQLAlchemy is not installed, which is required for database operations.',
+            'fix': 'Install Flask-SQLAlchemy using pip: pip install Flask-SQLAlchemy',
+            'docs_link': '/DATABASE_CONFIGURATION_GUIDE.md'
+        })
+    
+    return issues
+
 # System info route
 @app.route('/admin/system')
 def admin_system():
@@ -1222,24 +1422,48 @@ def admin_system():
                 'grade': student.get('grade', 'Unknown')
             }
         
+        # Check for environmental issues
+        environmental_issues = check_environmental_issues()
+        
         # Create some system events for the Recent events section
         system_events = [
             {
                 'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'type': 'SYSTEM',
-                'message': 'System page loaded successfully'
-            },
+                'message': 'System page loaded successfully',
+                'user': session.get('admin_username', 'System'),
+                'status': 'success'
+            }
+        ]
+        
+        # Add environmental issues to system events
+        for issue in environmental_issues:
+            status = 'error' if issue['severity'] in ['critical', 'high'] else 'warning'
+            system_events.append({
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'type': 'ENVIRONMENT',
+                'message': f"Environmental issue detected: {issue['title']}",
+                'user': 'System',
+                'status': status
+            })
+        
+        # Add other system events
+        system_events.extend([
             {
                 'timestamp': (datetime.now() - timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S'),
                 'type': 'INFO',
-                'message': 'Application started'
+                'message': 'Application started',
+                'user': 'System',
+                'status': 'success'
             },
             {
                 'timestamp': (datetime.now() - timedelta(minutes=10)).strftime('%Y-%m-%d %H:%M:%S'),
                 'type': 'DATABASE',
-                'message': 'Database connection established'
+                'message': 'Database connection established',
+                'user': 'System',
+                'status': 'success'
             }
-        ]
+        ])
         
         # Set feature flags to disable ALL unsupported features
         feature_flags = {
@@ -1280,7 +1504,8 @@ def admin_system():
                             mcp_port=3001,
                             vapi_status=vapi_client.is_configured(),
                             system_events=system_events,
-                            feature_flags=feature_flags)  # Pass feature flags to template
+                            feature_flags=feature_flags,
+                            environmental_issues=environmental_issues)  # Pass environmental issues to template
     except Exception as e:
         log_error('ADMIN', 'Error loading system page', e)
         flash(f'Error loading system information: {str(e)}', 'error')
