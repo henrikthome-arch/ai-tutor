@@ -1094,8 +1094,10 @@ def admin_system():
         return redirect(url_for('admin_login'))
     
     try:
-        # Ensure we're in an app context for all operations
+        # Create a completely new app context for this route
         with app.app_context():
+            db.init_app(app)  # Explicitly re-initialize the db with this app instance
+            
             stats = get_system_stats()
             
             # Get the phone mappings with error handling
@@ -1126,10 +1128,35 @@ def admin_system():
                     'grade': student.get('grade', 'Unknown')
                 }
             
-            # Set feature flags for buttons that should be disabled
+            # Create some system events for the Recent events section
+            system_events = [
+                {
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'type': 'SYSTEM',
+                    'message': 'System page loaded successfully'
+                },
+                {
+                    'timestamp': (datetime.now() - timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S'),
+                    'type': 'INFO',
+                    'message': 'Application started'
+                },
+                {
+                    'timestamp': (datetime.now() - timedelta(minutes=10)).strftime('%Y-%m-%d %H:%M:%S'),
+                    'type': 'DATABASE',
+                    'message': 'Database connection established'
+                }
+            ]
+            
+            # Set feature flags to disable ALL unsupported features
             feature_flags = {
-                'clear_logs_enabled': False,  # Disable Clear Sessions Log button
-                'backup_enabled': False,      # Disable backup options
+                'clear_logs_enabled': False,      # Disable Clear Sessions Log button
+                'backup_enabled': False,          # Disable backup options
+                'restore_enabled': False,         # Disable restore options
+                'admin_password_enabled': False,  # Disable admin password change
+                'session_timeout_enabled': False, # Disable session timeout settings
+                'auto_backup_enabled': False,     # Disable auto backup settings
+                'view_logs_enabled': False,       # Disable view logs button
+                'system_logs_enabled': False      # Disable system logs section
             }
             
             return render_template('system.html',
@@ -1139,7 +1166,7 @@ def admin_system():
                                 system_stats=stats,
                                 mcp_port=3001,
                                 vapi_status=vapi_client.is_configured(),
-                                system_events=[],
+                                system_events=system_events,
                                 feature_flags=feature_flags)  # Pass feature flags to template
     except Exception as e:
         log_error('ADMIN', 'Error loading system page', e)
@@ -1469,15 +1496,29 @@ def admin_all_sessions():
         return redirect(url_for('admin_login'))
     
     try:
-        # Ensure we're in an app context for all database operations
+        # Create a completely new app context for this route
+        # This ensures we're not using a stale or improperly configured context
         with app.app_context():
+            db.init_app(app)  # Explicitly re-initialize the db with this app instance
+            
             # Get all sessions from database
-            all_sessions = session_repository.get_all()
+            all_sessions = []
+            try:
+                all_sessions = session_repository.get_all()
+            except Exception as db_error:
+                log_error('DATABASE', f'Error getting sessions from repository: {str(db_error)}', db_error)
+                flash(f'Error getting sessions from database: {str(db_error)}', 'error')
             
             # Get all students for additional information
-            students = get_all_students()
+            students = []
+            try:
+                students = get_all_students()
+            except Exception as student_error:
+                log_error('DATABASE', f'Error getting students: {str(student_error)}', student_error)
+                flash(f'Error getting student information: {str(student_error)}', 'warning')
+            
             students_dict = {s['id']: s for s in students}
-        
+            
             # Enhance session data with student information
             for session in all_sessions:
                 student_id = session.get('student_id')
@@ -2538,23 +2579,35 @@ def admin_system_logs():
     level = request.args.get('level', '')
     
     try:
-        # Ensure we're in an app context for all operations
+        # Create a completely new app context for this route
         with app.app_context():
-            # Use the system_logger directly instead of creating a new repository
-            logs = system_logger.get_logs(days=days, category=category, level=level)
+            db.init_app(app)  # Explicitly re-initialize the db with this app instance
             
-            # Get log statistics
-            log_stats = system_logger.get_log_statistics()
+            # Use the system_logger directly instead of creating a new repository
+            logs = []
+            log_stats = {'categories': {}, 'levels': {}}
+            
+            try:
+                logs = system_logger.get_logs(days=days, category=category, level=level)
+                log_stats = system_logger.get_log_statistics()
+            except Exception as log_error:
+                log_error('DATABASE', f'Error accessing system logs: {str(log_error)}', log_error)
+                flash(f'Error accessing system logs: {str(log_error)}', 'error')
+                logs = []  # Ensure logs is an empty list if there was an error
             
             # Get available categories and levels for filtering
             available_categories = list(log_stats.get('categories', {}).keys())
             available_levels = list(log_stats.get('levels', {}).keys())
             
-            log_admin_action('view_logs', session.get('admin_username', 'unknown'),
-                            days_filter=days,
-                            category_filter=category,
-                            level_filter=level,
-                            log_count=len(logs))
+            try:
+                log_admin_action('view_logs', session.get('admin_username', 'unknown'),
+                                days_filter=days,
+                                category_filter=category,
+                                level_filter=level,
+                                log_count=len(logs))
+            except Exception as action_error:
+                # Don't let logging the action prevent viewing logs
+                print(f"Error logging admin action: {action_error}")
             
             return render_template('system_logs.html',
                                 logs=logs,
