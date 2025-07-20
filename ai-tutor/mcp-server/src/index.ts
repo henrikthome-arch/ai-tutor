@@ -451,52 +451,61 @@ app.get('/mcp/tools', (req, res) => {
 // MCP Tool: Get system logs
 app.post('/mcp/get-system-logs', validateToken('logs:read'), async (req, res) => {
   try {
-    const { date, level, limit = 100 } = req.body;
+    const { date, level, limit = 100, category } = req.body;
+    const days = req.body.days || 7;
     
-    // Construct the log file path based on the date
-    const logDate = date || new Date().toISOString().split('T')[0];
-    const logFilePath = `logs/${logDate}.jsonl`;
+    // Get the token from the request
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        error: 'No token provided'
+      });
+    }
+    
+    const token = authHeader.split(' ')[1];
+    
+    // Make a request to the admin server API
+    const apiUrl = new URL('http://localhost:5000/api/v1/logs');
+    
+    // Add query parameters
+    if (date) apiUrl.searchParams.append('date', date);
+    if (level) apiUrl.searchParams.append('level', level);
+    if (category) apiUrl.searchParams.append('category', category);
+    if (days) apiUrl.searchParams.append('days', days.toString());
+    if (limit) apiUrl.searchParams.append('limit', limit.toString());
     
     try {
-      // Read the log file
-      const logContent = await readTextFile(logFilePath);
-      
-      // Parse the JSONL content
-      const logs = logContent
-        .split('\n')
-        .filter(line => line.trim())
-        .map(line => JSON.parse(line));
-      
-      // Filter by level if specified
-      const filteredLogs = level
-        ? logs.filter(log => log.level === level)
-        : logs;
-      
-      // Apply limit
-      const limitedLogs = filteredLogs.slice(-Math.min(filteredLogs.length, limit));
-      
-      res.json({
-        success: true,
-        data: {
-          date: logDate,
-          count: limitedLogs.length,
-          logs: limitedLogs
+      // Use node-fetch to make the request
+      const fetch = (await import('node-fetch')).default;
+      const response = await fetch(apiUrl.toString(), {
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
       });
-    } catch (error) {
-      // If the log file doesn't exist or can't be read, return empty logs
-      if (error instanceof Error && error.message.includes('Failed to read file')) {
-        return res.json({
-          success: true,
-          data: {
-            date: logDate,
-            count: 0,
-            logs: [],
-            message: `No logs found for date: ${logDate}`
-          }
-        });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API request failed: ${response.status} ${response.statusText} - ${errorText}`);
       }
-      throw error;
+      
+      const apiResponse = await response.json();
+      
+      // Return the API response directly
+      return res.json(apiResponse);
+      
+    } catch (error) {
+      console.error('Error fetching logs from API:', error);
+      
+      // Fallback to empty logs if API is unavailable
+      return res.json({
+        success: true,
+        data: {
+          count: 0,
+          logs: [],
+          message: `Could not fetch logs from API: ${error instanceof Error ? error.message : 'Unknown error'}`
+        }
+      });
     }
   } catch (error) {
     console.error('Error retrieving system logs:', error);
