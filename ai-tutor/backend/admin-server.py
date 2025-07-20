@@ -205,6 +205,12 @@ app = Flask(__name__,
             template_folder='../frontend/templates',
             static_folder='../frontend/static')
 
+# Security Configuration with Environment Variables
+ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')  # Default for development only
+FLASK_SECRET_KEY = os.getenv('FLASK_SECRET_KEY', secrets.token_hex(32))
+FLASK_ENV = os.getenv('FLASK_ENV', 'development')
+
 # Set SQLAlchemy configuration
 # Get database URL from environment variable, with a fallback for local development
 database_url = os.getenv('DATABASE_URL')
@@ -300,11 +306,8 @@ try:
 except Exception as e:
     print(f"⚠️ Error initializing database with app: {e}")
 
-# Security Configuration with Environment Variables
-ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
-ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')  # Default for development only
-FLASK_SECRET_KEY = os.getenv('FLASK_SECRET_KEY', secrets.token_hex(32))
-FLASK_ENV = os.getenv('FLASK_ENV', 'development')
+# VAPI Configuration
+VAPI_SECRET = os.getenv('VAPI_SECRET', 'your_vapi_secret_here')
 
 # VAPI Configuration
 VAPI_SECRET = os.getenv('VAPI_SECRET', 'your_vapi_secret_here')
