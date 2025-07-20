@@ -205,7 +205,12 @@ app = Flask(__name__,
             static_folder='../frontend/static')
 
 # Set SQLAlchemy configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'  # Use in-memory SQLite
+# Get database URL from environment variable, with a fallback for local development
+database_url = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/ai_tutor')
+# Ensure the URL starts with postgresql:// (Render might provide postgres://)
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize the database with the app
