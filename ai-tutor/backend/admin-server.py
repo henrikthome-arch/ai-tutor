@@ -1397,6 +1397,61 @@ def admin_system():
         with app.app_context():
             stats = get_system_stats()
         
+        # Get database health information from health_check endpoint
+        try:
+            # Get database URL from app config
+            db_url = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+            
+            # Determine database type
+            if db_url.startswith('sqlite'):
+                db_type = 'sqlite'
+                db_url_info = 'sqlite database'
+            elif db_url.startswith('postgresql'):
+                db_type = 'postgresql'
+                # Mask sensitive information in the URL
+                url_parts = db_url.split('@')
+                if len(url_parts) > 1:
+                    # Only show host and database name, not credentials
+                    db_url_info = f"postgresql://****:****@{url_parts[1]}"
+                else:
+                    db_url_info = 'postgresql database (url format error)'
+            else:
+                db_type = 'unknown'
+                db_url_info = 'unknown database type'
+            
+            # Test database connection
+            db_connection_status = 'unknown'
+            db_error = None
+            try:
+                with app.app_context():
+                    # Try a simple query to test connection
+                    db.session.execute('SELECT 1').fetchall()
+                    db_connection_status = 'connected'
+            except Exception as e:
+                db_connection_status = 'error'
+                db_error = str(e)
+                log_error('SYSTEM', 'Database connection test failed', e)
+            
+            # Add database information to stats
+            stats['database'] = {
+                'type': db_type,
+                'url_info': db_url_info,
+                'connection_status': db_connection_status,
+                'error': db_error
+            }
+            
+            # Add environment information
+            stats['environment'] = FLASK_ENV
+            stats['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+        except Exception as e:
+            log_error('SYSTEM', 'Error getting database health information', e)
+            stats['database'] = {
+                'type': 'unknown',
+                'connection_status': 'error',
+                'error': str(e)
+            }
+        
         # Get the phone mappings with error handling
         try:
             # Try to get phone mappings from memory first
@@ -1439,6 +1494,24 @@ def admin_system():
             }
         ]
         
+        # Add database connection status to system events
+        if db_connection_status == 'connected':
+            system_events.append({
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'type': 'DATABASE',
+                'message': f'PostgreSQL database connection successful',
+                'user': 'System',
+                'status': 'success'
+            })
+        elif db_connection_status == 'error':
+            system_events.append({
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'type': 'DATABASE',
+                'message': f'PostgreSQL database connection error: {db_error}',
+                'user': 'System',
+                'status': 'error'
+            })
+        
         # Add environmental issues to system events
         for issue in environmental_issues:
             status = 'error' if issue['severity'] in ['critical', 'high'] else 'warning'
@@ -1449,24 +1522,6 @@ def admin_system():
                 'user': 'System',
                 'status': status
             })
-        
-        # Add other system events
-        system_events.extend([
-            {
-                'timestamp': (datetime.now() - timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S'),
-                'type': 'INFO',
-                'message': 'Application started',
-                'user': 'System',
-                'status': 'success'
-            },
-            {
-                'timestamp': (datetime.now() - timedelta(minutes=10)).strftime('%Y-%m-%d %H:%M:%S'),
-                'type': 'DATABASE',
-                'message': 'Database connection established',
-                'user': 'System',
-                'status': 'success'
-            }
-        ])
         
         # Set feature flags to disable ALL unsupported features
         feature_flags = {
@@ -2301,6 +2356,13 @@ def vapi_webhook():
             'all_header_names': list(request.headers.keys())
         }
         
+        # Enhanced logging for webhook debugging
+        log_webhook('webhook-received', 'VAPI webhook received - starting processing',
+                   ip_address=request.remote_addr,
+                   headers=str(headers_info),
+                   payload_size=len(payload))
+        print(f"📞 VAPI webhook received - payload size: {len(payload)} bytes")
+        
         # Verify signature
         if not verify_vapi_signature(payload, signature, headers_info):
             log_webhook('SECURITY_FAILURE', 'VAPI webhook signature verification failed',
@@ -2320,20 +2382,37 @@ def vapi_webhook():
         
         message = data.get('message', {})
         message_type = message.get('type')
+        call_id = message.get('call', {}).get('id') if isinstance(message, dict) else None
         
         log_webhook(message_type or 'unknown-event', f"VAPI webhook received: {message_type}",
                    ip_address=request.remote_addr,
-                   call_id=message.get('call', {}).get('id') if isinstance(message, dict) else None,
+                   call_id=call_id,
                    payload_size=len(payload))
-        print(f"📞 VAPI webhook received: {message_type}")
+        print(f"📞 VAPI webhook received: {message_type} (Call ID: {call_id})")
         
         # Only handle end-of-call-report - ignore all other events
         if message_type == 'end-of-call-report':
-            handle_end_of_call_api_driven(message)
+            # Use app context for database operations
+            with app.app_context():
+                log_webhook('processing-call', f"Processing end-of-call-report with app context",
+                           call_id=call_id)
+                print(f"📞 Processing end-of-call-report with app context (Call ID: {call_id})")
+                handle_end_of_call_api_driven(message)
+                # Explicitly commit any pending database transactions
+                try:
+                    db.session.commit()
+                    log_webhook('db-commit-success', f"Database transaction committed successfully",
+                               call_id=call_id)
+                    print(f"💾 Database transaction committed successfully (Call ID: {call_id})")
+                except Exception as commit_error:
+                    db.session.rollback()
+                    log_error('WEBHOOK', f"Error committing database transaction: {str(commit_error)}",
+                             commit_error, call_id=call_id)
+                    print(f"❌ Error committing database transaction: {commit_error}")
         else:
             # Log but ignore other events
             log_webhook('ignored-event', f"Ignored VAPI event: {message_type}",
-                       call_id=message.get('call', {}).get('id') if isinstance(message, dict) else None)
+                       call_id=call_id)
             print(f"📝 Ignored VAPI event: {message_type}")
         
         return jsonify({'status': 'ok'}), 200
@@ -2400,9 +2479,33 @@ def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
         print(f"📄 Transcript: {len(transcript) if transcript else 0} chars")
         
         # Student identification and session saving
-        student_id = identify_or_create_student(customer_phone, call_id)
-        save_api_driven_session(call_id, student_id, customer_phone,
-                               duration, transcript, call_data)
+        # We should already be in an app context from the vapi_webhook function
+        import flask
+        if not flask.has_app_context():
+            log_webhook('app-context-missing', f"No app context in handle_end_of_call_api_driven",
+                       call_id=call_id)
+            print(f"⚠️ No app context in handle_end_of_call_api_driven - this should not happen")
+            # We should already be in an app context, but just in case, create one
+            with app.app_context():
+                student_id = identify_or_create_student(customer_phone, call_id)
+                if student_id:
+                    save_api_driven_session(call_id, student_id, customer_phone,
+                                          duration, transcript, call_data)
+        else:
+            # Normal flow - we're already in an app context
+            student_id = identify_or_create_student(customer_phone, call_id)
+            if student_id:
+                log_webhook('student-identified', f"Student identified/created: {student_id}",
+                           call_id=call_id, phone=customer_phone)
+                print(f"👤 Student identified/created: {student_id}")
+                
+                # Save session data
+                save_api_driven_session(call_id, student_id, customer_phone,
+                                       duration, transcript, call_data)
+            else:
+                log_error('WEBHOOK', f"Failed to identify or create student for call {call_id}",
+                         ValueError("No student_id returned"), call_id=call_id, phone=customer_phone)
+                print(f"❌ Failed to identify or create student for call {call_id}")
         
         # Trigger AI analysis
         # Always analyze transcript for profile extraction regardless of length
@@ -2418,6 +2521,16 @@ def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
         log_error('WEBHOOK', f"Error in API-driven end-of-call handler", e,
                  call_id=call_id if 'call_id' in locals() else None)
         print(f"❌ API-driven handler error: {e}")
+        # Rollback any failed database transactions
+        try:
+            db.session.rollback()
+            log_webhook('db-rollback', f"Database transaction rolled back due to error",
+                       call_id=call_id if 'call_id' in locals() else None)
+            print(f"🔄 Database transaction rolled back due to error")
+        except Exception as rollback_error:
+            log_error('WEBHOOK', f"Error rolling back database transaction: {str(rollback_error)}",
+                     rollback_error, call_id=call_id if 'call_id' in locals() else None)
+            print(f"❌ Error rolling back database transaction: {rollback_error}")
 
 def save_vapi_session(call_id, student_id, phone, duration, user_transcript, assistant_transcript, full_message):
     """Save VAPI session data to database"""
@@ -2500,71 +2613,141 @@ def normalize_phone_number(phone_number: str) -> str:
 
 def identify_or_create_student(phone_number: str, call_id: str) -> str:
     """Identify existing student or create new one with better logic"""
-    if not phone_number:
-        return f"unknown_caller_{call_id}"
+    # Check if we're in an application context
+    import flask
+    has_app_context = flask.has_app_context()
+    if not has_app_context:
+        log_webhook('app-context-missing', f"No app context in identify_or_create_student - creating one",
+                   call_id=call_id)
+        print(f"⚠️ No app context in identify_or_create_student - creating one for call {call_id}")
     
-    # Clean and normalize phone number
-    clean_phone = normalize_phone_number(phone_number)
-    
-    # Log the exact lookup for debugging
-    log_webhook('phone-lookup', f"Looking up student by phone: {clean_phone}",
-               call_id=call_id, phone=clean_phone, original_phone=phone_number)
-    
-    # First check if we have a mapping in memory
-    student_id = phone_manager.get_student_by_phone(clean_phone)
-    
-    # If found, verify the student exists in the database
-    if student_id:
-        try:
-            # Verify student exists in database - ensure student_id is a string
-            student_id_str = str(student_id)
-            student = student_repository.get_by_id(student_id_str)
-            
-            if student:
-                log_webhook('student-identified', f"Found student {student_id_str} in database",
-                           call_id=call_id, student_id=student_id_str, phone=clean_phone)
+    try:
+        # Wrap everything in an app context if needed
+        context = app.app_context() if not has_app_context else None
+        if context:
+            context.push()
+            log_webhook('app-context-created', f"Created app context for identify_or_create_student",
+                       call_id=call_id)
+            print(f"🔄 Created app context for identify_or_create_student (Call ID: {call_id})")
+        
+        if not phone_number:
+            return f"unknown_caller_{call_id}"
+        
+        # Clean and normalize phone number
+        clean_phone = normalize_phone_number(phone_number)
+        
+        # Log the exact lookup for debugging
+        log_webhook('phone-lookup', f"Looking up student by phone: {clean_phone}",
+                   call_id=call_id, phone=clean_phone, original_phone=phone_number)
+        
+        # First check if we have a mapping in memory
+        student_id = phone_manager.get_student_by_phone(clean_phone)
+        
+        # If found, verify the student exists in the database
+        if student_id:
+            try:
+                # Verify student exists in database - ensure student_id is a string
+                student_id_str = str(student_id)
                 
-                # Get student name for logging
-                first_name = student.get('first_name', '')
-                last_name = student.get('last_name', '')
-                full_name = f"{first_name} {last_name}".strip() or 'Unknown'
+                # Explicitly use database transaction
+                try:
+                    student = student_repository.get_by_id(student_id_str)
+                    
+                    if student:
+                        log_webhook('student-identified', f"Found student {student_id_str} in database",
+                                   call_id=call_id, student_id=student_id_str, phone=clean_phone)
+                        
+                        # Get student name for logging
+                        first_name = student.get('first_name', '')
+                        last_name = student.get('last_name', '')
+                        full_name = f"{first_name} {last_name}".strip() or 'Unknown'
+                        
+                        print(f"👤 Found existing student: {full_name} (ID: {student_id_str})")
+                        return student_id_str
+                    else:
+                        # Student mapping exists but student doesn't exist in database
+                        log_webhook('student-mapping-orphaned', f"Phone mapping exists but student {student_id_str} not found in database",
+                                   call_id=call_id, student_id=student_id_str, phone=clean_phone)
+                        print(f"⚠️ Phone mapping exists but student {student_id_str} not found in database")
+                        
+                        # Remove orphaned mapping
+                        if clean_phone in phone_manager.phone_mapping:
+                            del phone_manager.phone_mapping[clean_phone]
+                            phone_manager.save_phone_mapping()
+                except Exception as db_error:
+                    # Rollback transaction on error
+                    db.session.rollback()
+                    log_error('DATABASE', f"Database error verifying student", db_error,
+                             call_id=call_id, student_id=student_id_str, phone=clean_phone)
+                    print(f"❌ Database error verifying student: {db_error}")
+                    raise  # Re-raise to be caught by outer exception handler
+            except Exception as e:
+                log_error('DATABASE', f"Error verifying student in database", e,
+                         call_id=call_id, student_id=student_id, phone=clean_phone)
+                print(f"⚠️ Error verifying student {student_id}: {e}")
                 
-                print(f"👤 Found existing student: {full_name} (ID: {student_id_str})")
-                return student_id_str
-            else:
-                # Student mapping exists but student doesn't exist in database
-                log_webhook('student-mapping-orphaned', f"Phone mapping exists but student {student_id_str} not found in database",
-                           call_id=call_id, student_id=student_id_str, phone=clean_phone)
-                print(f"⚠️ Phone mapping exists but student {student_id_str} not found in database")
-                
-                # Remove orphaned mapping
+                # Remove potentially problematic mapping
                 if clean_phone in phone_manager.phone_mapping:
                     del phone_manager.phone_mapping[clean_phone]
                     phone_manager.save_phone_mapping()
-        except Exception as e:
-            log_error('DATABASE', f"Error verifying student in database", e,
-                     call_id=call_id, student_id=student_id, phone=clean_phone)
-            print(f"⚠️ Error verifying student {student_id}: {e}")
-            
-            # Remove potentially problematic mapping
-            if clean_phone in phone_manager.phone_mapping:
-                del phone_manager.phone_mapping[clean_phone]
-                phone_manager.save_phone_mapping()
+        
+        # Create new student if not found
+        log_webhook('student-not-found', f"No student found for phone: {clean_phone}",
+                   call_id=call_id, phone=clean_phone)
+        
+        # Pass the normalized phone to create_student_from_call
+        new_student_id = create_student_from_call(clean_phone, call_id)
+        log_webhook('student-created', f"Created new student {new_student_id}",
+                   call_id=call_id, student_id=new_student_id, phone=clean_phone)
+        
+        return new_student_id
     
-    # Create new student if not found
-    log_webhook('student-not-found', f"No student found for phone: {clean_phone}",
-               call_id=call_id, phone=clean_phone)
+    except Exception as e:
+        log_error('WEBHOOK', f"Error in identify_or_create_student", e,
+                 call_id=call_id, phone=phone_number)
+        print(f"❌ Error in identify_or_create_student: {e}")
+        
+        # Ensure any transaction is rolled back
+        try:
+            db.session.rollback()
+            log_webhook('db-rollback', f"Database transaction rolled back due to error",
+                       call_id=call_id)
+            print(f"🔄 Database transaction rolled back due to error")
+        except Exception as rollback_error:
+            log_error('DATABASE', f"Error rolling back database transaction", rollback_error,
+                     call_id=call_id)
+            print(f"❌ Error rolling back database transaction: {rollback_error}")
+        
+        # Return a temporary ID as fallback
+        return f"temp_{call_id[-6:]}"
     
-    # Pass the normalized phone to create_student_from_call
-    new_student_id = create_student_from_call(clean_phone, call_id)
-    log_webhook('student-created', f"Created new student {new_student_id}",
-               call_id=call_id, student_id=new_student_id, phone=clean_phone)
-    
-    return new_student_id
+    finally:
+        # Pop the app context if we created one
+        if not has_app_context and 'context' in locals() and context:
+            context.pop()
+            log_webhook('app-context-removed', f"Removed app context for identify_or_create_student",
+                       call_id=call_id)
+            print(f"🔄 Removed app context for identify_or_create_student (Call ID: {call_id})")
 
 def create_student_from_call(phone: str, call_id: str) -> str:
     """Create a new student from phone call data using database"""
+    # Check if we're in an application context
+    import flask
+    has_app_context = flask.has_app_context()
+    if not has_app_context:
+        log_webhook('app-context-missing', f"No app context in create_student_from_call - creating one",
+                   call_id=call_id)
+        print(f"⚠️ No app context in create_student_from_call - creating one for call {call_id}")
+    
     try:
+        # Wrap everything in an app context if needed
+        context = app.app_context() if not has_app_context else None
+        if context:
+            context.push()
+            log_webhook('app-context-created', f"Created app context for create_student_from_call",
+                       call_id=call_id)
+            print(f"🔄 Created app context for create_student_from_call (Call ID: {call_id})")
+        
         # Ensure phone is normalized for consistent lookup and storage
         normalized_phone = normalize_phone_number(phone)
         
@@ -2592,44 +2775,105 @@ def create_student_from_call(phone: str, call_id: str) -> str:
             'age': None  # Default age
         }
         
-        # Create student in database
-        new_student = student_repository.create(student_data)
+        log_webhook('creating-student', f"Creating student in database",
+                   call_id=call_id, phone=normalized_phone)
+        print(f"👤 Creating new student for phone: {normalized_phone} (Call ID: {call_id})")
         
-        if not new_student:
-            log_error('DATABASE', f"Failed to create student in database", ValueError("Database operation failed"),
+        # Create student in database with explicit transaction management
+        try:
+            new_student = student_repository.create(student_data)
+            
+            # Explicitly commit the transaction
+            db.session.commit()
+            log_webhook('db-commit-success', f"Student database transaction committed successfully",
+                       call_id=call_id, phone=normalized_phone)
+            print(f"💾 Student database transaction committed successfully (Call ID: {call_id})")
+            
+            if not new_student:
+                log_error('DATABASE', f"Failed to create student in database", ValueError("Database operation failed"),
+                         call_id=call_id, phone=normalized_phone)
+                # Return a temporary ID for fallback
+                return f"temp_{call_id[-6:]}"
+        except Exception as db_error:
+            # Rollback transaction on error
+            db.session.rollback()
+            log_error('DATABASE', f"Error creating student in database", db_error,
                      call_id=call_id, phone=normalized_phone)
-            # Return a temporary ID for fallback
-            return f"temp_{call_id[-6:]}"
+            print(f"❌ Error creating student in database: {db_error}")
+            
+            # Re-raise to be caught by outer exception handler
+            raise
         
         # Ensure student_id is a string
         student_id = str(new_student['id'])
         
         # Add phone mapping using normalized phone number
         if normalized_phone:
-            # Log the exact phone number being mapped for debugging
-            log_webhook('phone-mapping', f"Adding phone mapping: {normalized_phone} → {student_id}",
-                        phone=normalized_phone, student_id=student_id)
-            
-            # Explicitly use string ID for phone mapping
-            phone_manager.add_phone_mapping(normalized_phone, student_id)
-            
-            # Log student creation for debugging
-            log_webhook('student-created', f"Created new student in database: {first_name} {last_name}",
-                       call_id=call_id, student_id=student_id, phone=normalized_phone)
-            print(f"👤 Created new student in database: {first_name} {last_name} (ID: {student_id})")
+            try:
+                # Log the exact phone number being mapped for debugging
+                log_webhook('phone-mapping', f"Adding phone mapping: {normalized_phone} → {student_id}",
+                            phone=normalized_phone, student_id=student_id)
+                
+                # Explicitly use string ID for phone mapping
+                phone_manager.add_phone_mapping(normalized_phone, student_id)
+                
+                # Log student creation for debugging
+                log_webhook('student-created', f"Created new student in database: {first_name} {last_name}",
+                           call_id=call_id, student_id=student_id, phone=normalized_phone)
+                print(f"👤 Created new student in database: {first_name} {last_name} (ID: {student_id})")
+            except Exception as mapping_error:
+                log_error('DATABASE', f"Error adding phone mapping for new student", mapping_error,
+                         call_id=call_id, student_id=student_id, phone=normalized_phone)
+                print(f"⚠️ Error adding phone mapping: {mapping_error}")
         
         return student_id
         
     except Exception as e:
         log_error('DATABASE', f"Error creating student from call", e,
                  call_id=call_id, phone=phone)
+        
+        # Ensure any transaction is rolled back
+        try:
+            db.session.rollback()
+            log_webhook('db-rollback', f"Database transaction rolled back due to error",
+                       call_id=call_id)
+            print(f"🔄 Database transaction rolled back due to error")
+        except Exception as rollback_error:
+            log_error('DATABASE', f"Error rolling back database transaction", rollback_error,
+                     call_id=call_id)
+            print(f"❌ Error rolling back database transaction: {rollback_error}")
+        
         # Return a temporary ID for fallback
         return f"temp_{call_id[-6:]}"
+    
+    finally:
+        # Pop the app context if we created one
+        if not has_app_context and 'context' in locals() and context:
+            context.pop()
+            log_webhook('app-context-removed', f"Removed app context for create_student_from_call",
+                       call_id=call_id)
+            print(f"🔄 Removed app context for create_student_from_call (Call ID: {call_id})")
 
 def save_api_driven_session(call_id: str, student_id: str, phone: str,
-                             duration: int, transcript: str, call_data: Dict[Any, Any]):
+                              duration: int, transcript: str, call_data: Dict[Any, Any]):
     """Save VAPI session data using API-fetched data to database"""
+    # Check if we're in an application context
+    import flask
+    has_app_context = flask.has_app_context()
+    if not has_app_context:
+        log_webhook('app-context-missing', f"No app context in save_api_driven_session - creating one",
+                   call_id=call_id, student_id=student_id)
+        print(f"⚠️ No app context in save_api_driven_session - creating one for call {call_id}")
+    
     try:
+        # Wrap everything in an app context if needed
+        context = app.app_context() if not has_app_context else None
+        if context:
+            context.push()
+            log_webhook('app-context-created', f"Created app context for save_api_driven_session",
+                       call_id=call_id, student_id=student_id)
+            print(f"🔄 Created app context for save_api_driven_session (Call ID: {call_id})")
+        
         # Create session data using API metadata
         metadata = vapi_client.extract_call_metadata(call_data)
         
@@ -2676,14 +2920,34 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
             'engagement_score': 75  # Default engagement score
         }
         
-        # Save session to database
-        new_session = session_repository.create(session_data)
+        log_webhook('creating-session', f"Creating session in database",
+                   call_id=call_id, student_id=student_id,
+                   session_type='phone', duration=effective_duration)
         
-        if not new_session:
-            log_error('DATABASE', f"Failed to create session in database", ValueError("Database operation failed"),
+        # Save session to database
+        try:
+            new_session = session_repository.create(session_data)
+            
+            # Explicitly commit the transaction
+            db.session.commit()
+            log_webhook('db-commit-success', f"Session database transaction committed successfully",
+                       call_id=call_id, student_id=student_id)
+            print(f"💾 Session database transaction committed successfully (Call ID: {call_id})")
+            
+            if not new_session:
+                log_error('DATABASE', f"Failed to create session in database", ValueError("Database operation failed"),
+                         call_id=call_id, student_id=student_id)
+                print(f"❌ Failed to save session to database")
+                return
+        except Exception as db_error:
+            # Rollback transaction on error
+            db.session.rollback()
+            log_error('DATABASE', f"Error creating session in database", db_error,
                      call_id=call_id, student_id=student_id)
-            print(f"❌ Failed to save session to database")
-            return
+            print(f"❌ Error creating session in database: {db_error}")
+            
+            # Re-raise to be caught by outer exception handler
+            raise
         
         # Always analyze transcript for profile information if there's content
         if transcript and len(transcript) > 100:  # Only analyze if there's meaningful content
@@ -2697,11 +2961,21 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
                 
                 extracted_info = analyzer.analyze_transcript(transcript, student_id)
                 if extracted_info:
-                    analyzer.update_student_profile(student_id, extracted_info)
-                    log_webhook('profile-updated', f"Updated student profile from transcript",
-                                call_id=call_id, student_id=student_id,
-                                extracted_info=extracted_info)
-                    print(f"👤 Updated profile for student {student_id} with extracted information: {extracted_info}")
+                    # Wrap profile update in try-except to handle database errors
+                    try:
+                        analyzer.update_student_profile(student_id, extracted_info)
+                        # Explicitly commit the profile update transaction
+                        db.session.commit()
+                        log_webhook('profile-updated', f"Updated student profile from transcript",
+                                    call_id=call_id, student_id=student_id,
+                                    extracted_info=extracted_info)
+                        print(f"👤 Updated profile for student {student_id} with extracted information: {extracted_info}")
+                    except Exception as profile_error:
+                        # Rollback transaction on error
+                        db.session.rollback()
+                        log_error('DATABASE', f"Error updating student profile", profile_error,
+                                 call_id=call_id, student_id=student_id)
+                        print(f"❌ Error updating student profile: {profile_error}")
                 else:
                     log_webhook('profile-no-info', f"No profile information extracted from transcript",
                                 call_id=call_id, student_id=student_id)
@@ -2722,6 +2996,24 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
         log_error('WEBHOOK', f"Error saving API-driven session for call {call_id}", e,
                   call_id=call_id, student_id=student_id)
         print(f"❌ Error saving API-driven session: {e}")
+        
+        # Ensure any transaction is rolled back
+        try:
+            db.session.rollback()
+            log_webhook('db-rollback', f"Database transaction rolled back due to error",
+                       call_id=call_id, student_id=student_id)
+            print(f"🔄 Database transaction rolled back due to error")
+        except Exception as rollback_error:
+            log_error('DATABASE', f"Error rolling back database transaction", rollback_error,
+                     call_id=call_id, student_id=student_id)
+            print(f"❌ Error rolling back database transaction: {rollback_error}")
+    finally:
+        # Pop the app context if we created one
+        if not has_app_context and 'context' in locals() and context:
+            context.pop()
+            log_webhook('app-context-removed', f"Removed app context for save_api_driven_session",
+                       call_id=call_id, student_id=student_id)
+            print(f"🔄 Removed app context for save_api_driven_session (Call ID: {call_id})")
 
 def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
     """Fallback to webhook-based processing when API is unavailable"""
