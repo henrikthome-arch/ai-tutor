@@ -199,16 +199,15 @@ except ImportError as e:
     AI_POC_AVAILABLE = False
     print(f"⚠️  AI POC not available: {e}")
 
-app = Flask(__name__,
-            template_folder='../frontend/templates',
-            static_folder='../frontend/static')
+# Create the Flask app using the app factory pattern
+from app import create_app
+app = create_app()
 
-# Initialize the database with the app
-try:
-    db.init_app(app)
-    print("🗄️ Database initialized with app")
-except Exception as e:
-    print(f"⚠️ Error initializing database with app: {e}")
+# Override template and static folders
+app.template_folder = '../frontend/templates'
+app.static_folder = '../frontend/static'
+
+print("🗄️ Flask app created using app factory pattern")
 
 # Security Configuration with Environment Variables
 ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
