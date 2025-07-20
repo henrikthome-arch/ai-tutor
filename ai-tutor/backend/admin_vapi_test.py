@@ -5,16 +5,18 @@ from datetime import datetime
 from sqlalchemy import text
 from flask import current_app
 
+# Import the database instance directly
+from app import db
+
 def check_system_logs_table():
     """Check if the system_logs table exists and return its status."""
     try:
-        with current_app.app_context():
-            db = current_app.extensions['sqlalchemy'].db
-            result = db.session.execute(text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'system_logs')")).scalar()
-            return {
-                "exists": bool(result),
-                "message": "System logs table exists" if result else "System logs table does not exist"
-            }
+        # Use direct database access
+        result = db.session.execute(text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'system_logs')")).scalar()
+        return {
+            "exists": bool(result),
+            "message": "System logs table exists" if result else "System logs table does not exist"
+        }
     except Exception as e:
         error_trace = traceback.format_exc()
         return {
@@ -77,18 +79,16 @@ def send_test_webhook(base_url=None):
 def check_webhook_logs():
     """Check if webhook logs were created for the test webhook."""
     try:
-        with current_app.app_context():
-            db = current_app.extensions['sqlalchemy'].db
-            # Check if any logs with 'test_call' in the message exist
-            result = db.session.execute(
-                text("SELECT COUNT(*) FROM system_logs WHERE message LIKE '%test_call%'")
-            ).scalar()
-            
-            return {
-                "success": result > 0,
-                "count": result,
-                "message": f"Found {result} webhook logs" if result > 0 else "No webhook logs found"
-            }
+        # Use direct database access
+        result = db.session.execute(
+            text("SELECT COUNT(*) FROM system_logs WHERE message LIKE '%test_call%'")
+        ).scalar()
+        
+        return {
+            "success": result > 0,
+            "count": result,
+            "message": f"Found {result} webhook logs" if result > 0 else "No webhook logs found"
+        }
     except Exception as e:
         error_trace = traceback.format_exc()
         return {
@@ -101,18 +101,16 @@ def check_webhook_logs():
 def check_test_student_created():
     """Check if a test student was created from the test webhook."""
     try:
-        with current_app.app_context():
-            db = current_app.extensions['sqlalchemy'].db
-            # Check if a student with phone number +1234567890 exists
-            result = db.session.execute(
-                text("SELECT COUNT(*) FROM students WHERE phone_number = '+1234567890'")
-            ).scalar()
-            
-            return {
-                "success": result > 0,
-                "count": result,
-                "message": f"Found {result} test students" if result > 0 else "No test students found"
-            }
+        # Use direct database access
+        result = db.session.execute(
+            text("SELECT COUNT(*) FROM students WHERE phone_number = '+1234567890'")
+        ).scalar()
+        
+        return {
+            "success": result > 0,
+            "count": result,
+            "message": f"Found {result} test students" if result > 0 else "No test students found"
+        }
     except Exception as e:
         error_trace = traceback.format_exc()
         return {
@@ -125,18 +123,16 @@ def check_test_student_created():
 def check_test_session_created():
     """Check if a test session was created from the test webhook."""
     try:
-        with current_app.app_context():
-            db = current_app.extensions['sqlalchemy'].db
-            # Check if a session with 'test_call' in the call_id exists
-            result = db.session.execute(
-                text("SELECT COUNT(*) FROM sessions WHERE call_id LIKE '%test_call%'")
-            ).scalar()
-            
-            return {
-                "success": result > 0,
-                "count": result,
-                "message": f"Found {result} test sessions" if result > 0 else "No test sessions found"
-            }
+        # Use direct database access
+        result = db.session.execute(
+            text("SELECT COUNT(*) FROM sessions WHERE call_id LIKE '%test_call%'")
+        ).scalar()
+        
+        return {
+            "success": result > 0,
+            "count": result,
+            "message": f"Found {result} test sessions" if result > 0 else "No test sessions found"
+        }
     except Exception as e:
         error_trace = traceback.format_exc()
         return {
