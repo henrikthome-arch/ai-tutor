@@ -19,6 +19,8 @@ class Session(db.Model):
     summary = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, server_default=func.now())
     updated_at = db.Column(db.DateTime, server_default=func.now(), onupdate=func.now())
+    topics_covered = db.Column(db.JSON, nullable=True)  # Store topics as JSON array
+    engagement_score = db.Column(db.Integer, nullable=True)  # Store engagement score
     
     # Relationships
     student = db.relationship('Student', back_populates='sessions')

@@ -267,22 +267,37 @@ try:
             # For PostgreSQL, we should use migrations
             try:
                 # Import Flask-Migrate components
-                from flask_migrate import Migrate, upgrade
+                from flask_migrate import Migrate, upgrade, init, migrate as migrate_cmd
                 
                 # Initialize Flask-Migrate
                 migrate = Migrate(app, db)
                 
-                # Check if migrations directory exists
+                # Check if migrations directory exists and has proper structure
                 migrations_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../migrations')
-                if not os.path.exists(migrations_dir):
-                    print("⚠️ Migrations directory not found, creating initial migration")
-                    # Import commands to create initial migration
-                    from flask_migrate import init, migrate as migrate_cmd
+                versions_dir = os.path.join(migrations_dir, 'versions')
+                
+                # Check if migrations need to be initialized or reset
+                migration_needs_init = (
+                    not os.path.exists(migrations_dir) or
+                    not os.path.exists(versions_dir) or
+                    len(os.listdir(versions_dir) if os.path.exists(versions_dir) else []) == 0
+                )
+                
+                if migration_needs_init:
+                    print("⚠️ Migrations directory not properly initialized, creating fresh migration")
+                    
+                    # If migrations directory exists but is incomplete, remove it
+                    if os.path.exists(migrations_dir):
+                        import shutil
+                        print(f"🗑️ Removing incomplete migrations directory: {migrations_dir}")
+                        shutil.rmtree(migrations_dir)
                     
                     # Initialize migrations
+                    print("🔄 Initializing migrations directory")
                     init(directory=migrations_dir)
                     
                     # Create initial migration
+                    print("🔄 Creating initial migration")
                     with app.app_context():
                         migrate_cmd(directory=migrations_dir, message="Initial migration")
                 
@@ -290,6 +305,33 @@ try:
                 print("🗄️ Running database migrations")
                 upgrade(directory=migrations_dir)
                 print("🗄️ Database migrations completed")
+                
+                # Verify tables exist
+                print("🔍 Verifying database tables...")
+                from sqlalchemy import inspect, text
+                inspector = inspect(db.engine)
+                expected_tables = ['system_logs', 'sessions', 'students', 'schools', 'curriculums', 'assessments']
+                missing_tables = []
+                
+                for table in expected_tables:
+                    if not inspector.has_table(table):
+                        missing_tables.append(table)
+                
+                if missing_tables:
+                    print(f"⚠️ Missing tables after migration: {', '.join(missing_tables)}")
+                    print("⚠️ Falling back to create_all() to ensure all tables exist")
+                    db.create_all()
+                    print("🗄️ Database tables created using create_all() (fallback)")
+                else:
+                    print("✅ All expected tables exist in the database")
+                    
+                # Test database connection with a simple query
+                try:
+                    db.session.execute(text('SELECT 1')).fetchall()
+                    print("✅ Database connection test successful")
+                except Exception as conn_error:
+                    print(f"❌ Database connection test failed: {conn_error}")
+                    
             except ImportError:
                 print("⚠️ Flask-Migrate not installed, falling back to create_all()")
                 # Fallback to create_all if Flask-Migrate is not available
@@ -305,6 +347,8 @@ try:
         print("🗄️ Database tables created/verified")
 except Exception as e:
     print(f"⚠️ Error initializing database with app: {e}")
+    import traceback
+    print(f"Stack trace: {traceback.format_exc()}")
 
 # VAPI Configuration
 VAPI_SECRET = os.getenv('VAPI_SECRET', 'your_vapi_secret_here')
