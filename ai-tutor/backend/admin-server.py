@@ -738,8 +738,15 @@ def admin_schools():
    if not check_auth():
        return redirect(url_for('admin_login'))
    
-   schools = get_all_schools()
-   return render_template('schools.html', schools=schools)
+   try:
+       # Use app context without reinitializing db
+       with app.app_context():
+           schools = get_all_schools()
+           return render_template('schools.html', schools=schools)
+   except Exception as e:
+       log_error('ADMIN', 'Error loading schools page', e)
+       flash(f'Error loading system information: {str(e)}', 'error')
+       return render_template('schools.html', schools=[])
 
 @app.route('/admin/schools/add', methods=['GET', 'POST'])
 def add_school():
@@ -977,7 +984,7 @@ def admin_database():
         return redirect(url_for('admin_login'))
     
     try:
-        # Ensure we're in an app context for all database operations
+        # Use app context without reinitializing db
         with app.app_context():
             # Get counts of each model
             stats = {
@@ -1011,7 +1018,7 @@ def admin_database_table(table):
         return redirect(url_for('admin_login'))
     
     try:
-        # Ensure we're in an app context for all database operations
+        # Use app context without reinitializing db
         with app.app_context():
             # Get table data based on table name
             if table == 'students':
@@ -1053,7 +1060,7 @@ def admin_database_view(table, item_id):
         return redirect(url_for('admin_login'))
     
     try:
-        # Ensure we're in an app context for all database operations
+        # Use app context without reinitializing db
         with app.app_context():
             # Get item data based on table name and ID
             item = None
@@ -1094,10 +1101,9 @@ def admin_system():
         return redirect(url_for('admin_login'))
     
     try:
-        # Create a completely new app context for this route
+        # Use app context without reinitializing db
         with app.app_context():
-            db.init_app(app)  # Explicitly re-initialize the db with this app instance
-            
+            # Don't reinitialize db, just use the existing instance
             stats = get_system_stats()
             
             # Get the phone mappings with error handling
@@ -1496,10 +1502,9 @@ def admin_all_sessions():
         return redirect(url_for('admin_login'))
     
     try:
-        # Create a completely new app context for this route
-        # This ensures we're not using a stale or improperly configured context
+        # Use app context without reinitializing db
         with app.app_context():
-            db.init_app(app)  # Explicitly re-initialize the db with this app instance
+            # Don't reinitialize db, just use the existing instance
             
             # Get all sessions from database
             all_sessions = []
@@ -2579,9 +2584,9 @@ def admin_system_logs():
     level = request.args.get('level', '')
     
     try:
-        # Create a completely new app context for this route
+        # Use app context without reinitializing db
         with app.app_context():
-            db.init_app(app)  # Explicitly re-initialize the db with this app instance
+            # Don't reinitialize db, just use the existing instance
             
             # Use the system_logger directly instead of creating a new repository
             logs = []
@@ -2701,7 +2706,7 @@ def admin_tokens():
         return redirect(url_for('admin_login'))
     
     try:
-        # Ensure we're in an app context for all operations
+        # Use app context without reinitializing db
         with app.app_context():
             # Get active tokens - handle the case where get_active_tokens might not exist
             if hasattr(token_service, 'get_active_tokens'):
@@ -2738,7 +2743,7 @@ def generate_token():
         return redirect(url_for('admin_login'))
     
     try:
-        # Ensure we're in an app context for all operations
+        # Use app context without reinitializing db
         with app.app_context():
             # Get form data
             token_name = request.form.get('token_name', 'Unnamed Token')
@@ -2792,7 +2797,7 @@ def revoke_token(token_id):
         return redirect(url_for('admin_login'))
     
     try:
-        # Ensure we're in an app context for all operations
+        # Use app context without reinitializing db
         with app.app_context():
             # Revoke token
             if token_service.revoke_token(token_id):
@@ -2853,22 +2858,24 @@ if __name__ == '__main__':
         with app.app_context():
             db.create_all()
             print("🗄️  Database tables created/verified")
+            
+            # Run initial cleanup in the same app context
+            try:
+                # Import and use the Celery task for log cleanup
+                from app.tasks.maintenance_tasks import cleanup_old_logs
+                from app.config import Config
+                
+                # Run cleanup task directly (not as a Celery task)
+                deleted_count = cleanup_old_logs(days=Config.LOG_RETENTION_DAYS)
+                
+                if deleted_count > 0:
+                    print(f"🧹 Initial cleanup: {deleted_count} old log entries removed")
+            except Exception as cleanup_e:
+                print(f"⚠️  Initial cleanup failed: {cleanup_e}")
+                log_error('DATABASE', 'Initial log cleanup failed', cleanup_e)
     except Exception as e:
         print(f"⚠️  Database initialization failed: {e}")
         log_error('DATABASE', 'Database initialization failed', e)
-    
-    # Run initial cleanup
-    try:
-        # Import and use the Celery task for log cleanup
-        from app.tasks.maintenance_tasks import cleanup_old_logs
-        from app.config import Config
-        
-        # Run cleanup task directly (not as a Celery task) within app context
-        with app.app_context():
-            deleted_count = cleanup_old_logs(days=Config.LOG_RETENTION_DAYS)
-            
-            if deleted_count > 0:
-                print(f"🧹 Initial cleanup: {deleted_count} old log entries removed")
     except Exception as e:
         print(f"⚠️  Initial cleanup failed: {e}")
         log_error('DATABASE', 'Initial log cleanup failed', e)
