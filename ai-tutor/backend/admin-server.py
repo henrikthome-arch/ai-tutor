@@ -337,7 +337,11 @@ def get_system_stats():
     """Get system statistics for dashboard from database"""
     try:
         # Get counts from database
-        total_students = Student.query.count()
+        try:
+            total_students = Student.query.count()
+        except Exception as e:
+            log_error('DATABASE', 'Error counting students', e)
+            total_students = 0
         
         # Count sessions today - handle datetime format issues
         try:
@@ -382,17 +386,28 @@ def get_system_stats():
             sessions_today = 0
         
         # Get total sessions
-        total_sessions = Session.query.count()
+        try:
+            total_sessions = Session.query.count()
+        except Exception as e:
+            log_error('DATABASE', 'Error counting total sessions', e)
+            total_sessions = 0
         
         # Get server status
         server_status = "Online"  # Assume online if we can query the database
+        
+        # Get phone mappings count with error handling
+        try:
+            phone_mappings_count = len(phone_manager.phone_mapping) if hasattr(phone_manager, 'phone_mapping') else 0
+        except Exception as e:
+            log_error('DATABASE', 'Error counting phone mappings', e)
+            phone_mappings_count = 0
         
         return {
             'total_students': total_students,
             'sessions_today': sessions_today,
             'total_sessions': total_sessions,
             'server_status': server_status,
-            'phone_mappings': len(phone_manager.phone_mapping) if hasattr(phone_manager, 'phone_mapping') else 0
+            'phone_mappings': phone_mappings_count
         }
     except Exception as e:
         print(f"Error getting system stats from database: {e}")
@@ -1101,79 +1116,85 @@ def admin_system():
         return redirect(url_for('admin_login'))
     
     try:
-        # Use app context without reinitializing db
-        with app.app_context():
-            # Don't reinitialize db, just use the existing instance
-            stats = get_system_stats()
-            
-            # Get the phone mappings with error handling
+        # Get system stats directly without using app context
+        # This avoids SQLAlchemy registration issues
+        stats = get_system_stats()
+        
+        # Get the phone mappings with error handling
+        try:
+            # Try to get phone mappings from memory first
+            phone_mappings = dict(phone_manager.phone_mapping)
+        except Exception as e:
+            # If that fails, try to load from disk
             try:
-                # Try to get phone mappings from memory first
-                phone_mappings = dict(phone_manager.phone_mapping)
-            except Exception as e:
-                # If that fails, try to load from disk
-                try:
-                    phone_mappings = phone_manager.load_phone_mapping()
-                except Exception as load_error:
-                    # If both fail, use an empty dictionary
-                    log_error('ADMIN', f'Error loading phone mappings: {str(load_error)}', load_error)
-                    phone_mappings = {}
+                phone_mappings = phone_manager.load_phone_mapping()
+            except Exception as load_error:
+                # If both fail, use an empty dictionary
+                log_error('ADMIN', f'Error loading phone mappings: {str(load_error)}', load_error)
+                phone_mappings = {}
+        
+        # Get students info for phone mapping display with proper field access
+        students = get_all_students()
+        students_info = {}
+        for student in students:
+            # Create proper name from first_name and last_name
+            first_name = student.get('first_name', '')
+            last_name = student.get('last_name', '')
+            full_name = f"{first_name} {last_name}".strip() or 'Unknown'
             
-            # Get students info for phone mapping display with proper field access
-            students = get_all_students()
-            students_info = {}
-            for student in students:
-                # Create proper name from first_name and last_name
-                first_name = student.get('first_name', '')
-                last_name = student.get('last_name', '')
-                full_name = f"{first_name} {last_name}".strip() or 'Unknown'
-                
-                students_info[student['id']] = {
-                    'name': full_name,
-                    'id': student['id'],
-                    'grade': student.get('grade', 'Unknown')
-                }
-            
-            # Create some system events for the Recent events section
-            system_events = [
-                {
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'type': 'SYSTEM',
-                    'message': 'System page loaded successfully'
-                },
-                {
-                    'timestamp': (datetime.now() - timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S'),
-                    'type': 'INFO',
-                    'message': 'Application started'
-                },
-                {
-                    'timestamp': (datetime.now() - timedelta(minutes=10)).strftime('%Y-%m-%d %H:%M:%S'),
-                    'type': 'DATABASE',
-                    'message': 'Database connection established'
-                }
-            ]
-            
-            # Set feature flags to disable ALL unsupported features
-            feature_flags = {
-                'clear_logs_enabled': False,      # Disable Clear Sessions Log button
-                'backup_enabled': False,          # Disable backup options
-                'restore_enabled': False,         # Disable restore options
-                'admin_password_enabled': False,  # Disable admin password change
-                'session_timeout_enabled': False, # Disable session timeout settings
-                'auto_backup_enabled': False,     # Disable auto backup settings
-                'view_logs_enabled': False,       # Disable view logs button
-                'system_logs_enabled': False      # Disable system logs section
+            students_info[student['id']] = {
+                'name': full_name,
+                'id': student['id'],
+                'grade': student.get('grade', 'Unknown')
             }
-            
-            return render_template('system.html',
-                                stats=stats,
-                                phone_mappings=phone_mappings,
-                                students_info=students_info,
-                                system_stats=stats,
-                                mcp_port=3001,
-                                vapi_status=vapi_client.is_configured(),
-                                system_events=system_events,
-                                feature_flags=feature_flags)  # Pass feature flags to template
+        
+        # Create some system events for the Recent events section
+        system_events = [
+            {
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'type': 'SYSTEM',
+                'message': 'System page loaded successfully'
+            },
+            {
+                'timestamp': (datetime.now() - timedelta(minutes=5)).strftime('%Y-%m-%d %H:%M:%S'),
+                'type': 'INFO',
+                'message': 'Application started'
+            },
+            {
+                'timestamp': (datetime.now() - timedelta(minutes=10)).strftime('%Y-%m-%d %H:%M:%S'),
+                'type': 'DATABASE',
+                'message': 'Database connection established'
+            }
+        ]
+        
+        # Set feature flags to disable ALL unsupported features
+        feature_flags = {
+            'clear_logs_enabled': False,      # Disable Clear Sessions Log button
+            'backup_enabled': False,          # Disable backup options
+            'restore_enabled': False,         # Disable restore options
+            'admin_password_enabled': False,  # Disable admin password change
+            'session_timeout_enabled': False, # Disable session timeout settings
+            'auto_backup_enabled': False,     # Disable auto backup settings
+            'view_logs_enabled': False,       # Disable view logs button
+            'system_logs_enabled': False      # Disable system logs section
+        }
+        
+        # Make sure server_status and status are set in stats
+        if 'server_status' not in stats:
+            stats['server_status'] = 'Online'
+        
+        # Add status attribute for compatibility with template
+        stats['status'] = stats.get('server_status', 'Online')
+        
+        return render_template('system.html',
+                            stats=stats,
+                            phone_mappings=phone_mappings,
+                            students_info=students_info,
+                            system_stats=stats,
+                            mcp_port=3001,
+                            vapi_status=vapi_client.is_configured(),
+                            system_events=system_events,
+                            feature_flags=feature_flags)  # Pass feature flags to template
     except Exception as e:
         log_error('ADMIN', 'Error loading system page', e)
         flash(f'Error loading system information: {str(e)}', 'error')
@@ -1502,19 +1523,16 @@ def admin_all_sessions():
         return redirect(url_for('admin_login'))
     
     try:
-        # Use app context without reinitializing db
-        with app.app_context():
-            # Don't reinitialize db, just use the existing instance
-            
-            # Get all sessions from database
-            all_sessions = []
-            try:
-                all_sessions = session_repository.get_all()
-            except Exception as db_error:
-                log_error('DATABASE', f'Error getting sessions from repository: {str(db_error)}', db_error)
-                flash(f'Error getting sessions from database: {str(db_error)}', 'error')
-            
-            # Get all students for additional information
+        # Get all sessions from database directly without using app context
+        # This avoids SQLAlchemy registration issues
+        all_sessions = []
+        try:
+            all_sessions = session_repository.get_all()
+        except Exception as db_error:
+            log_error('DATABASE', f'Error getting sessions from repository: {str(db_error)}', db_error)
+            flash(f'Error getting sessions from database: {str(db_error)}', 'error')
+        
+        # Get all students for additional information
             students = []
             try:
                 students = get_all_students()
