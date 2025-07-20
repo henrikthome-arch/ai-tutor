@@ -113,18 +113,41 @@
         
         <div style="padding: 1rem; border: 2px solid #27ae60; border-radius: 4px; background: #f0f9f0;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                <span style="font-weight: 600;">Data Directory</span>
-                <span style="color: #27ae60; font-size: 1.2rem;">✅</span>
-            </div>
-            <p style="color: #666; font-size: 0.9rem; margin: 0;">Accessible and writable</p>
-        </div>
-        
-        <div style="padding: 1rem; border: 2px solid #27ae60; border-radius: 4px; background: #f0f9f0;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                 <span style="font-weight: 600;">Admin Dashboard</span>
                 <span style="color: #27ae60; font-size: 1.2rem;">✅</span>
             </div>
             <p style="color: #666; font-size: 0.9rem; margin: 0;">Online and responsive</p>
+        </div>
+        
+        <div style="padding: 1rem; border: 2px solid
+            {% if system_stats.database and system_stats.database.connection_status == 'connected' %}#27ae60
+            {% elif system_stats.database and system_stats.database.connection_status == 'error' %}#e74c3c
+            {% else %}#f39c12{% endif %};
+            border-radius: 4px; background:
+            {% if system_stats.database and system_stats.database.connection_status == 'connected' %}#f0f9f0
+            {% elif system_stats.database and system_stats.database.connection_status == 'error' %}#fef5f5
+            {% else %}#fef9e7{% endif %};">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <span style="font-weight: 600;">PostgreSQL Database</span>
+                <span style="color:
+                    {% if system_stats.database and system_stats.database.connection_status == 'connected' %}#27ae60
+                    {% elif system_stats.database and system_stats.database.connection_status == 'error' %}#e74c3c
+                    {% else %}#f39c12{% endif %};
+                    font-size: 1.2rem;">
+                    {% if system_stats.database and system_stats.database.connection_status == 'connected' %}✅
+                    {% elif system_stats.database and system_stats.database.connection_status == 'error' %}❌
+                    {% else %}⚠️{% endif %}
+                </span>
+            </div>
+            <p style="color: #666; font-size: 0.9rem; margin: 0;">
+                {% if system_stats.database and system_stats.database.connection_status == 'connected' %}
+                    Connected and operational
+                {% elif system_stats.database and system_stats.database.connection_status == 'error' %}
+                    Connection error: {{ system_stats.database.error }}
+                {% else %}
+                    Status unknown
+                {% endif %}
+            </p>
         </div>
         
         <div style="padding: 1rem; border: 2px solid {% if vapi_status %}#27ae60{% else %}#f39c12{% endif %}; border-radius: 4px; background: {% if vapi_status %}#f0f9f0{% else %}#fef9e7{% endif %};">
@@ -140,6 +163,11 @@
         </div>
     </div>
 </div>
+
+{% if vapi_test_enabled %}
+<!-- VAPI Webhook Testing Section -->
+{% include 'vapi_test_section.html' %}
+{% endif %}
 
 {% if environmental_issues %}
 <div class="card" style="margin-top: 2rem;">
@@ -201,20 +229,12 @@
                 📋 View System Logs
             </a>
             
-            <button class="btn" onclick="alert('Backup functionality coming in Phase 2!')">
-                💾 Create Backup
-            </button>
-            
-            <button class="btn" style="background: #f39c12;" onclick="alert('Restore functionality coming in Phase 2!')">
-                📥 Restore from Backup
-            </button>
-            
-            <button class="btn" style="background: #e74c3c;" onclick="if(confirm('This will clear all session logs. Are you sure?')) alert('Clear logs functionality coming in Phase 2!')">
-                🗑️ Clear Session Logs
-            </button>
-            
             <a href="{{ url_for('admin_database') }}" class="btn" style="background: #3498db;">
                 📂 Browse Database
+            </a>
+            
+            <a href="{{ url_for('health_check') }}" target="_blank" class="btn" style="background: #27ae60;">
+                🔍 View Detailed Health Check
             </a>
         </div>
     </div>
@@ -222,39 +242,27 @@
     <div class="card">
         <h2>⚙️ Configuration</h2>
         <div style="display: flex; flex-direction: column; gap: 1rem;">
-            <div>
-                <label style="font-weight: 600; color: #666;">Admin Password</label>
-                <div style="display: flex; gap: 1rem; margin-top: 5px;">
-                    <button class="btn" onclick="alert('Change password functionality coming in Phase 2!')">
-                        🔑 Change Password
-                    </button>
-                </div>
+            <div style="padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+                <p style="color: #666; margin: 0;">
+                    <strong>Environment:</strong> {{ system_stats.environment or 'Unknown' }}
+                </p>
             </div>
             
-            <div>
-                <label style="font-weight: 600; color: #666;">Session Timeout</label>
-                <div style="display: flex; gap: 1rem; margin-top: 5px; align-items: center;">
-                    <input type="number" value="30" min="5" max="120" style="width: 80px; padding: 6px;">
-                    <span style="color: #666;">minutes</span>
-                    <button class="btn" onclick="alert('Update timeout functionality coming in Phase 2!')">
-                        💾 Update
-                    </button>
-                </div>
+            <div style="padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+                <p style="color: #666; margin: 0;">
+                    <strong>Database Type:</strong>
+                    {% if system_stats.database and system_stats.database.type %}
+                        {{ system_stats.database.type }}
+                    {% else %}
+                        Unknown
+                    {% endif %}
+                </p>
             </div>
             
-            <div>
-                <label style="font-weight: 600; color: #666;">Auto-backup</label>
-                <div style="display: flex; gap: 1rem; margin-top: 5px; align-items: center;">
-                    <select style="padding: 6px;">
-                        <option>Daily</option>
-                        <option>Weekly</option>
-                        <option>Monthly</option>
-                        <option>Disabled</option>
-                    </select>
-                    <button class="btn" onclick="alert('Update auto-backup functionality coming in Phase 2!')">
-                        💾 Update
-                    </button>
-                </div>
+            <div style="padding: 1rem; background: #f8f9fa; border-radius: 4px;">
+                <p style="color: #666; margin: 0;">
+                    <strong>Server Time:</strong> {{ system_stats.timestamp or 'Unknown' }}
+                </p>
             </div>
         </div>
     </div>

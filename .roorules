@@ -1,0 +1,5 @@
+Do not use && commands in terminal as it isn't supported.
+Remember that the code runs on render.com. Testing has to be done there. Testing cannot be done before code has been pushed.
+The solution uses a postgreSQL database for alls torage
+Always refer to the architectural document and the requirements in the root folder.
+Break tasks into smaller tasks.

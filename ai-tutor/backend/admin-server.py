@@ -4,6 +4,9 @@ AI Tutor Admin Dashboard
 Flask web interface for managing students, sessions, and system data
 """
 
+# Import VAPI test module
+from admin_vapi_test import run_vapi_integration_test
+
 import os
 import json
 import hashlib
@@ -320,10 +323,52 @@ try:
                 if missing_tables:
                     print(f"⚠️ Missing tables after migration: {', '.join(missing_tables)}")
                     print("⚠️ Falling back to create_all() to ensure all tables exist")
+                    
+                    # Add direct SQL commands to create missing tables
+                    if 'system_logs' in missing_tables:
+                        print("🔧 Explicitly creating system_logs table with direct SQL")
+                        try:
+                            # Create system_logs table with direct SQL
+                            system_logs_sql = """
+                            CREATE TABLE IF NOT EXISTS system_logs (
+                                id SERIAL PRIMARY KEY,
+                                timestamp TIMESTAMP NOT NULL,
+                                level VARCHAR(20) NOT NULL,
+                                category VARCHAR(50) NOT NULL,
+                                message TEXT NOT NULL,
+                                data JSONB,
+                                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                            );
+                            """
+                            db.session.execute(text(system_logs_sql))
+                            db.session.commit()
+                            print("✅ system_logs table created successfully with direct SQL")
+                            log_system("system_logs table created with direct SQL", level="INFO")
+                        except Exception as sql_error:
+                            print(f"❌ Error creating system_logs table with direct SQL: {sql_error}")
+                            log_system(f"Error creating system_logs table with direct SQL: {sql_error}", level="ERROR")
+                            db.session.rollback()
+                    
+                    # Fall back to create_all for any remaining tables
                     db.create_all()
                     print("🗄️ Database tables created using create_all() (fallback)")
+                    
+                    # Verify tables again after direct creation
+                    inspector = inspect(db.engine)
+                    still_missing = []
+                    for table in expected_tables:
+                        if not inspector.has_table(table):
+                            still_missing.append(table)
+                    
+                    if still_missing:
+                        print(f"⚠️ Tables still missing after direct creation: {', '.join(still_missing)}")
+                        log_system(f"Tables still missing after direct creation: {', '.join(still_missing)}", level="ERROR")
+                    else:
+                        print("✅ All expected tables exist after direct creation")
+                        log_system("All expected tables created successfully", level="INFO")
                 else:
                     print("✅ All expected tables exist in the database")
+                    log_system("All expected tables verified in database", level="INFO")
                     
                 # Test database connection with a simple query
                 try:
@@ -1609,7 +1654,8 @@ def admin_system():
                             vapi_status=vapi_client.is_configured(),
                             system_events=system_events,
                             feature_flags=feature_flags,
-                            environmental_issues=environmental_issues)  # Pass environmental issues to template
+                            environmental_issues=environmental_issues,
+                            vapi_test_enabled=True)  # Enable VAPI test section
     except Exception as e:
         log_error('ADMIN', 'Error loading system page', e)
         flash(f'Error loading system information: {str(e)}', 'error')
@@ -3505,9 +3551,11 @@ def admin_system_logs():
             try:
                 logs = system_logger.get_logs(days=days, category=category, level=level)
                 log_stats = system_logger.get_log_statistics()
-            except Exception as log_error:
-                log_error('DATABASE', f'Error accessing system logs: {str(log_error)}', log_error)
-                flash(f'Error accessing system logs: {str(log_error)}', 'error')
+            except Exception as e:
+                # Use the imported log_error function, not a local variable
+                from system_logger import log_error as logger_error
+                logger_error('DATABASE', f'Error accessing system logs: {str(e)}', e)
+                flash(f'Error accessing system logs: {str(e)}', 'error')
                 logs = []  # Ensure logs is an empty list if there was an error
             
             # Get available categories and levels for filtering
@@ -3535,8 +3583,10 @@ def admin_system_logs():
                                     'level': level
                                 })
     except Exception as e:
+        # Use the imported log_error function
+        from system_logger import log_error as logger_error
         flash(f'Error retrieving logs: {str(e)}', 'error')
-        log_error('DATABASE', 'Error retrieving logs', e)
+        logger_error('DATABASE', 'Error retrieving logs', e)
         return render_template('system_logs.html',
                             logs=[],
                             log_stats={},
@@ -3585,6 +3635,37 @@ def export_logs():
         log_error('DATABASE', 'Error exporting logs', e)
         return redirect(url_for('admin_system_logs'))
 
+
+# VAPI Test Route
+@app.route('/admin/vapi-test', methods=['POST'])
+def admin_vapi_test():
+    """Test VAPI webhook integration"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        # Get the base URL from the request or config
+        base_url = request.json.get('base_url') if request.is_json else None
+        
+        # If no base URL was provided, try to get it from the config
+        if not base_url:
+            base_url = app.config.get('BASE_URL')
+            
+        # Run the VAPI integration test
+        results = run_vapi_integration_test(base_url)
+        
+        # Log the results
+        log_admin_action('vapi_test', session.get('admin_username', 'unknown'),
+                        success=results['overall_success'],
+                        test_details=results)
+        
+        return jsonify(results)
+    except Exception as e:
+        log_error('ADMIN', f'Error in VAPI test route: {str(e)}', e)
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
 
 @app.route('/admin/logs/cleanup', methods=['POST'])
 def cleanup_system_logs():

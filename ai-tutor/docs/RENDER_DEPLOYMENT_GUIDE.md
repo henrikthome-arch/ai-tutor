@@ -50,6 +50,8 @@ Build Command: pip install -r requirements.txt && python -m flask db upgrade
 Start Command: python run.py
 ```
 
+**Important**: Ensure your `requirements.txt` includes `Flask-Migrate` for database migrations. The application will automatically handle database migrations during startup, but the build command also includes a migration step to ensure tables are created before the application starts.
+
 4. **Add Environment Variables**:
    - Click "Advanced" → "Add Environment Variable"
    - Add `DATABASE_URL` with the value of your Internal Database URL (with `postgresql://`)

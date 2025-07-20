@@ -1,0 +1,133 @@
+<!-- Add this to the system.html template -->
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-phone-alt me-2"></i> VAPI Webhook Testing
+        </h5>
+    </div>
+    <div class="card-body">
+        <p>Test the VAPI webhook integration to ensure it's working correctly. This will:</p>
+        <ul>
+            <li>Verify the system_logs table exists</li>
+            <li>Send a test webhook to the VAPI webhook endpoint</li>
+            <li>Check if webhook logs are created</li>
+            <li>Check if a test student is created</li>
+            <li>Check if a test session is created</li>
+        </ul>
+        
+        <div class="mb-3">
+            <label for="baseUrl" class="form-label">Base URL (optional)</label>
+            <input type="text" class="form-control" id="baseUrl" placeholder="https://your-deployment-url.onrender.com">
+            <div class="form-text">Leave blank to use the current host URL.</div>
+        </div>
+        
+        <button id="testVapiBtn" class="btn btn-primary">
+            <i class="fas fa-vial me-2"></i> Run VAPI Integration Test
+        </button>
+        
+        <div id="vapiTestResults" class="mt-4" style="display: none;">
+            <h6>Test Results</h6>
+            <div class="alert" id="vapiTestAlert" role="alert"></div>
+            
+            <div class="accordion" id="vapiTestAccordion">
+                <!-- Test steps will be added here dynamically -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add this JavaScript to the bottom of the template -->
+<script>
+    $(document).ready(function() {
+        $('#testVapiBtn').click(function() {
+            // Show loading state
+            $(this).prop('disabled', true);
+            $(this).html('<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Running test...');
+            
+            // Clear previous results
+            $('#vapiTestResults').hide();
+            $('#vapiTestAccordion').empty();
+            
+            // Get the base URL
+            const baseUrl = $('#baseUrl').val();
+            
+            // Send the test request
+            $.ajax({
+                url: '/admin/system/test-vapi',
+                type: 'POST',
+                data: { base_url: baseUrl },
+                success: function(response) {
+                    // Show results
+                    $('#vapiTestResults').show();
+                    
+                    // Set overall status
+                    if (response.success) {
+                        $('#vapiTestAlert').removeClass('alert-danger').addClass('alert-success')
+                            .html('<i class="fas fa-check-circle me-2"></i> VAPI webhook integration is working correctly!');
+                    } else {
+                        $('#vapiTestAlert').removeClass('alert-success').addClass('alert-danger')
+                            .html('<i class="fas fa-exclamation-circle me-2"></i> VAPI webhook integration test failed. See details below.');
+                    }
+                    
+                    // Add test steps to accordion
+                    response.steps.forEach(function(step, index) {
+                        const stepId = `step${index}`;
+                        const stepSuccess = step.name === 'Check system_logs table' ? 
+                            step.result.exists : 
+                            (step.result.success !== false && step.result.error === undefined);
+                        
+                        const stepHtml = `
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="heading${stepId}">
+                                    <button class="accordion-button ${index === 0 ? '' : 'collapsed'}" type="button" 
+                                            data-bs-toggle="collapse" data-bs-target="#collapse${stepId}" 
+                                            aria-expanded="${index === 0 ? 'true' : 'false'}" aria-controls="collapse${stepId}">
+                                        <span class="me-2">
+                                            <i class="fas ${stepSuccess ? 'fa-check-circle text-success' : 'fa-times-circle text-danger'}"></i>
+                                        </span>
+                                        ${step.name}
+                                    </button>
+                                </h2>
+                                <div id="collapse${stepId}" class="accordion-collapse collapse ${index === 0 ? 'show' : ''}" 
+                                     aria-labelledby="heading${stepId}" data-bs-parent="#vapiTestAccordion">
+                                    <div class="accordion-body">
+                                        <pre class="bg-light p-3 rounded">${JSON.stringify(step.result, null, 2)}</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        
+                        $('#vapiTestAccordion').append(stepHtml);
+                    });
+                },
+                error: function(xhr, status, error) {
+                    // Show error
+                    $('#vapiTestResults').show();
+                    $('#vapiTestAlert').removeClass('alert-success').addClass('alert-danger')
+                        .html(`<i class="fas fa-exclamation-circle me-2"></i> Error running test: ${error}`);
+                    
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        $('#vapiTestAccordion').html(`
+                            <div class="alert alert-danger">
+                                <pre>${JSON.stringify(response, null, 2)}</pre>
+                            </div>
+                        `);
+                    } catch (e) {
+                        $('#vapiTestAccordion').html(`
+                            <div class="alert alert-danger">
+                                <p>Server returned an error: ${xhr.status} ${xhr.statusText}</p>
+                            </div>
+                        `);
+                    }
+                },
+                complete: function() {
+                    // Reset button
+                    $('#testVapiBtn').prop('disabled', false)
+                        .html('<i class="fas fa-vial me-2"></i> Run VAPI Integration Test');
+                }
+            });
+        });
+    });
+</script>
