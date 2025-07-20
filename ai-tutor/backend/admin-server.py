@@ -261,201 +261,60 @@ try:
     
     # Create database tables if they don't exist
     with app.app_context():
-        # Check if we're using SQLite (development) or PostgreSQL (production)
-        if database_url.startswith('sqlite'):
-            # For SQLite, we can use create_all() directly
-            db.create_all()
-            print("🗄️ Database tables created using create_all() (SQLite)")
-        else:
-            # For PostgreSQL, check for the problematic revision immediately and bypass migrations entirely if found
-            print("🗄️ Setting up PostgreSQL database...")
-            
-            # First, check if the known problematic revision error would occur
-            use_migrations = True
-            
-            try:
-                # Try importing Flask-Migrate first
-                from flask_migrate import Migrate, upgrade, init, migrate as migrate_cmd
-                
-                # Check for the known revision issue by testing a simple migration command
-                migrations_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../migrations')
-                
-                # If migrations directory exists, check if the problematic revision is referenced
-                if os.path.exists(migrations_dir):
-                    try:
-                        # Quick test to see if the revision error would occur
-                        # This is a lightweight check before committing to the full migration process
-                        import subprocess
-                        import tempfile
-                        
-                        # Create a simple alembic command to test for the revision error
-                        test_result = subprocess.run(
-                            ['python', '-c', f"""
-import os
-os.chdir('{os.path.dirname(migrations_dir)}')
-try:
-    from flask_migrate import current
-    from {os.path.basename(__file__)[:-3]} import app
-    with app.app_context():
-        current(directory='{migrations_dir}')
-except Exception as e:
-    if "Can't locate revision identified by '7af00b8120d1'" in str(e):
-        print("REVISION_ERROR_DETECTED")
-    else:
-        print("OTHER_ERROR")
-"""],
-                            capture_output=True, text=True, timeout=10, cwd=os.path.dirname(os.path.abspath(__file__))
-                        )
-                        
-                        if "REVISION_ERROR_DETECTED" in test_result.stdout:
-                            print("⚠️ Detected known revision error in existing migrations")
-                            print("⚠️ Bypassing Flask-Migrate entirely and using direct table creation")
-                            use_migrations = False
-                    except (subprocess.TimeoutExpired, subprocess.SubprocessError, Exception) as e:
-                        print(f"⚠️ Migration test failed: {e}")
-                        print("⚠️ Being cautious and bypassing migrations")
-                        use_migrations = False
-                
-                if use_migrations:
-                    print("🔄 Attempting to use Flask-Migrate")
-                    
-                    # Initialize Flask-Migrate
-                    migrate = Migrate(app, db)
-                    
-                    # Check if migrations need to be initialized or reset
-                    versions_dir = os.path.join(migrations_dir, 'versions')
-                    migration_needs_init = (
-                        not os.path.exists(migrations_dir) or
-                        not os.path.exists(versions_dir) or
-                        len(os.listdir(versions_dir) if os.path.exists(versions_dir) else []) == 0
-                    )
-                    
-                    if migration_needs_init:
-                        print("⚠️ Migrations directory not properly initialized, creating fresh migration")
-                        
-                        # If migrations directory exists but is incomplete, remove it
-                        if os.path.exists(migrations_dir):
-                            import shutil
-                            print(f"🗑️ Removing incomplete migrations directory: {migrations_dir}")
-                            shutil.rmtree(migrations_dir)
-                        
-                        # Initialize migrations
-                        print("🔄 Initializing migrations directory")
-                        init(directory=migrations_dir)
-                        
-                        # Create initial migration
-                        print("🔄 Creating initial migration")
-                        migrate_cmd(directory=migrations_dir, message="Initial migration")
-                    
-                    # Try to run migrations with comprehensive error handling
-                    print("🗄️ Running database migrations")
-                    try:
-                        upgrade(directory=migrations_dir)
-                        print("✅ Database migrations completed successfully")
-                    except Exception as upgrade_error:
-                        # Check for the specific revision error
-                        if "Can't locate revision identified by '7af00b8120d1'" in str(upgrade_error):
-                            print(f"⚠️ Known migration revision error detected: {upgrade_error}")
-                            print("⚠️ Bypassing Flask-Migrate and using direct table creation")
-                            use_migrations = False
-                        else:
-                            print(f"⚠️ Other migration error: {upgrade_error}")
-                            print("⚠️ Bypassing Flask-Migrate and using direct table creation")
-                            use_migrations = False
-                
-            except ImportError:
-                print("⚠️ Flask-Migrate not installed, using direct table creation")
-                use_migrations = False
-            except Exception as migration_error:
-                print(f"⚠️ Error with migration system: {migration_error}")
-                print("⚠️ Bypassing Flask-Migrate and using direct table creation")
-                use_migrations = False
-            
-            # If migrations failed or are bypassed, use direct table creation
-            if not use_migrations:
-                print("🗄️ Using direct table creation (bypassing migrations)")
-                db.create_all()
-                print("✅ Database tables created using create_all()")
-                
-                # Verify tables exist
-                print("🔍 Verifying database tables...")
-                from sqlalchemy import inspect, text
-                inspector = inspect(db.engine)
-                expected_tables = ['system_logs', 'sessions', 'students', 'schools', 'curriculums', 'assessments']
-                missing_tables = []
-                
-                for table in expected_tables:
-                    if not inspector.has_table(table):
-                        missing_tables.append(table)
-                
-                if missing_tables:
-                    print(f"⚠️ Missing tables after migration: {', '.join(missing_tables)}")
-                    print("⚠️ Falling back to create_all() to ensure all tables exist")
-                    
-                    # Add direct SQL commands to create missing tables
-                    if 'system_logs' in missing_tables:
-                        print("🔧 Explicitly creating system_logs table with direct SQL")
-                        try:
-                            # Create system_logs table with direct SQL
-                            system_logs_sql = """
-                            CREATE TABLE IF NOT EXISTS system_logs (
-                                id SERIAL PRIMARY KEY,
-                                timestamp TIMESTAMP NOT NULL,
-                                level VARCHAR(20) NOT NULL,
-                                category VARCHAR(50) NOT NULL,
-                                message TEXT NOT NULL,
-                                data JSONB,
-                                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                            );
-                            """
-                            db.session.execute(text(system_logs_sql))
-                            db.session.commit()
-                            print("✅ system_logs table created successfully with direct SQL")
-                            log_system("system_logs table created with direct SQL", level="INFO")
-                        except Exception as sql_error:
-                            print(f"❌ Error creating system_logs table with direct SQL: {sql_error}")
-                            log_system(f"Error creating system_logs table with direct SQL: {sql_error}", level="ERROR")
-                            db.session.rollback()
-                    
-                    # Fall back to create_all for any remaining tables
-                    db.create_all()
-                    print("🗄️ Database tables created using create_all() (fallback)")
-                    
-                    # Verify tables again after direct creation
-                    inspector = inspect(db.engine)
-                    still_missing = []
-                    for table in expected_tables:
-                        if not inspector.has_table(table):
-                            still_missing.append(table)
-                    
-                    if still_missing:
-                        print(f"⚠️ Tables still missing after direct creation: {', '.join(still_missing)}")
-                        log_system(f"Tables still missing after direct creation: {', '.join(still_missing)}", level="ERROR")
-                    else:
-                        print("✅ All expected tables exist after direct creation")
-                        log_system("All expected tables created successfully", level="INFO")
-                else:
-                    print("✅ All expected tables exist in the database")
-                    log_system("All expected tables verified in database", level="INFO")
-                    
-                # Test database connection with a simple query
+        # Simple database initialization - just create all tables
+        print("🗄️ Creating database tables...")
+        db.create_all()
+        print("✅ Database tables created successfully")
+        
+        # Verify tables exist
+        print("🔍 Verifying database tables...")
+        from sqlalchemy import inspect, text
+        inspector = inspect(db.engine)
+        expected_tables = ['system_logs', 'sessions', 'students', 'schools', 'curriculums', 'assessments']
+        missing_tables = []
+        
+        for table in expected_tables:
+            if not inspector.has_table(table):
+                missing_tables.append(table)
+        
+        if missing_tables:
+            print(f"⚠️ Missing tables: {', '.join(missing_tables)}")
+            # For PostgreSQL, try creating system_logs table with direct SQL
+            if 'system_logs' in missing_tables and database_url.startswith('postgresql'):
+                print("🔧 Creating system_logs table with direct SQL for PostgreSQL")
                 try:
-                    db.session.execute(text('SELECT 1')).fetchall()
-                    print("✅ Database connection test successful")
-                except Exception as conn_error:
-                    print(f"❌ Database connection test failed: {conn_error}")
-                    
-            except ImportError:
-                print("⚠️ Flask-Migrate not installed, falling back to create_all()")
-                # Fallback to create_all if Flask-Migrate is not available
-                db.create_all()
-                print("🗄️ Database tables created using create_all() (fallback)")
-            except Exception as migration_error:
-                print(f"⚠️ Error running migrations: {migration_error}")
-                print("⚠️ Falling back to create_all()")
-                # Fallback to create_all if migrations fail
-                db.create_all()
-                print("🗄️ Database tables created using create_all() (fallback)")
+                    system_logs_sql = """
+                    CREATE TABLE IF NOT EXISTS system_logs (
+                        id SERIAL PRIMARY KEY,
+                        timestamp TIMESTAMP NOT NULL,
+                        level VARCHAR(20) NOT NULL,
+                        category VARCHAR(50) NOT NULL,
+                        message TEXT NOT NULL,
+                        data JSONB,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+                    """
+                    db.session.execute(text(system_logs_sql))
+                    db.session.commit()
+                    print("✅ system_logs table created with direct SQL")
+                    log_system("system_logs table created with direct SQL", level="INFO")
+                except Exception as sql_error:
+                    print(f"❌ Error creating system_logs table: {sql_error}")
+                    db.session.rollback()
+            
+            # Try create_all again for any remaining tables
+            db.create_all()
+            print("🗄️ Retried table creation")
+        else:
+            print("✅ All expected tables exist")
+            log_system("All expected tables verified", level="INFO")
+        
+        # Test database connection
+        try:
+            db.session.execute(text('SELECT 1')).fetchall()
+            print("✅ Database connection test successful")
+        except Exception as conn_error:
+            print(f"❌ Database connection test failed: {conn_error}")
         
         print("🗄️ Database tables created/verified")
 except Exception as e:
