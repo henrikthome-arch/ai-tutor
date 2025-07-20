@@ -1469,94 +1469,94 @@ def admin_all_sessions():
             students = get_all_students()
             students_dict = {s['id']: s for s in students}
         
-        # Enhance session data with student information
-        for session in all_sessions:
-            student_id = session.get('student_id')
-            student = students_dict.get(student_id, {})
-            
-            # Create full name from first_name and last_name
-            first_name = student.get('first_name', '')
-            last_name = student.get('last_name', '')
-            full_name = f"{first_name} {last_name}".strip() or 'Unknown'
-            
-            # Safely assign student name
-            session['student_name'] = full_name if full_name else 'Unknown'
-            session['student_grade'] = student.get('grade', 'Unknown')
-            
-            # Ensure session ID is set
-            if 'id' not in session and session.get('_id'):
-                session['id'] = session.get('_id')
-            
-            # Format date and time - handle different datetime formats safely
-            start_datetime = session.get('start_datetime', '')
-            try:
-                if start_datetime:
-                    # Convert to string if it's not already
-                    start_datetime_str = str(start_datetime) if not isinstance(start_datetime, str) else start_datetime
-                    
-                    # Handle ISO format with T separator
-                    if 'T' in start_datetime_str:
-                        session['date'] = start_datetime_str.split('T')[0]
-                        session['time'] = start_datetime_str.split('T')[1][:8]
-                    # Handle space separator
-                    elif ' ' in start_datetime_str:
-                        parts = start_datetime_str.split(' ')
-                        session['date'] = parts[0]
-                        session['time'] = parts[1][:8] if len(parts) > 1 else ''
-                    # Handle date-only string
+            # Enhance session data with student information
+            for session in all_sessions:
+                student_id = session.get('student_id')
+                student = students_dict.get(student_id, {})
+                
+                # Create full name from first_name and last_name
+                first_name = student.get('first_name', '')
+                last_name = student.get('last_name', '')
+                full_name = f"{first_name} {last_name}".strip() or 'Unknown'
+                
+                # Safely assign student name
+                session['student_name'] = full_name if full_name else 'Unknown'
+                session['student_grade'] = student.get('grade', 'Unknown')
+                
+                # Ensure session ID is set
+                if 'id' not in session and session.get('_id'):
+                    session['id'] = session.get('_id')
+                
+                # Format date and time - handle different datetime formats safely
+                start_datetime = session.get('start_datetime', '')
+                try:
+                    if start_datetime:
+                        # Convert to string if it's not already
+                        start_datetime_str = str(start_datetime) if not isinstance(start_datetime, str) else start_datetime
+                        
+                        # Handle ISO format with T separator
+                        if 'T' in start_datetime_str:
+                            session['date'] = start_datetime_str.split('T')[0]
+                            session['time'] = start_datetime_str.split('T')[1][:8]
+                        # Handle space separator
+                        elif ' ' in start_datetime_str:
+                            parts = start_datetime_str.split(' ')
+                            session['date'] = parts[0]
+                            session['time'] = parts[1][:8] if len(parts) > 1 else ''
+                        # Handle date-only string
+                        else:
+                            session['date'] = start_datetime_str[:10]
+                            session['time'] = ''
                     else:
-                        session['date'] = start_datetime_str[:10]
+                        session['date'] = 'Unknown'
                         session['time'] = ''
-                else:
-                    session['date'] = 'Unknown'
+                except Exception as e:
+                    # Fallback for any datetime parsing errors
+                    session['date'] = str(start_datetime)[:10] if start_datetime else 'Unknown'
                     session['time'] = ''
-            except Exception as e:
-                # Fallback for any datetime parsing errors
-                session['date'] = str(start_datetime)[:10] if start_datetime else 'Unknown'
-                session['time'] = ''
-                log_error('ADMIN', f'Error formatting session datetime: {e}', e,
-                         session_id=session.get('id'), datetime_value=str(start_datetime))
-            
-            # Set session type
-            session['type'] = 'VAPI Call' if session.get('session_type') == 'phone' else 'Regular Session'
-            
-            # Set duration - handle different duration formats safely
-            try:
-                if session.get('duration_minutes') is not None:
-                    session['duration'] = session.get('duration_minutes')
-                elif session.get('duration') is not None:
-                    # Convert seconds to minutes if needed
-                    session['duration'] = session.get('duration') // 60
-                else:
+                    log_error('ADMIN', f'Error formatting session datetime: {e}', e,
+                             session_id=session.get('id'), datetime_value=str(start_datetime))
+                
+                # Set session type
+                session['type'] = 'VAPI Call' if session.get('session_type') == 'phone' else 'Regular Session'
+                
+                # Set duration - handle different duration formats safely
+                try:
+                    if session.get('duration_minutes') is not None:
+                        session['duration'] = session.get('duration_minutes')
+                    elif session.get('duration') is not None:
+                        # Convert seconds to minutes if needed
+                        session['duration'] = session.get('duration') // 60
+                    else:
+                        session['duration'] = 'Unknown'
+                except Exception:
                     session['duration'] = 'Unknown'
-            except Exception:
-                session['duration'] = 'Unknown'
+                
+                # Set transcript and analysis flags
+                session['has_transcript'] = bool(session.get('transcript'))
+                session['has_analysis'] = False  # Set based on your database schema
             
-            # Set transcript and analysis flags
-            session['has_transcript'] = bool(session.get('transcript'))
-            session['has_analysis'] = False  # Set based on your database schema
-        
-        # Sort by date and time (newest first) - with error handling
-        try:
-            all_sessions.sort(key=lambda x: (x.get('date', ''), x.get('time', '')), reverse=True)
-        except Exception as e:
-            log_error('ADMIN', f'Error sorting sessions: {e}', e)
-            # Alternative sorting by ID if date sorting fails
-            all_sessions.sort(key=lambda x: x.get('id', 0), reverse=True)
-        
-        # Calculate session statistics
-        session_stats = {
-            'total_sessions': len(all_sessions),
-            'vapi_sessions': len([s for s in all_sessions if s.get('type') == 'VAPI Call']),
-            'regular_sessions': len([s for s in all_sessions if s.get('type') == 'Regular Session']),
-            'with_transcripts': len([s for s in all_sessions if s.get('has_transcript')]),
-            'with_analysis': len([s for s in all_sessions if s.get('has_analysis')]),
-            'total_students': len(students)
-        }
-        
-        return render_template('all_sessions.html',
-                             sessions=all_sessions,
-                             session_stats=session_stats)
+            # Sort by date and time (newest first) - with error handling
+            try:
+                all_sessions.sort(key=lambda x: (x.get('date', ''), x.get('time', '')), reverse=True)
+            except Exception as e:
+                log_error('ADMIN', f'Error sorting sessions: {e}', e)
+                # Alternative sorting by ID if date sorting fails
+                all_sessions.sort(key=lambda x: x.get('id', 0), reverse=True)
+            
+            # Calculate session statistics
+            session_stats = {
+                'total_sessions': len(all_sessions),
+                'vapi_sessions': len([s for s in all_sessions if s.get('type') == 'VAPI Call']),
+                'regular_sessions': len([s for s in all_sessions if s.get('type') == 'Regular Session']),
+                'with_transcripts': len([s for s in all_sessions if s.get('has_transcript')]),
+                'with_analysis': len([s for s in all_sessions if s.get('has_analysis')]),
+                'total_students': len(students)
+            }
+            
+            return render_template('all_sessions.html',
+                                 sessions=all_sessions,
+                                 session_stats=session_stats)
     
     except Exception as e:
         flash(f'Error loading sessions: {str(e)}', 'error')
