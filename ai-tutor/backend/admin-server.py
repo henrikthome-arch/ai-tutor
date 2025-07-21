@@ -548,42 +548,87 @@ def get_all_students():
         return []
 
 def get_student_data(student_id):
-    """Get detailed student data from database"""
+    """Get detailed student data from database with comprehensive error handling"""
     try:
-        # Get student from repository
-        student = student_repository.get_by_id(student_id)
-        if not student:
+        print(f"🔍 Getting student data for ID: {student_id}")
+        
+        # Get student from repository with error handling
+        student = None
+        try:
+            student = student_repository.get_by_id(student_id)
+            print(f"📊 Student repository returned: {json.dumps(student, indent=2) if student else 'None'}")
+        except Exception as repo_error:
+            log_error('DATABASE', f'Error getting student from repository: {str(repo_error)}', repo_error, student_id=student_id)
+            print(f"❌ Error getting student from repository: {repo_error}")
             return None
         
-        # Get student sessions
-        sessions = session_repository.get_by_student_id(student_id)
+        if not student:
+            print(f"❌ Student {student_id} not found in repository")
+            return None
         
-        # Get student assessments
-        assessments = Assessment.query.filter_by(student_id=student_id).all()
-        assessments_data = [assessment.to_dict() for assessment in assessments]
+        # Get student sessions with error handling
+        sessions = []
+        try:
+            sessions = session_repository.get_by_student_id(student_id)
+            print(f"📋 Retrieved {len(sessions) if sessions else 0} sessions for student {student_id}")
+        except Exception as session_error:
+            log_error('DATABASE', f'Error getting sessions for student: {str(session_error)}', session_error, student_id=student_id)
+            print(f"❌ Error getting sessions: {session_error}")
+            sessions = []  # Continue with empty sessions list
         
-        # Create student data object
-        student_data = {
-            'id': student_id,
-            'profile': student,
-            'progress': {
-                'overall_progress': 0,  # Default value
-                'subjects': {},
-                'goals': [],
-                'streak_days': 0,
-                'last_updated': datetime.now().isoformat()
-            },
-            'assessment': assessments_data[0] if assessments_data else None,
-            'sessions': sessions
-        }
+        # Get student assessments with error handling
+        assessments_data = []
+        try:
+            assessments = Assessment.query.filter_by(student_id=student_id).all()
+            assessments_data = [assessment.to_dict() for assessment in assessments]
+            print(f"📊 Retrieved {len(assessments_data)} assessments for student {student_id}")
+        except Exception as assessment_error:
+            log_error('DATABASE', f'Error getting assessments for student: {str(assessment_error)}', assessment_error, student_id=student_id)
+            print(f"❌ Error getting assessments: {assessment_error}")
+            assessments_data = []  # Continue with empty assessments list
         
-        # Sort sessions by start time (newest first)
-        student_data['sessions'].sort(key=lambda x: x.get('start_datetime', ''), reverse=True)
+        # Create student data object with safe field access
+        try:
+            student_data = {
+                'id': student_id,
+                'profile': student,
+                'progress': {
+                    'overall_progress': 0,  # Default value
+                    'subjects': {},
+                    'goals': [],
+                    'streak_days': 0,
+                    'last_updated': datetime.now().isoformat()
+                },
+                'assessment': assessments_data[0] if assessments_data else None,
+                'sessions': sessions if sessions else []
+            }
+            
+            # Sort sessions by start time (newest first) with error handling
+            try:
+                if student_data['sessions']:
+                    student_data['sessions'].sort(
+                        key=lambda x: x.get('start_datetime', x.get('start_time', '')),
+                        reverse=True
+                    )
+                    print(f"📋 Sorted {len(student_data['sessions'])} sessions by start time")
+            except Exception as sort_error:
+                log_error('DATABASE', f'Error sorting sessions for student: {str(sort_error)}', sort_error, student_id=student_id)
+                print(f"⚠️ Error sorting sessions: {sort_error}")
+                # Continue without sorting
+            
+            print(f"✅ Successfully created student data for student {student_id}")
+            return student_data
+            
+        except Exception as data_error:
+            log_error('DATABASE', f'Error creating student data object: {str(data_error)}', data_error, student_id=student_id)
+            print(f"❌ Error creating student data object: {data_error}")
+            return None
         
-        return student_data
     except Exception as e:
-        print(f"Error getting student data from database: {e}")
-        log_error('DATABASE', 'Error getting student data', e, student_id=student_id)
+        print(f"❌ Critical error getting student data from database: {e}")
+        log_error('DATABASE', 'Critical error getting student data', e, student_id=student_id)
+        import traceback
+        print(f"🔍 Stack trace: {traceback.format_exc()}")
         return None
 
 def get_system_stats():
@@ -1069,54 +1114,195 @@ def admin_student_detail(student_id):
     if not check_auth():
         return redirect(url_for('admin_login'))
     
-    student_data = get_student_data(student_id)
-    if not student_data:
-        flash(f'Student {student_id} not found', 'error')
-        return redirect(url_for('admin_students'))
+    try:
+        print(f"🔍 Loading student detail for student ID: {student_id}")
+        
+        # Get student data with comprehensive error handling
+        student_data = get_student_data(student_id)
+        if not student_data:
+            print(f"❌ Student {student_id} not found in database")
+            flash(f'Student {student_id} not found', 'error')
+            return redirect(url_for('admin_students'))
+        
+        print(f"📊 Student data retrieved: {json.dumps({k: v for k, v in student_data.items() if k != 'sessions'}, indent=2)}")
+        
+        # Get phone number from the latest mapping with error handling
+        phone = None
+        try:
+            current_mapping = phone_manager.load_phone_mapping()
+            for phone_num, sid in current_mapping.items():
+                if str(sid) == str(student_id):  # Ensure string comparison
+                    phone = phone_num
+                    break
+            print(f"📞 Phone mapping found: {phone}")
+        except Exception as phone_error:
+            log_error('ADMIN', f'Error loading phone mapping for student detail: {str(phone_error)}', phone_error, student_id=student_id)
+            print(f"⚠️ Error loading phone mapping: {phone_error}")
+        
+        # Extract data for template with safe field access
+        try:
+            profile = student_data.get('profile', {})
+            progress = student_data.get('progress', {})
+            assessment = student_data.get('assessment', {})
+            sessions = student_data.get('sessions', [])
+            
+            print(f"📋 Profile data: {json.dumps(profile, indent=2)}")
+            print(f"📈 Progress data: {json.dumps(progress, indent=2)}")
+            print(f"📚 Sessions count: {len(sessions)}")
+            
+            # Create proper name from first_name and last_name
+            first_name = profile.get('first_name', '')
+            last_name = profile.get('last_name', '')
+            full_name = f"{first_name} {last_name}".strip() or profile.get('name', 'Unknown')
+            
+            # Create student object for template with safe field access
+            student = {
+                'id': student_id,
+                'name': full_name,
+                'age': profile.get('age', 'Unknown'),
+                'grade': profile.get('grade', 'Unknown'),
+                'phone': phone,
+                'interests': profile.get('interests', []) if isinstance(profile.get('interests'), list) else [],
+                'learning_preferences': profile.get('learning_preferences', []) if isinstance(profile.get('learning_preferences'), list) else []
+            }
+            
+            print(f"👤 Student object created: {json.dumps(student, indent=2)}")
+        except Exception as profile_error:
+            log_error('ADMIN', f'Error processing student profile data: {str(profile_error)}', profile_error, student_id=student_id)
+            print(f"❌ Error processing student profile: {profile_error}")
+            # Create minimal student object as fallback
+            student = {
+                'id': student_id,
+                'name': f'Student {student_id}',
+                'age': 'Unknown',
+                'grade': 'Unknown',
+                'phone': phone,
+                'interests': [],
+                'learning_preferences': []
+            }
+        
+        # Process sessions for recent sessions display with comprehensive error handling
+        recent_sessions = []
+        try:
+            for i, session in enumerate(sessions[:5]):  # Last 5 sessions
+                try:
+                    print(f"📋 Processing session {i+1}: {json.dumps({k: v for k, v in session.items() if k != 'transcript'}, indent=2)}")
+                    
+                    # Handle different datetime field names and formats
+                    session_date = 'Unknown'
+                    start_time_field = session.get('start_datetime') or session.get('start_time') or session.get('date')
+                    if start_time_field:
+                        try:
+                            if isinstance(start_time_field, str):
+                                if 'T' in start_time_field:
+                                    session_date = start_time_field.split('T')[0]
+                                elif ' ' in start_time_field:
+                                    session_date = start_time_field.split(' ')[0]
+                                else:
+                                    session_date = start_time_field[:10] if len(start_time_field) >= 10 else start_time_field
+                            else:
+                                session_date = str(start_time_field)[:10]
+                        except Exception as date_error:
+                            print(f"⚠️ Error parsing session date: {date_error}")
+                            session_date = 'Unknown'
+                    
+                    # Handle different duration field names and formats
+                    duration = 'Unknown'
+                    try:
+                        if session.get('duration_minutes') is not None:
+                            duration = session.get('duration_minutes')
+                        elif session.get('duration') is not None:
+                            # Convert seconds to minutes if needed
+                            duration_val = session.get('duration')
+                            if isinstance(duration_val, (int, float)) and duration_val > 1000:
+                                duration = int(duration_val // 60)  # Assume seconds, convert to minutes
+                            else:
+                                duration = duration_val
+                        elif session.get('duration_seconds') is not None:
+                            duration_seconds = session.get('duration_seconds')
+                            if isinstance(duration_seconds, (int, float)):
+                                duration = int(duration_seconds // 60)
+                        
+                        # Ensure duration is a reasonable number
+                        if isinstance(duration, (int, float)) and duration < 0:
+                            duration = 'Unknown'
+                    except Exception as duration_error:
+                        print(f"⚠️ Error parsing session duration: {duration_error}")
+                        duration = 'Unknown'
+                    
+                    session_info = {
+                        'date': session_date,
+                        'duration': duration,
+                        'topics': session.get('topics_covered', ['General']) if isinstance(session.get('topics_covered'), list) else ['General'],
+                        'engagement': session.get('engagement_score', 75),
+                        'file': session.get('transcript_file', session.get('id', ''))
+                    }
+                    
+                    recent_sessions.append(session_info)
+                    print(f"✅ Session {i+1} processed: {json.dumps(session_info, indent=2)}")
+                    
+                except Exception as session_error:
+                    log_error('ADMIN', f'Error processing session {i+1} for student detail: {str(session_error)}', session_error, student_id=student_id)
+                    print(f"❌ Error processing session {i+1}: {session_error}")
+                    # Add a fallback session entry
+                    recent_sessions.append({
+                        'date': 'Unknown',
+                        'duration': 'Unknown',
+                        'topics': ['General'],
+                        'engagement': 75,
+                        'file': ''
+                    })
+        except Exception as sessions_error:
+            log_error('ADMIN', f'Error processing sessions for student detail: {str(sessions_error)}', sessions_error, student_id=student_id)
+            print(f"❌ Error processing sessions: {sessions_error}")
+            recent_sessions = []
+        
+        print(f"📋 Recent sessions processed: {len(recent_sessions)} sessions")
+        
+        # Render template with comprehensive error handling
+        try:
+            return render_template('student_detail.html',
+                                 student=student,
+                                 phone=phone,
+                                 progress=progress,
+                                 recent_sessions=recent_sessions,
+                                 session_count=len(sessions),
+                                 last_session=recent_sessions[0]['date'] if recent_sessions else None)
+        except Exception as template_error:
+            log_error('ADMIN', f'Error rendering student detail template: {str(template_error)}', template_error, student_id=student_id)
+            print(f"❌ Error rendering template: {template_error}")
+            # Return a simple error page
+            return f"""
+            <html>
+                <head><title>Student Detail - Error</title></head>
+                <body>
+                    <h1>Student Detail Error</h1>
+                    <p>There was an error loading the student detail page for student {student_id}.</p>
+                    <p>Error: {str(template_error)}</p>
+                    <p><a href="/admin/students">Return to students list</a></p>
+                </body>
+            </html>
+            """, 500
     
-    # Get phone number from the latest mapping
-    phone = None
-    current_mapping = phone_manager.load_phone_mapping()
-    for phone_num, sid in current_mapping.items():
-        if sid == student_id:
-            phone = phone_num
-            break
-    
-    # Extract data for template
-    profile = student_data.get('profile', {})
-    progress = student_data.get('progress', {})
-    assessment = student_data.get('assessment', {})
-    sessions = student_data.get('sessions', [])
-    
-    # Create student object for template
-    student = {
-        'id': student_id,
-        'name': profile.get('name', 'Unknown'),
-        'age': profile.get('age', 'Unknown'),
-        'grade': profile.get('grade', 'Unknown'),
-        'phone': phone,
-        'interests': profile.get('interests', []),
-        'learning_preferences': profile.get('learning_preferences', [])
-    }
-    
-    # Process sessions for recent sessions display
-    recent_sessions = []
-    for session in sessions[:5]:  # Last 5 sessions
-        recent_sessions.append({
-            'date': session.get('start_time', '').split('T')[0] if session.get('start_time') else 'Unknown',
-            'duration': session.get('duration_minutes', session.get('duration_seconds', 0) // 60 if session.get('duration_seconds') else 'Unknown'),
-            'topics': session.get('topics_covered', ['General']),
-            'engagement': session.get('engagement_score', 75),
-            'file': session.get('transcript_file', '')
-        })
-    
-    return render_template('student_detail.html',
-                         student=student,
-                         phone=phone,
-                         progress=progress,
-                         recent_sessions=recent_sessions,
-                         session_count=len(sessions),
-                         last_session=recent_sessions[0]['date'] if recent_sessions else None)
+    except Exception as e:
+        log_error('ADMIN', f'Critical error in admin_student_detail for student {student_id}: {str(e)}', e, student_id=student_id)
+        print(f"❌ Critical error in student detail: {e}")
+        import traceback
+        print(f"🔍 Stack trace: {traceback.format_exc()}")
+        
+        # Return a comprehensive error page
+        return f"""
+        <html>
+            <head><title>Student Detail - Critical Error</title></head>
+            <body>
+                <h1>Student Detail Critical Error</h1>
+                <p>There was a critical error loading the student detail page for student {student_id}.</p>
+                <p>Error: {str(e)}</p>
+                <p><a href="/admin/students">Return to students list</a></p>
+                <p><a href="/admin">Return to dashboard</a></p>
+            </body>
+        </html>
+        """, 500
 
 # School management routes
 @app.route('/admin/schools')
