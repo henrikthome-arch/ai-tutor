@@ -82,19 +82,23 @@ class StudentService:
                     'session_count': 0  # Will be calculated from sessions
                 })
                 
-                # Calculate session stats
-                session_count = student.sessions.count() if hasattr(student.sessions, 'count') else 0
-                student_dict['session_count'] = session_count
-                
-                # Get last session date
-                if session_count > 0:
-                    try:
-                        last_session = student.sessions.order_by(student.sessions.start_time.desc()).first()
+                # Calculate session stats safely
+                try:
+                    session_count = student.sessions.count() if hasattr(student.sessions, 'count') else 0
+                    student_dict['session_count'] = session_count
+                    
+                    # Get last session date safely
+                    student_dict['last_session'] = None
+                    if session_count > 0:
+                        # Import Session model locally to avoid circular imports
+                        from app.models.session import Session
+                        last_session = Session.query.filter_by(student_id=student.id).order_by(Session.start_time.desc()).first()
                         if last_session and last_session.start_time:
                             student_dict['last_session'] = last_session.start_time.strftime('%Y-%m-%d')
-                    except Exception as e:
-                        print(f"Error getting last session for student {student.id}: {e}")
-                        student_dict['last_session'] = None
+                except Exception as e:
+                    print(f"Error calculating session stats for student {student.id}: {e}")
+                    student_dict['session_count'] = 0
+                    student_dict['last_session'] = None
                 
                 result.append(student_dict)
             
