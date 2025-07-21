@@ -3658,11 +3658,7 @@ def generate_token():
                 return redirect(url_for('admin_tokens'))
             
             # Generate token
-            token_data = token_service.generate_token(
-                scopes=scopes,
-                name=token_name,
-                expiration_hours=expiration_hours
-            )
+            token_data = token_service.generate_token(scopes=scopes)
             
             log_admin_action('generate_token', session.get('admin_username', 'unknown'),
                             token_name=token_name,
