@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}{{ table_name|title }} Record {{ item_id }} - Database Browser{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> &gt; 
+    <a href="{{ url_for('admin_database') }}">🗄️ Database Browser</a> &gt;
+    <a href="{{ url_for('admin_database_table', table=table_name) }}">📋 {{ table_name|title }}</a> &gt;
+    <span>🔍 Record {{ item_id }}</span>
+</div>
+
+<h1 style="margin-bottom: 2rem; color: #2c3e50;">{{ table_name|title }} Record #{{ item_id }}</h1>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2>📄 Record Details</h2>
+        <div>
+            <span style="background: #e3f2fd; padding: 4px 12px; border-radius: 12px; font-size: 0.9rem;">
+                ID: {{ item_id }}
+            </span>
+        </div>
+    </div>
+    
+    {% if content %}
+    <div style="background: #f8f9fa; border-radius: 8px; padding: 1.5rem; border-left: 4px solid #3498db;">
+        <h3 style="margin-bottom: 1rem; color: #2c3e50;">JSON Data</h3>
+        <div style="background: #ffffff; border-radius: 4px; padding: 1rem; border: 1px solid #e9ecef;">
+            <pre style="margin: 0; font-family: 'Courier New', monospace; font-size: 0.9rem; line-height: 1.4; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word;">{{ content }}</pre>
+        </div>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: #666;">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">❌</div>
+        <h3>No Data Available</h3>
+        <p>Unable to load record data or record not found.</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>🔧 Record Actions</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        {% if table_name == 'students' %}
+        <a href="{{ url_for('admin_student_detail', student_id=item_id) }}" class="btn">
+            👤 View Student Profile
+        </a>
+        <a href="{{ url_for('edit_student', student_id=item_id) }}" class="btn">
+            ✏️ Edit Student
+        </a>
+        <a href="{{ url_for('view_student_sessions', student_id=item_id) }}" class="btn">
+            🕒 View Sessions
+        </a>
+        {% elif table_name == 'schools' %}
+        <a href="{{ url_for('edit_school', school_id=item_id) }}" class="btn">
+            ✏️ Edit School
+        </a>
+        <a href="{{ url_for('school_curriculum', school_id=item_id) }}" class="btn">
+            📚 View Curriculum
+        </a>
+        {% elif table_name == 'curriculums' %}
+        <a href="{{ url_for('edit_curriculum', curriculum_id=item_id) }}" class="btn">
+            ✏️ Edit Curriculum
+        </a>
+        {% elif table_name == 'sessions' %}
+        <a href="{{ url_for('view_session_detail', student_id='unknown', session_id=item_id) }}" class="btn">
+            🕒 View Session Details
+        </a>
+        {% endif %}
+        
+        <a href="{{ url_for('admin_database_table', table=table_name) }}" class="btn">
+            📋 Back to {{ table_name|title }} Table
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <h2>ℹ️ Record Information</h2>
+    <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+            <div>
+                <strong>Table:</strong><br>
+                <span style="font-family: monospace;">{{ table_name }}</span>
+            </div>
+            <div>
+                <strong>Record ID:</strong><br>
+                <span style="font-family: monospace;">{{ item_id }}</span>
+            </div>
+            <div>
+                <strong>Data Format:</strong><br>
+                JSON
+            </div>
+            <div>
+                <strong>View Mode:</strong><br>
+                Read-only
+            </div>
+        </div>
+    </div>
+</div>
+
+<div style="margin-top: 2rem; text-align: center;">
+    <a href="{{ url_for('admin_database_table', table=table_name) }}" class="btn">
+        ← Back to {{ table_name|title }} Table
+    </a>
+    <a href="{{ url_for('admin_database') }}" class="btn" style="margin-left: 10px;">
+        🗄️ Database Browser
+    </a>
+</div>
+{% endblock %}

@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Database Browser - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> &gt; 
+    <span>🗄️ Database Browser</span>
+</div>
+
+<h1 style="margin-bottom: 2rem; color: #2c3e50;">Database Browser</h1>
+
+<div class="card">
+    <h2>📊 Database Overview</h2>
+    <p>Browse and explore the PostgreSQL database tables and their contents.</p>
+    
+    {% if stats %}
+    <div class="stats-grid" style="margin: 1.5rem 0;">
+        <div class="stat-card">
+            <h3>{{ stats.students }}</h3>
+            <p>Students</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ stats.schools }}</h3>
+            <p>Schools</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ stats.curriculums }}</h3>
+            <p>Curriculums</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ stats.sessions }}</h3>
+            <p>Sessions</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ stats.assessments }}</h3>
+            <p>Assessments</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>🗂️ Database Tables</h2>
+    
+    {% if tables %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Table Name</th>
+                <th>Record Count</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for table in tables %}
+            <tr>
+                <td>
+                    <strong>{{ table.name }}</strong>
+                </td>
+                <td>
+                    <span style="background: #e3f2fd; padding: 4px 8px; border-radius: 12px; font-size: 0.9rem;">
+                        {{ table.count }} records
+                    </span>
+                </td>
+                <td>
+                    <a href="{{ table.url }}" class="btn" style="font-size: 0.9rem; padding: 6px 12px;">
+                        👁️ Browse
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="text-align: center; padding: 2rem; color: #666;">
+        <p>❌ No database tables found or error accessing database.</p>
+        <p style="font-size: 0.9rem; margin-top: 1rem;">
+            Please check your database connection and configuration.
+        </p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>ℹ️ Database Information</h2>
+    <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">
+        <p><strong>Database Type:</strong> PostgreSQL</p>
+        <p><strong>Connection Status:</strong> 
+            {% if tables %}
+                <span style="color: #27ae60;">✓ Connected</span>
+            {% else %}
+                <span style="color: #e74c3c;">❌ Connection Error</span>
+            {% endif %}
+        </p>
+        <p><strong>Last Updated:</strong> {{ moment().format('YYYY-MM-DD HH:mm:ss') if moment else 'Unknown' }}</p>
+    </div>
+    
+    <div style="margin-top: 1rem;">
+        <a href="{{ url_for('admin_system') }}" class="btn">
+            ⚙️ System Settings
+        </a>
+        <a href="{{ url_for('admin_logs') }}" class="btn" style="margin-left: 10px;">
+            📋 View Logs
+        </a>
+    </div>
+</div>
+{% endblock %}

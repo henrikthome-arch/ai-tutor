@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}{{ table_name|title }} Table - Database Browser{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> &gt; 
+    <a href="{{ url_for('admin_database') }}">🗄️ Database Browser</a> &gt;
+    <span>📋 {{ table_name|title }}</span>
+</div>
+
+<h1 style="margin-bottom: 2rem; color: #2c3e50;">{{ table_name|title }} Table</h1>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2>📋 Table Contents</h2>
+        <div>
+            <span style="background: #e3f2fd; padding: 4px 12px; border-radius: 12px; font-size: 0.9rem;">
+                {{ items|length }} records
+            </span>
+        </div>
+    </div>
+    
+    {% if items %}
+    <div style="overflow-x: auto;">
+        <table class="table">
+            <thead>
+                <tr>
+                    {% for column in columns %}
+                    <th>{{ column|replace('_', ' ')|title }}</th>
+                    {% endfor %}
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    {% for column in columns %}
+                    <td>
+                        {% set value = item[column] %}
+                        {% if value is none %}
+                            <span style="color: #999; font-style: italic;">null</span>
+                        {% elif value is boolean %}
+                            {% if value %}
+                                <span style="color: #27ae60;">✓ True</span>
+                            {% else %}
+                                <span style="color: #e74c3c;">✗ False</span>
+                            {% endif %}
+                        {% elif value is string and value|length > 50 %}
+                            <span title="{{ value }}">{{ value[:50] }}...</span>
+                        {% elif value is mapping %}
+                            <span style="color: #3498db; font-family: monospace;">{JSON}</span>
+                        {% elif value is iterable and value is not string %}
+                            <span style="color: #9b59b6; font-family: monospace;">[Array]</span>
+                        {% else %}
+                            {{ value }}
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                    <td>
+                        {% if item.id %}
+                        <a href="{{ url_for('admin_database_view', table=table_name, item_id=item.id) }}" 
+                           class="btn" style="font-size: 0.8rem; padding: 4px 8px;">
+                            👁️ View
+                        </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: #666;">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">📭</div>
+        <h3>No Records Found</h3>
+        <p>This table doesn't contain any records yet.</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>📊 Table Information</h2>
+    <div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+            <div>
+                <strong>Table Name:</strong><br>
+                <span style="font-family: monospace;">{{ table_name }}</span>
+            </div>
+            <div>
+                <strong>Total Records:</strong><br>
+                {{ items|length }}
+            </div>
+            <div>
+                <strong>Columns:</strong><br>
+                {{ columns|length }}
+            </div>
+            {% if columns %}
+            <div>
+                <strong>Primary Key:</strong><br>
+                <span style="font-family: monospace;">
+                    {% if 'id' in columns %}
+                        id
+                    {% else %}
+                        {{ columns[0] }}
+                    {% endif %}
+                </span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div style="margin-top: 1.5rem;">
+        <a href="{{ url_for('admin_database') }}" class="btn">
+            ← Back to Database Browser
+        </a>
+        
+        {% if table_name == 'students' %}
+        <a href="{{ url_for('admin_students') }}" class="btn" style="margin-left: 10px;">
+            👥 Manage Students
+        </a>
+        {% elif table_name == 'schools' %}
+        <a href="{{ url_for('admin_schools') }}" class="btn" style="margin-left: 10px;">
+            🏫 Manage Schools
+        </a>
+        {% elif table_name == 'curriculums' %}
+        <a href="{{ url_for('admin_curriculum') }}" class="btn" style="margin-left: 10px;">
+            📚 Manage Curriculum
+        </a>
+        {% elif table_name == 'sessions' %}
+        <a href="{{ url_for('admin_all_sessions') }}" class="btn" style="margin-left: 10px;">
+            🕒 View Sessions
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
