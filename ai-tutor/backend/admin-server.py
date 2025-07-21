@@ -313,8 +313,19 @@ try:
         try:
             db.session.execute(text('SELECT 1')).fetchall()
             print("✅ Database connection test successful")
+            log_system("Database connection test successful", level="INFO")
         except Exception as conn_error:
             print(f"❌ Database connection test failed: {conn_error}")
+            log_system("Database connection test failed", level="ERROR", error=str(conn_error))
+        
+        # Log system startup now that database is initialized and we're in app context
+        log_system("AI Tutor Admin Dashboard startup completed",
+                  flask_env=FLASK_ENV,
+                  admin_username=ADMIN_USERNAME,
+                  has_vapi_secret=VAPI_SECRET != 'your_vapi_secret_here',
+                  ai_poc_available=AI_POC_AVAILABLE,
+                  database_type=database_url.split('://')[0] if '://' in database_url else 'unknown',
+                  level="INFO")
         
         print("🗄️ Database tables created/verified")
 except Exception as e:
@@ -348,12 +359,8 @@ phone_manager = PhoneMappingManager()
 session_tracker = SessionTracker()
 token_service = TokenService()
 
-# Log system startup
-log_system("AI Tutor Admin Dashboard starting up",
-          flask_env=FLASK_ENV,
-          admin_username=ADMIN_USERNAME,
-          has_vapi_secret=VAPI_SECRET != 'your_vapi_secret_here',
-          ai_poc_available=AI_POC_AVAILABLE)
+# Note: System startup logging moved to after database initialization
+# to ensure logs are written to database instead of console only
 
 def check_auth():
     """Check if user is authenticated"""
