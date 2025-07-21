@@ -100,13 +100,22 @@ class OpenAIProvider(SimpleAIProvider):
                 
                 # Make the API call
                 logger.info(f"Calling OpenAI API with model: {self.model}")
-                response = await self.openai.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    max_tokens=self.max_tokens,
-                    temperature=self.temperature,
-                    timeout=self.timeout
-                )
+                
+                # Handle different parameter names for different models
+                api_params = {
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": self.temperature,
+                    "timeout": self.timeout
+                }
+                
+                # Use max_completion_tokens for o3 models, max_tokens for others
+                if "o3" in self.model.lower():
+                    api_params["max_completion_tokens"] = self.max_tokens
+                else:
+                    api_params["max_tokens"] = self.max_tokens
+                
+                response = await self.openai.chat.completions.create(**api_params)
                 
                 # Extract the response content
                 raw_response = response.choices[0].message.content
@@ -180,13 +189,22 @@ class OpenAIProvider(SimpleAIProvider):
                 
                 # Make the API call
                 logger.info(f"Calling OpenAI API with session_analysis prompt and model: {self.model}")
-                response = await self.openai.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    max_tokens=self.max_tokens,
-                    temperature=self.temperature,
-                    timeout=self.timeout
-                )
+                
+                # Handle different parameter names for different models
+                api_params = {
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": self.temperature,
+                    "timeout": self.timeout
+                }
+                
+                # Use max_completion_tokens for o3 models, max_tokens for others
+                if "o3" in self.model.lower():
+                    api_params["max_completion_tokens"] = self.max_tokens
+                else:
+                    api_params["max_tokens"] = self.max_tokens
+                
+                response = await self.openai.chat.completions.create(**api_params)
                 
                 # Extract the response content
                 raw_response = response.choices[0].message.content

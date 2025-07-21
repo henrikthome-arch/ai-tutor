@@ -1025,19 +1025,19 @@ def admin_dashboard():
             # Create students_info with proper field access
             students_info = {}
             for student in all_students:
-                # Create proper name from first_name and last_name
-                first_name = student.get('first_name', '')
-                last_name = student.get('last_name', '')
+                # Create proper name from first_name and last_name - use getattr for SimpleNamespace
+                first_name = getattr(student, 'first_name', '')
+                last_name = getattr(student, 'last_name', '')
                 full_name = f"{first_name} {last_name}".strip() or 'Unknown'
                 
                 # Add session count if available
-                session_count = student.get('session_count', 0)
+                session_count = getattr(student, 'session_count', 0)
                 
-                students_info[student['id']] = {
+                students_info[getattr(student, 'id', 'unknown')] = {
                     'name': full_name,
-                    'id': student['id'],
-                    'grade': student.get('grade', 'Unknown'),
-                    'phone': student.get('phone', 'None'),
+                    'id': getattr(student, 'id', 'unknown'),
+                    'grade': getattr(student, 'grade', 'Unknown'),
+                    'phone': getattr(student, 'phone', 'None'),
                     'session_count': session_count
                 }
                 
