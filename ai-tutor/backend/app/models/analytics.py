@@ -13,7 +13,7 @@ class SessionMetrics(db.Model):
     __tablename__ = 'session_metrics'
     
     id = db.Column(db.Integer, primary_key=True)
-    session_id = db.Column(db.String(50), db.ForeignKey('sessions.id'), nullable=False)
+    session_id = db.Column(db.Integer, db.ForeignKey('sessions.id'), nullable=False)
     duration_seconds = db.Column(db.Integer, nullable=False, default=0)
     message_count = db.Column(db.Integer, nullable=False, default=0)
     student_satisfaction = db.Column(db.Float, nullable=True)
@@ -66,7 +66,7 @@ class StudentProgress(db.Model):
     __tablename__ = 'student_progress'
     
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.String(50), db.ForeignKey('students.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
     date = db.Column(db.DateTime, nullable=False)
     subject = db.Column(db.String(100), nullable=False)
     proficiency_level = db.Column(db.Float, nullable=False, default=0)  # 0-100 scale
