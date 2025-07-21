@@ -1877,15 +1877,15 @@ def admin_system():
         students = get_all_students()
         students_info = {}
         for student in students:
-            # Create proper name from first_name and last_name
-            first_name = student.get('first_name', '')
-            last_name = student.get('last_name', '')
+            # Create proper name from first_name and last_name - use getattr for SimpleNamespace
+            first_name = getattr(student, 'first_name', '')
+            last_name = getattr(student, 'last_name', '')
             full_name = f"{first_name} {last_name}".strip() or 'Unknown'
             
-            students_info[student['id']] = {
+            students_info[getattr(student, 'id', 'unknown')] = {
                 'name': full_name,
-                'id': student['id'],
-                'grade': student.get('grade', 'Unknown')
+                'id': getattr(student, 'id', 'unknown'),
+                'grade': getattr(student, 'grade', 'Unknown')
             }
         
         # Check for environmental issues
@@ -1990,7 +1990,10 @@ def admin_system():
                             feature_flags=feature_flags,
                             environmental_issues=environmental_issues,
                             vapi_test_enabled=True)  # Enable VAPI test section
+    
     except Exception as e:
+        # Import log_error in the exception handler to avoid scope issues
+        from system_logger import log_error
         log_error('ADMIN', 'Error loading system page', e)
         flash(f'Error loading system information: {str(e)}', 'error')
         # Return a simple error page instead of trying to render the full system page
