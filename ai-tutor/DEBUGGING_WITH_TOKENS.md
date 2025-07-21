@@ -1,6 +1,8 @@
 # AI Tutor Token Authentication Guide
 
-This guide explains how to use the token-based authentication system for debugging, AI assistant access, and automated testing of the AI Tutor system.
+This guide explains how to use the persistent token-based authentication system for debugging, AI assistant access, and automated testing of the AI Tutor system.
+
+⚠️ **IMPORTANT**: Tokens are now stored persistently in PostgreSQL database and will survive deployments and server restarts.
 
 ## Overview
 
@@ -41,13 +43,15 @@ The AI Tutor system provides token-based authentication for:
 - `admin:read` - Read-only access to admin interface
 - `tasks:read` - Access to background task status (if available)
 
-### Token Expiration
+### Token Expiration and Persistence
 
+- **Persistent Storage**: Tokens are stored in PostgreSQL database and survive deployments
 - Tokens automatically expire after the configured time
-- Expired tokens are automatically revoked
+- Expired tokens are automatically cleaned up on server startup
 - Default expiration: 4 hours
 - Maximum expiration: 24 hours
 - Tokens are short-lived by design for security
+- **Usage Tracking**: Token usage is tracked for audit purposes
 
 ## Browser Access for AI Assistants
 
@@ -379,15 +383,19 @@ echo "All tests passed!"
 ## Implementation Details
 
 The token-based authentication system is implemented using:
-- Simple in-memory token storage for debugging and development
+- **Persistent PostgreSQL storage** for deployment-safe token management
+- SHA-256 hashed token storage for security (never stores plain text)
 - Scope-based authorization for fine-grained access control
 - Custom Flask decorators for endpoint protection
-- Token service for generation, validation, and management
+- Usage tracking and audit trail for security monitoring
+- Automatic cleanup of expired tokens
 
 For developers extending the system, see the implementation in:
+- `backend/app/models/token.py` - Token model with PostgreSQL schema
+- `backend/app/repositories/token_repository.py` - Token database operations
 - `backend/admin-server.py` - Main admin server with token authentication
-- Token service class (lines 65-133) - Token generation and validation
-- Token decorators (lines 135-181) - Authentication decorators
+- Token service class - Persistent token generation and validation
+- Token decorators - Authentication decorators with database validation
 - API endpoints with `@token_required` decorator
 
 ## Production Deployment Notes
@@ -406,6 +414,8 @@ For developers extending the system, see the implementation in:
 - [ ] Log monitoring configured and working
 - [ ] Backup and disaster recovery planned
 - [ ] System logs being written to PostgreSQL database
+- [ ] **Token persistence verified** - tokens survive deployments/restarts
+- [ ] Expired token cleanup working properly
 
 ## Support
 
