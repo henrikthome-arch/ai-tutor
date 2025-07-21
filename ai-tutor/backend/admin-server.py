@@ -739,6 +739,38 @@ def health_check():
 # Authentication routes
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
+    # Check for token-based login first
+    token = request.args.get('token')
+    if token:
+        # Validate the token
+        for token_id, token_data in token_service.tokens.items():
+            if (token_data.get('token') == token and
+                token_data.get('is_active', False)):
+                
+                # Check if token is expired
+                expires_at = datetime.fromisoformat(token_data['expires_at'])
+                if expires_at > datetime.utcnow():
+                    # Token is valid - log in the user
+                    session['admin_logged_in'] = True
+                    session['admin_username'] = 'token_user'
+                    session['login_method'] = 'token'
+                    session['token_name'] = token_data.get('name', 'AI Assistant')
+                    
+                    log_admin_action('token_login', 'token_user',
+                                   ip_address=request.remote_addr,
+                                   user_agent=request.headers.get('User-Agent', 'Unknown'),
+                                   token_name=token_data.get('name', 'AI Assistant'),
+                                   token_id=token_id)
+                    
+                    flash(f'Successfully logged in with token: {token_data.get("name", "AI Assistant")}', 'success')
+                    return redirect(url_for('admin_dashboard'))
+                else:
+                    flash('Token has expired', 'error')
+                    break
+        else:
+            flash('Invalid token', 'error')
+    
+    # Handle password-based login
     if request.method == 'POST':
         password = request.form['password']
         password_hash = hashlib.sha256(password.encode()).hexdigest()
@@ -746,6 +778,7 @@ def admin_login():
         if password_hash == ADMIN_PASSWORD_HASH:
             session['admin_logged_in'] = True
             session['admin_username'] = 'admin'
+            session['login_method'] = 'password'
             log_admin_action('login', 'admin',
                            ip_address=request.remote_addr,
                            user_agent=request.headers.get('User-Agent', 'Unknown'))
