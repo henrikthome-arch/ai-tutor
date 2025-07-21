@@ -54,6 +54,7 @@ The AI Tutor system is a cloud-native, PostgreSQL-backed platform that provides 
   - Student profile management
   - Session data processing
   - Token-based authentication
+  - AI prompt management via file-based system
 
 #### 2.1.2. MCP Server (`mcp-server/`)
 - **Purpose**: Model Context Protocol server for external data access
@@ -73,6 +74,16 @@ The AI Tutor system is a cloud-native, PostgreSQL-backed platform that provides 
   - Authentication tokens (persistent storage)
   - System logs and analytics
   - Curriculum and school data
+
+#### 2.1.4. AI Analysis System (`ai-tutor/backend/ai_poc/`)
+- **Purpose**: AI-powered analysis of tutoring session transcripts
+- **Framework**: Python with OpenAI/Anthropic API integration
+- **Responsibilities**:
+  - File-based prompt management (Markdown templates)
+  - Multi-provider AI analysis (OpenAI, Anthropic)
+  - Structured response parsing and extraction
+  - Session quality validation
+  - Student profile enhancement from transcripts
 
 ### 2.2. External Integrations
 
@@ -186,6 +197,16 @@ GET  /api/v1/logs              # System logs (with filtering)
 5. AI analysis → Updates student assessment
 6. Session summary generated
 7. Data stored in PostgreSQL
+```
+
+### 6.3. AI Prompt Management Flow
+```
+1. System startup → FileBasedPromptManager loads all .md files
+2. Prompt request → Template lookup by name (e.g., 'session_analysis')
+3. Parameter injection → Template formatting with student context
+4. AI provider call → Formatted prompt sent to OpenAI/Anthropic
+5. Response parsing → Structured analysis extraction
+6. Database storage → Results saved to PostgreSQL
 ```
 
 ### 6.2. Admin Dashboard Flow
