@@ -62,8 +62,8 @@ class StudentService:
                     student_dict.update({
                         'interests': student.profile.interests or [],
                         'learning_preferences': student.profile.learning_preferences or [],
-                        'grade': student.profile.grade,
-                        'curriculum': student.profile.curriculum
+                        'grade': student.profile.grade or 'Unknown',
+                        'curriculum': student.profile.curriculum or 'Unknown'
                     })
                 else:
                     student_dict.update({
@@ -73,11 +73,28 @@ class StudentService:
                         'curriculum': 'Unknown'
                     })
                 
-                # Format for template compatibility
+                # Format for template compatibility - ensure all required fields
                 student_dict.update({
                     'name': student.full_name,
-                    'phone': student.phone_number
+                    'phone': student.phone_number,
+                    'progress': 75,  # Default progress percentage
+                    'last_session': None,  # Will be calculated from sessions
+                    'session_count': 0  # Will be calculated from sessions
                 })
+                
+                # Calculate session stats
+                session_count = student.sessions.count() if hasattr(student.sessions, 'count') else 0
+                student_dict['session_count'] = session_count
+                
+                # Get last session date
+                if session_count > 0:
+                    try:
+                        last_session = student.sessions.order_by(student.sessions.start_time.desc()).first()
+                        if last_session and last_session.start_time:
+                            student_dict['last_session'] = last_session.start_time.strftime('%Y-%m-%d')
+                    except Exception as e:
+                        print(f"Error getting last session for student {student.id}: {e}")
+                        student_dict['last_session'] = None
                 
                 result.append(student_dict)
             
