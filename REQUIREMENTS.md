@@ -9,18 +9,49 @@ This document outlines the detailed requirements for the AI Tutor system, coveri
 -   **Multi-Channel Interaction**: Support for tutoring sessions via phone calls, with a design that accommodates future channels like web and mobile apps.
 -   **Context-Aware Conversation**: Provide the AI tutor with relevant student context at the start of each session.
 -   **Post-Session Processing**: Automatically process session transcripts to generate summaries and update student profiles and assessments.
--   **Admin Dashboard**: A secure, web-based admin dashboard for system management.
+-   **AI-Powered Profile Extraction**: Automatically extract and update student information (age, grade, interests, learning preferences) from conversation transcripts using AI analysis.
+-   **VAPI Integration**: Complete integration with VAPI for voice call handling, including webhook processing, call data retrieval, and transcript analysis.
+-   **Automatic Student Registration**: System must automatically create student profiles for new callers using phone number identification and conversation analysis.
+-   **Phone Number Management**: Robust phone number normalization, mapping, and international format handling for student identification.
+-   **Admin Dashboard**: A secure, web-based admin dashboard for system management with database browser functionality.
 -   **API Layer**: A dedicated API layer (MCP Server) to serve data to all user interfaces.
--   **Log Management**: System logs will be automatically deleted after 30 days to ensure data hygiene.
+-   **Production Testing Tools**: Built-in testing infrastructure for VAPI integration and system health monitoring.
+-   **Log Management**: Comprehensive PostgreSQL-based logging system with automatic 30-day retention and categorized event tracking.
 
 ### 1.2. Non-Functional Requirements
 
 -   **Scalability**: An architecture designed for growth.
 -   **Maintainability**: A well-structured, modular codebase.
 -   **Security**: Secure data storage and encrypted communication.
--   **Reliability**: Robust error handling and logging.
--   **Low-Maintenance**: Use of managed services to minimize operational overhead.
+-   **Reliability**: Robust error handling with database transaction rollback, comprehensive logging, and graceful error recovery.
+-   **Low-Maintenance**: Use of managed services (Render.com, PostgreSQL) to minimize operational overhead.
+-   **Environment Flexibility**: Support for development and production environments with appropriate configuration management.
+-   **Health Monitoring**: Built-in health check endpoints and system status monitoring capabilities.
+-   **Database Management**: Integrated database browser functionality for data inspection and troubleshooting.
+-   **Real-time Event Tracking**: Live system event monitoring through PostgreSQL-based logging with categorized event types.
+-   **Session Security**: Secure admin session management with password hashing and session timeout protection.
+-   **Data Migration Support**: Database schema migration capabilities and automated table creation for deployment.
 -   **GDPR Compliance**: The system must be designed and operated in adherence to the General Data Protection Regulation (GDPR), ensuring student data is handled with the highest standards of privacy and security.
+
+### 1.3. Authentication and Access Control Requirements
+
+-   **Token-Based API Authentication**: The system must provide secure, scope-limited access tokens for debugging, testing, and AI assistant integration.
+-   **Admin Token Management**: The admin dashboard must include a token management interface for generating, viewing, and revoking access tokens.
+-   **API Access Control**: All API endpoints must support token-based authentication with appropriate scope validation.
+-   **MCP Server Integration**: The MCP server must accept and validate access tokens for secure data retrieval operations.
+-   **AI Assistant Access**: The system must support providing temporary access tokens to AI assistants for debugging and troubleshooting purposes.
+
+#### Token Requirements:
+- **Scope-Based Authorization**: Tokens must be issued with specific scopes limiting access to relevant functionality:
+  - `api:read` - Read access to API endpoints
+  - `api:write` - Write access to API endpoints
+  - `logs:read` - Access to system logs and diagnostics
+  - `mcp:access` - Access to MCP server functionality
+  - `admin:read` - Read access to admin dashboard data
+- **Short-Lived Tokens**: Tokens must have configurable expiration times (1 hour to 7 days maximum) to limit security exposure
+- **Token Revocation**: Admins must be able to immediately revoke active tokens
+- **Secure Storage**: Tokens must be securely generated using cryptographic standards
+- **Audit Trail**: Token generation, usage, and revocation must be logged for security auditing
 
 ## 2. Data Models and Functions
 
