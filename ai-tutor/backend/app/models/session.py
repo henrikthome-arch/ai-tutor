@@ -24,6 +24,7 @@ class Session(db.Model):
     
     # Relationships
     student = db.relationship('Student', back_populates='sessions')
+    metrics = db.relationship('SessionMetrics', back_populates='session', uselist=False)
     
     def __repr__(self):
         return f'<Session {self.id} for student_id={self.student_id}>'
