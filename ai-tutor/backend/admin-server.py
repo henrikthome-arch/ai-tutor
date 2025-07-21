@@ -718,7 +718,9 @@ def get_system_stats():
             'sessions_today': sessions_today,
             'total_sessions': total_sessions,
             'server_status': server_status,
-            'phone_mappings': phone_mappings_count
+            'phone_mappings': phone_mappings_count,
+            'data_size': 'PostgreSQL DB',  # File system no longer used
+            'last_backup': None  # Backup functionality not implemented for PostgreSQL yet
         }
     except Exception as e:
         print(f"Error getting system stats from database: {e}")
