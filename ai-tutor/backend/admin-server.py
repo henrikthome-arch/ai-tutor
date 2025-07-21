@@ -399,26 +399,48 @@ def check_auth():
 def get_all_students():
     """Get list of all students from database"""
     try:
-        # Get all students from repository
-        students = student_repository.get_all()
+        print(f"🔍 Getting all students from database...")
+        
+        # Get all students from repository with error handling
+        try:
+            students = student_repository.get_all()
+            print(f"📊 Retrieved {len(students) if students else 0} students from repository")
+        except Exception as repo_error:
+            log_error('DATABASE', f'Error getting students from repository: {str(repo_error)}', repo_error)
+            print(f"❌ Error getting students from repository: {repo_error}")
+            return []
+        
+        if not students:
+            print(f"ℹ️ No students found in database")
+            return []
         
         # Get phone mappings with error handling
         try:
             # Try to get phone mappings from memory first
             phone_mappings = dict(phone_manager.phone_mapping)
+            print(f"📞 Retrieved {len(phone_mappings)} phone mappings from memory")
         except Exception as e:
             # If that fails, try to load from disk
             try:
                 phone_mappings = phone_manager.load_phone_mapping()
+                print(f"📞 Loaded {len(phone_mappings)} phone mappings from disk")
             except Exception as load_error:
                 # If both fail, use an empty dictionary
                 log_error('DATABASE', f'Error loading phone mappings for students: {str(load_error)}', load_error)
                 print(f"⚠️ Error loading phone mappings: {load_error}")
                 phone_mappings = {}
         
+        # Convert to SimpleNamespace objects for template compatibility
+        from types import SimpleNamespace
+        result = []
+        
+        print(f"🔄 Processing {len(students)} students...")
+        
         # Add phone numbers to students with error handling
-        for student in students:
+        for i, student in enumerate(students):
             try:
+                print(f"👤 Processing student {i+1}/{len(students)}: {student.get('id', 'unknown_id')}")
+                
                 student_id = str(student['id'])
                 # Find phone number for this student
                 phone = None
@@ -427,24 +449,102 @@ def get_all_students():
                         phone = phone_num
                         break
                 student['phone'] = phone
+                
+                print(f"📞 Phone mapping for student {student_id}: {phone}")
+                
             except Exception as e:
                 log_error('DATABASE', f'Error processing phone mapping for student', e, student_id=student.get('id'))
+                print(f"❌ Error processing phone mapping for student {student.get('id')}: {e}")
                 student['phone'] = None
             
-            # Get session count
-            student_sessions = session_repository.get_by_student_id(student_id)
-            student['session_count'] = len(student_sessions)
+            try:
+                # Get session count and last session date with enhanced error handling
+                print(f"📋 Getting sessions for student {student_id}...")
+                
+                try:
+                    student_sessions = session_repository.get_by_student_id(student_id)
+                    print(f"📋 Retrieved {len(student_sessions) if student_sessions else 0} sessions for student {student_id}")
+                except Exception as session_error:
+                    log_error('DATABASE', f'Error getting sessions for student {student_id}', session_error, student_id=student_id)
+                    print(f"❌ Error getting sessions for student {student_id}: {session_error}")
+                    student_sessions = []
+                
+                student['session_count'] = len(student_sessions)
+                
+                # Find most recent session date
+                last_session_date = None
+                if student_sessions:
+                    try:
+                        # Sort sessions by start_datetime to get the most recent
+                        sorted_sessions = sorted(
+                            student_sessions,
+                            key=lambda x: x.get('start_datetime', ''),
+                            reverse=True
+                        )
+                        if sorted_sessions:
+                            latest_session = sorted_sessions[0]
+                            start_datetime = latest_session.get('start_datetime', '')
+                            if start_datetime:
+                                # Extract date part from datetime string
+                                if 'T' in start_datetime:
+                                    last_session_date = start_datetime.split('T')[0]
+                                elif ' ' in start_datetime:
+                                    last_session_date = start_datetime.split(' ')[0]
+                                else:
+                                    last_session_date = start_datetime[:10]
+                    except Exception as e:
+                        log_error('DATABASE', f'Error processing last session date', e, student_id=student_id)
+                        print(f"❌ Error processing last session date for student {student_id}: {e}")
+                
+                student['last_session'] = last_session_date
+                print(f"📅 Last session for student {student_id}: {last_session_date}")
+                
+            except Exception as session_proc_error:
+                log_error('DATABASE', f'Error in session processing for student {student_id}', session_proc_error, student_id=student_id)
+                print(f"❌ Error in session processing for student {student_id}: {session_proc_error}")
+                student['session_count'] = 0
+                student['last_session'] = None
             
-            # Create display name for templates
-            first_name = student.get('first_name', '')
-            last_name = student.get('last_name', '')
-            student['display_name'] = f"{first_name} {last_name}".strip() or 'Unknown'
+            try:
+                # Create display name for templates
+                first_name = student.get('first_name', '')
+                last_name = student.get('last_name', '')
+                student['display_name'] = f"{first_name} {last_name}".strip() or 'Unknown'
+                
+                # Create template-compatible fields
+                student['name'] = student['display_name']
+                student['grade'] = student.get('grade', 'Unknown')  # Add grade field
+                student['progress'] = 75  # Default progress percentage (could be calculated from sessions)
+                
+                print(f"👤 Student processed: {student['name']} (grade: {student['grade']}, sessions: {student['session_count']})")
+                
+                # Convert dictionary to SimpleNamespace for template attribute access
+                student_obj = SimpleNamespace(**student)
+                result.append(student_obj)
+                
+            except Exception as name_error:
+                log_error('DATABASE', f'Error processing student name/attributes for student {student_id}', name_error, student_id=student_id)
+                print(f"❌ Error processing student name/attributes for student {student_id}: {name_error}")
+                # Skip this student if we can't process their basic info
+                continue
+        
+        print(f"✅ Successfully processed {len(result)} students")
         
         # Sort by ID (most recent first) instead of name
-        return sorted(students, key=lambda x: x.get('id', 0), reverse=True)
+        try:
+            sorted_result = sorted(result, key=lambda x: getattr(x, 'id', 0), reverse=True)
+            print(f"🔄 Sorted {len(sorted_result)} students by ID")
+            return sorted_result
+        except Exception as sort_error:
+            log_error('DATABASE', f'Error sorting students', sort_error)
+            print(f"❌ Error sorting students: {sort_error}")
+            return result  # Return unsorted if sorting fails
+        
     except Exception as e:
-        print(f"Error getting students from database: {e}")
+        print(f"❌ Error getting students from database: {e}")
         log_error('DATABASE', 'Error getting students', e)
+        import traceback
+        print(f"🔍 Stack trace: {traceback.format_exc()}")
         return []
 
 def get_student_data(student_id):
@@ -938,8 +1038,31 @@ def admin_students():
     if not check_auth():
         return redirect(url_for('admin_login'))
     
-    students = get_all_students()
-    return render_template('students.html', students=students)
+    try:
+        students = get_all_students()
+        
+        # Calculate additional statistics for the template
+        active_students = len([s for s in students if getattr(s, 'session_count', 0) > 0])
+        avg_progress = sum(getattr(s, 'progress', 0) for s in students) / len(students) if students else 0
+        total_sessions = sum(getattr(s, 'session_count', 0) for s in students)
+        
+        return render_template('students.html',
+                             students=students,
+                             active_students=active_students,
+                             avg_progress=int(avg_progress),
+                             total_sessions=total_sessions)
+    except Exception as e:
+        log_error('ADMIN', 'Error in admin_students route', e)
+        print(f"❌ Error in admin_students route: {e}")
+        import traceback
+        print(f"🔍 Stack trace: {traceback.format_exc()}")
+        
+        # Return empty template with default values to prevent 500 error
+        return render_template('students.html',
+                             students=[],
+                             active_students=0,
+                             avg_progress=0,
+                             total_sessions=0)
 
 @app.route('/admin/students/<student_id>')
 def admin_student_detail(student_id):
@@ -2372,6 +2495,45 @@ def api_ai_stats():
         return jsonify({'error': 'AI POC not available'}), 503
     
     return jsonify(session_processor.get_processing_stats())
+
+@app.route('/api/v1/verify-token', methods=['GET'])
+@token_required()
+def verify_token_api():
+    """API endpoint to verify token validity"""
+    try:
+        # If we reach here, the token is valid (validated by decorator)
+        auth_header = request.headers.get('Authorization')
+        token = auth_header.split(' ')[1] if auth_header and ' ' in auth_header else None
+        
+        if token:
+            # Get token details from database
+            with app.app_context():
+                token_data = token_repository.find_by_token(token)
+                
+                if token_data:
+                    return jsonify({
+                        'success': True,
+                        'message': 'Token is valid',
+                        'token_info': {
+                            'id': token_data.get('id'),
+                            'name': token_data.get('name'),
+                            'scopes': token_data.get('scopes', []),
+                            'expires_at': token_data.get('expires_at'),
+                            'created_at': token_data.get('created_at')
+                        }
+                    })
+        
+        return jsonify({
+            'success': True,
+            'message': 'Token is valid but details unavailable'
+        })
+        
+    except Exception as e:
+        log_error('API', 'Error in verify-token endpoint', e)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route('/api/v1/logs', methods=['GET'])
 @token_required(['logs:read'])
