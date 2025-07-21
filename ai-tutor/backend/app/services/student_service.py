@@ -6,6 +6,7 @@ import os
 import json
 from typing import Dict, List, Optional, Any
 from datetime import datetime, date
+from types import SimpleNamespace
 
 from app.repositories import student_repository
 from app.models.student import Student
@@ -48,7 +49,7 @@ class StudentService:
                 'phone_mappings': 0
             }
     
-    def get_all_students(self) -> List[Dict[str, Any]]:
+    def get_all_students(self) -> List[Any]:
         """Get all students with profile information"""
         try:
             students = Student.query.all()
@@ -100,7 +101,9 @@ class StudentService:
                     student_dict['session_count'] = 0
                     student_dict['last_session'] = None
                 
-                result.append(student_dict)
+                # Convert dictionary to object with attribute access for template compatibility
+                student_obj = SimpleNamespace(**student_dict)
+                result.append(student_obj)
             
             return result
         except Exception as e:
