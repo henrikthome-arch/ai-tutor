@@ -1511,45 +1511,62 @@ def admin_system():
         # Check for environmental issues
         environmental_issues = check_environmental_issues()
         
-        # Create some system events for the Recent events section
-        system_events = [
-            {
+        # Get real system events from PostgreSQL database using system_logger
+        try:
+            # Get recent logs from the last 7 days, limited to 10 entries for recent events
+            recent_logs = system_logger.get_logs(days=7, limit=10)
+            
+            # Convert database logs to the format expected by the template
+            system_events = []
+            for log in recent_logs:
+                # Map database log levels to display status
+                status_mapping = {
+                    'INFO': 'success',
+                    'WARNING': 'warning',
+                    'ERROR': 'error',
+                    'DEBUG': 'info'
+                }
+                
+                # Format the timestamp for display
+                timestamp_str = log.get('timestamp', datetime.now().isoformat())
+                if isinstance(timestamp_str, str):
+                    try:
+                        # Parse ISO format timestamp and convert to display format
+                        timestamp_obj = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                        display_timestamp = timestamp_obj.strftime('%Y-%m-%d %H:%M:%S')
+                    except:
+                        display_timestamp = timestamp_str[:19]  # Fallback to first 19 chars
+                else:
+                    display_timestamp = str(timestamp_str)[:19]
+                
+                system_events.append({
+                    'timestamp': display_timestamp,
+                    'type': log.get('category', 'SYSTEM'),
+                    'message': log.get('message', 'Unknown event'),
+                    'user': log.get('data', {}).get('user', 'System'),
+                    'status': status_mapping.get(log.get('level', 'INFO'), 'info')
+                })
+            
+            # If no logs found, add a placeholder event
+            if not system_events:
+                system_events = [{
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'type': 'SYSTEM',
+                    'message': 'No recent log entries found in database',
+                    'user': 'System',
+                    'status': 'info'
+                }]
+                
+        except Exception as log_error:
+            # Fallback to a single error event if database log retrieval fails
+            log_error('ADMIN', f'Failed to retrieve recent logs for system events: {str(log_error)}', log_error)
+            system_events = [{
                 'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'type': 'SYSTEM',
-                'message': 'System page loaded successfully',
-                'user': session.get('admin_username', 'System'),
-                'status': 'success'
-            }
-        ]
-        
-        # Add database connection status to system events
-        if db_connection_status == 'connected':
-            system_events.append({
-                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'type': 'DATABASE',
-                'message': f'PostgreSQL database connection successful',
-                'user': 'System',
-                'status': 'success'
-            })
-        elif db_connection_status == 'error':
-            system_events.append({
-                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'type': 'DATABASE',
-                'message': f'PostgreSQL database connection error: {db_error}',
+                'message': f'Error retrieving recent logs: {str(log_error)}',
                 'user': 'System',
                 'status': 'error'
-            })
-        
-        # Add environmental issues to system events
-        for issue in environmental_issues:
-            status = 'error' if issue['severity'] in ['critical', 'high'] else 'warning'
-            system_events.append({
-                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'type': 'ENVIRONMENT',
-                'message': f"Environmental issue detected: {issue['title']}",
-                'user': 'System',
-                'status': status
-            })
+            }]
         
         # Set feature flags to disable ALL unsupported features
         feature_flags = {
