@@ -84,7 +84,7 @@ except ImportError:
             """Initialize with empty tokens storage."""
             self.tokens = {}  # token_id -> token_data
         
-        def generate_token(self, name="Debug Token", scopes=None, expiration_hours=4):
+        def generate_token(self, scopes=None, expiration_hours=4, description="Debug Token"):
             """Generate a simple token with the given scopes and expiration."""
             if scopes is None:
                 scopes = ['api:read']
@@ -102,7 +102,7 @@ except ImportError:
             token_data = {
                 'id': token_id,
                 'token': token,
-                'name': name,
+                'name': description,  # Use description instead of name
                 'scopes': scopes,
                 'created_at': datetime.utcnow().isoformat(),
                 'expires_at': expires_at.isoformat(),
@@ -3741,7 +3741,7 @@ def generate_token():
             
             # Generate token
             token_data = token_service.generate_token(
-                name=token_name,
+                description=token_name,
                 scopes=scopes,
                 expiration_hours=expiration_hours
             )
