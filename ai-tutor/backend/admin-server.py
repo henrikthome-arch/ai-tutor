@@ -266,7 +266,11 @@ try:
         print("🔍 Verifying database tables...")
         from sqlalchemy import inspect, text
         inspector = inspect(db.engine)
-        expected_tables = ['system_logs', 'sessions', 'students', 'schools', 'curriculums', 'assessments']
+        expected_tables = [
+            'system_logs', 'sessions', 'students', 'schools',
+            'curriculums', 'assessments', 'tokens', 'profiles',
+            'session_metrics', 'daily_stats', 'student_progress'
+        ]
         missing_tables = []
         
         for table in expected_tables:
@@ -296,6 +300,36 @@ try:
                     log_system("system_logs table created with direct SQL", level="INFO")
                 except Exception as sql_error:
                     print(f"❌ Error creating system_logs table: {sql_error}")
+                    db.session.rollback()
+            
+            # For PostgreSQL, try creating tokens table with direct SQL
+            if 'tokens' in missing_tables and database_url.startswith('postgresql'):
+                print("🔧 Creating tokens table with direct SQL for PostgreSQL")
+                try:
+                    tokens_sql = """
+                    CREATE TABLE IF NOT EXISTS tokens (
+                        id VARCHAR(36) PRIMARY KEY,
+                        name VARCHAR(100) NOT NULL,
+                        token_hash VARCHAR(64) NOT NULL UNIQUE,
+                        scopes JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        is_active BOOLEAN NOT NULL DEFAULT true,
+                        expires_at TIMESTAMP NOT NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        created_by VARCHAR(50),
+                        last_used_at TIMESTAMP,
+                        usage_count INTEGER NOT NULL DEFAULT 0
+                    );
+                    
+                    CREATE INDEX IF NOT EXISTS idx_tokens_token_hash ON tokens(token_hash);
+                    CREATE INDEX IF NOT EXISTS idx_tokens_is_active ON tokens(is_active);
+                    CREATE INDEX IF NOT EXISTS idx_tokens_expires_at ON tokens(expires_at);
+                    """
+                    db.session.execute(text(tokens_sql))
+                    db.session.commit()
+                    print("✅ tokens table created with direct SQL")
+                    log_system("tokens table created with direct SQL", level="INFO")
+                except Exception as sql_error:
+                    print(f"❌ Error creating tokens table: {sql_error}")
                     db.session.rollback()
             
             # Try create_all again for any remaining tables
