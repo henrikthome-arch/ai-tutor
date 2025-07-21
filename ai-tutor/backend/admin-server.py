@@ -25,7 +25,8 @@ from app.models.school import School
 from app.models.curriculum import Curriculum
 from app.models.session import Session
 from app.models.assessment import Assessment
-from app.repositories import student_repository, session_repository
+from app.models.token import Token
+from app.repositories import student_repository, session_repository, token_repository
 
 # Load environment variables
 try:
@@ -57,79 +58,89 @@ from system_logger import SystemLogRepository
 # Import VAPI Client
 from vapi_client import vapi_client
 
-# Simple TokenService implementation that works without JWT dependencies
+# Persistent TokenService implementation using PostgreSQL database
 import secrets
 import uuid
 from datetime import datetime, timedelta
 
 class TokenService:
-    """Simple token service for debugging and admin access."""
+    """Persistent token service for debugging and admin access using PostgreSQL."""
     
     def __init__(self):
-        """Initialize with empty tokens storage."""
-        self.tokens = {}  # token_id -> token_data
+        """Initialize token service."""
+        # Clean up expired tokens on startup
+        try:
+            with app.app_context():
+                expired_count = token_repository.cleanup_expired()
+                if expired_count > 0:
+                    print(f"🧹 Cleaned up {expired_count} expired tokens on startup")
+        except Exception as e:
+            print(f"⚠️ Error cleaning up expired tokens on startup: {e}")
     
     def generate_token(self, scopes=None, **kwargs):
-        """Generate a simple token with the given scopes."""
+        """Generate a persistent token with the given scopes."""
         if scopes is None:
             scopes = ['api:read']
             
         # Extract name and expiration from kwargs if provided
         token_name = kwargs.get('name', 'Debug Token')
         expiration_hours = kwargs.get('expiration_hours', 4)
+        created_by = kwargs.get('created_by', None)
         
-        # Generate a token ID and token
-        token_id = str(uuid.uuid4())
-        token = secrets.token_urlsafe(32)
-        
-        # Calculate expiration
-        expires_at = datetime.utcnow() + timedelta(hours=expiration_hours)
-        
-        # Store token data
-        token_data = {
-            'id': token_id,
-            'token': token,
-            'name': token_name,
-            'scopes': scopes,
-            'created_at': datetime.utcnow().isoformat(),
-            'expires_at': expires_at.isoformat(),
-            'is_active': True
-        }
-        
-        self.tokens[token_id] = token_data
-        return token_data
+        try:
+            # Use app context to ensure database operations work
+            with app.app_context():
+                token_data = token_repository.create(
+                    name=token_name,
+                    scopes=scopes,
+                    expiration_hours=expiration_hours,
+                    created_by=created_by
+                )
+                return token_data
+        except Exception as e:
+            print(f"Error generating token: {e}")
+            raise e
     
     def get_active_tokens(self):
-        """Get all active tokens."""
-        now = datetime.utcnow()
-        active_tokens = []
-        
-        for token_id, token_data in self.tokens.items():
-            if not token_data.get('is_active', False):
-                continue
+        """Get all active tokens from database."""
+        try:
+            with app.app_context():
+                active_tokens = token_repository.get_all_active()
                 
-            # Parse expiration time
-            expires_at = datetime.fromisoformat(token_data['expires_at'])
-            
-            # Check if token is expired
-            if expires_at < now:
-                token_data['is_active'] = False
-                continue
+                # Add remaining time for each token
+                now = datetime.utcnow()
+                for token in active_tokens:
+                    expires_at = datetime.fromisoformat(token['expires_at'])
+                    token['expires_in'] = max(0, (expires_at - now).total_seconds() // 60)
                 
-            # Add remaining time
-            token_data['expires_in'] = (expires_at - now).total_seconds() // 60
-            active_tokens.append(token_data)
-            
-        return active_tokens
+                return active_tokens
+        except Exception as e:
+            print(f"Error getting active tokens: {e}")
+            return []
     
     def revoke_token(self, token_id):
         """Revoke a token by ID."""
-        if token_id in self.tokens:
-            self.tokens[token_id]['is_active'] = False
-            return True
-        return False
+        try:
+            with app.app_context():
+                return token_repository.revoke(token_id)
+        except Exception as e:
+            print(f"Error revoking token: {e}")
+            return False
+    
+    def validate_token(self, raw_token, required_scopes=None):
+        """Validate a token and check scopes."""
+        try:
+            with app.app_context():
+                if required_scopes:
+                    return token_repository.validate_token_scopes(raw_token, required_scopes)
+                else:
+                    token_data = token_repository.find_by_token(raw_token)
+                    return token_data is not None
+        except Exception as e:
+            print(f"Error validating token: {e}")
+            return False
 
-print("🔑 Simple TokenService initialized")
+print("🔑 Persistent TokenService initialized with PostgreSQL storage")
 
 # Token authentication decorator
 def token_required(required_scopes=None):
@@ -151,29 +162,26 @@ def token_required(required_scopes=None):
             
             token = auth_header.split(' ')[1]
             
-            # Verify token
-            for token_id, token_data in token_service.tokens.items():
-                if not token_data.get('is_active', False):
-                    continue
-                
-                # Check if token matches
-                if token_data.get('token') == token:
-                    # Check if token is expired
-                    expires_at = datetime.fromisoformat(token_data['expires_at'])
-                    if expires_at < datetime.utcnow():
-                        return jsonify({'error': 'Token expired'}), 401
-                    
-                    # Check if token has required scopes
-                    if required_scopes:
-                        token_scopes = token_data.get('scopes', [])
-                        if not all(scope in token_scopes for scope in required_scopes):
-                            return jsonify({'error': 'Token does not have required scopes'}), 403
-                    
-                    # Token is valid
+            # Verify token using persistent storage
+            try:
+                if token_service.validate_token(token, required_scopes):
+                    # Token is valid and has required scopes
                     return f(*args, **kwargs)
-            
-            # No matching token found
-            return jsonify({'error': 'Invalid token'}), 401
+                else:
+                    # Check specific error reason
+                    with app.app_context():
+                        token_data = token_repository.find_by_token(token)
+                        if not token_data:
+                            return jsonify({'error': 'Invalid token'}), 401
+                        
+                        # If we reach here, token exists but doesn't have required scopes
+                        if required_scopes:
+                            return jsonify({'error': 'Token does not have required scopes'}), 403
+                        else:
+                            return jsonify({'error': 'Token expired or inactive'}), 401
+            except Exception as e:
+                print(f"Error validating token: {e}")
+                return jsonify({'error': 'Token validation failed'}), 500
         
         return decorated_function
     
@@ -742,33 +750,32 @@ def admin_login():
     # Check for token-based login first
     token = request.args.get('token')
     if token:
-        # Validate the token
-        for token_id, token_data in token_service.tokens.items():
-            if (token_data.get('token') == token and
-                token_data.get('is_active', False)):
+        try:
+            # Validate the token using persistent storage
+            with app.app_context():
+                token_data = token_repository.find_by_token(token)
                 
-                # Check if token is expired
-                expires_at = datetime.fromisoformat(token_data['expires_at'])
-                if expires_at > datetime.utcnow():
+                if token_data:
                     # Token is valid - log in the user
                     session['admin_logged_in'] = True
                     session['admin_username'] = 'token_user'
                     session['login_method'] = 'token'
                     session['token_name'] = token_data.get('name', 'AI Assistant')
+                    session['token_id'] = token_data.get('id')
                     
                     log_admin_action('token_login', 'token_user',
                                    ip_address=request.remote_addr,
                                    user_agent=request.headers.get('User-Agent', 'Unknown'),
                                    token_name=token_data.get('name', 'AI Assistant'),
-                                   token_id=token_id)
+                                   token_id=token_data.get('id'))
                     
                     flash(f'Successfully logged in with token: {token_data.get("name", "AI Assistant")}', 'success')
                     return redirect(url_for('admin_dashboard'))
                 else:
-                    flash('Token has expired', 'error')
-                    break
-        else:
-            flash('Invalid token', 'error')
+                    flash('Invalid or expired token', 'error')
+        except Exception as e:
+            print(f"Error validating browser login token: {e}")
+            flash('Error validating token', 'error')
     
     # Handle password-based login
     if request.method == 'POST':
@@ -3749,48 +3756,40 @@ def generate_token():
         return redirect(url_for('admin_login'))
     
     try:
-        # Use app context without reinitializing db
-        with app.app_context():
-            # Get form data
-            token_name = request.form.get('token_name', 'Unnamed Token')
-            scopes = request.form.getlist('scopes')
-            expiration_hours = int(request.form.get('expiration', 4))
-            
-            if not scopes:
-                flash('At least one scope must be selected', 'error')
-                return redirect(url_for('admin_tokens'))
-            
-            # Generate token
-            token_data = token_service.generate_token(
-                scopes=scopes,
-                name=token_name,
-                expiration_hours=expiration_hours
-            )
-            
-            log_admin_action('generate_token', session.get('admin_username', 'unknown'),
+        # Get form data
+        token_name = request.form.get('token_name', 'Unnamed Token')
+        scopes = request.form.getlist('scopes')
+        expiration_hours = int(request.form.get('expiration', 4))
+        
+        if not scopes:
+            flash('At least one scope must be selected', 'error')
+            return redirect(url_for('admin_tokens'))
+        
+        # Generate token using persistent storage
+        token_data = token_service.generate_token(
+            scopes=scopes,
+            name=token_name,
+            expiration_hours=expiration_hours,
+            created_by=session.get('admin_username', 'unknown')
+        )
+        
+        log_admin_action('generate_token', session.get('admin_username', 'unknown'),
+                        token_name=token_name,
+                        scopes=scopes,
+                        expiration_hours=expiration_hours,
+                        token_id=token_data['id'])
+        
+        flash('Token generated successfully', 'success')
+        
+        # Get active tokens for display
+        active_tokens = token_service.get_active_tokens()
+        
+        return render_template('tokens.html',
+                            token=token_data.get('token'),
                             token_name=token_name,
-                            scopes=scopes,
-                            expiration_hours=expiration_hours,
-                            token_id=token_data['id'])
-            
-            flash('Token generated successfully', 'success')
-            
-            # Get active tokens for display - handle the case where get_active_tokens might not exist
-            if hasattr(token_service, 'get_active_tokens'):
-                active_tokens = token_service.get_active_tokens()
-            else:
-                # Fallback implementation if get_active_tokens doesn't exist
-                active_tokens = []
-                # Log the issue
-                log_error('ADMIN', 'TokenService missing get_active_tokens method, using empty list',
-                         ValueError('Method not found'))
-            
-            return render_template('tokens.html',
-                                token=token_data['token'],
-                                token_name=token_name,
-                                token_scopes=scopes,
-                                token_expires=token_data['expires_at'],
-                                active_tokens=active_tokens)
+                            token_scopes=scopes,
+                            token_expires=token_data['expires_at'],
+                            active_tokens=active_tokens)
     except Exception as e:
         log_error('ADMIN', f'Error generating token: {str(e)}', e)
         flash(f'Error generating token: {str(e)}', 'error')
