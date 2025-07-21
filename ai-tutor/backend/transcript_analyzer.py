@@ -107,32 +107,35 @@ Do not include any explanatory text in your response, ONLY the JSON object.
             # Log the transcript length for debugging
             logger.info(f"Analyzing transcript with {len(transcript)} characters")
             
-            # Create a direct prompt for the AI model following the user's suggestion
-            direct_prompt = f"""Below follows a transcript of a conversation between an AI tutor and a Student:
+            # Create a more specific and detailed prompt for better extraction
+            direct_prompt = f"""You are analyzing a conversation transcript to extract student profile information.
 
+TRANSCRIPT:
 {transcript}
 
-END OF TRANSCRIPT
-
-Provide the response in the format of JSON as per the example below. Extract only information that is explicitly stated by the student.
+TASK: Extract student information from this conversation and return ONLY a JSON object with the following structure:
 
 {{
-  "age": 10,
-  "grade": 4,
-  "interests": ["playing games", "building things", "playing in the forest"],
-  "learning_preferences": [],
+  "age": <number or null>,
+  "grade": <number or null>,
+  "interests": ["list", "of", "interests"],
+  "learning_preferences": ["list", "of", "preferences"],
   "subjects": {{
-    "favorite": ["math"],
-    "challenging": []
+    "favorite": ["list", "of", "favorite", "subjects"],
+    "challenging": ["list", "of", "challenging", "subjects"]
   }},
-  "confidence_score": 0.9
+  "confidence_score": <number between 0.0 and 1.0>
 }}
 
-IMPORTANT:
-1. Return ONLY the JSON object, no other text
-2. If information is not present, use null for numbers and empty arrays for lists
-3. Make sure to extract ALL information mentioned by the student
-4. Pay attention to direct answers to questions like "How old are you?" or "What grade are you in?"
+EXTRACTION RULES:
+1. Look for explicit statements like "I'm 8 years old", "I'm in 3rd grade", "I like soccer"
+2. Extract hobbies, interests, sports, activities mentioned by the student
+3. Note any subjects or topics the student mentions liking or finding difficult
+4. If the student mentions grade level with words like "third grade", convert to number: 3
+5. Be very careful to extract ALL mentioned interests and hobbies
+6. Return confidence_score as 0.9 if you found clear information, 0.5 if uncertain, 0.1 if very little found
+
+IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
 """
             
             # Log the prompt for debugging
@@ -170,7 +173,10 @@ IMPORTANT:
                 # Log the raw response for debugging
                 raw_text = analysis.raw_response
                 logger.info(f"Received AI response with {len(raw_text) if raw_text else 0} characters")
-                logger.info(f"Raw response preview: {raw_text[:200] if raw_text else 'None'}")
+                logger.info(f"Raw response preview: {raw_text[:500] if raw_text else 'None'}")
+                
+                # Log the full response for debugging failed extractions
+                print(f"🔍 Full AI response for debugging: {raw_text}")
                 
                 # Try to parse the entire response as JSON first
                 try:

@@ -2349,14 +2349,23 @@ def admin_all_sessions():
             student_id = session.get('student_id')
             student = students_dict.get(student_id, {})
             
-            # Create full name from first_name and last_name
-            first_name = student.get('first_name', '')
-            last_name = student.get('last_name', '')
+            # Handle SimpleNamespace objects for students - use getattr instead of .get()
+            if hasattr(student, 'first_name'):
+                # Student is a SimpleNamespace object
+                first_name = getattr(student, 'first_name', '')
+                last_name = getattr(student, 'last_name', '')
+                grade = getattr(student, 'grade', 'Unknown')
+            else:
+                # Student is a dictionary
+                first_name = student.get('first_name', '')
+                last_name = student.get('last_name', '')
+                grade = student.get('grade', 'Unknown')
+            
             full_name = f"{first_name} {last_name}".strip() or 'Unknown'
             
             # Safely assign student name
             session['student_name'] = full_name if full_name else 'Unknown'
-            session['student_grade'] = student.get('grade', 'Unknown')
+            session['student_grade'] = grade
             
             # Ensure session ID is set
             if 'id' not in session and session.get('_id'):
