@@ -18,31 +18,41 @@ def get_all() -> List[Dict[str, Any]]:
     sessions = Session.query.all()
     return [session.to_dict() for session in sessions]
 
-def get_by_id(session_id: str) -> Optional[Dict[str, Any]]:
+def get_by_id(session_id) -> Optional[Dict[str, Any]]:
     """
     Get a session by ID
     
     Args:
-        session_id: The session ID
+        session_id: The session ID (int or str)
         
     Returns:
         Session dictionary or None if not found
     """
-    session = Session.query.get(session_id)
-    return session.to_dict() if session else None
+    # Handle both int and str session_id types
+    try:
+        session_id_int = int(session_id)
+        session = Session.query.get(session_id_int)
+        return session.to_dict() if session else None
+    except (ValueError, TypeError):
+        return None
 
-def get_by_student_id(student_id: str) -> List[Dict[str, Any]]:
+def get_by_student_id(student_id) -> List[Dict[str, Any]]:
     """
     Get all sessions for a student
     
     Args:
-        student_id: The student ID
+        student_id: The student ID (int or str)
         
     Returns:
         List of session dictionaries
     """
-    sessions = Session.query.filter_by(student_id=student_id).order_by(Session.start_datetime.desc()).all()
-    return [session.to_dict() for session in sessions]
+    # Handle both int and str student_id types
+    try:
+        student_id_int = int(student_id)
+        sessions = Session.query.filter_by(student_id=student_id_int).order_by(Session.start_datetime.desc()).all()
+        return [session.to_dict() for session in sessions]
+    except (ValueError, TypeError):
+        return []
 
 def get_by_date_range(start_date: date, end_date: date) -> List[Dict[str, Any]]:
     """
@@ -72,53 +82,79 @@ def create(session_data: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         The created session
     """
-    session = Session(**session_data)
-    db.session.add(session)
-    db.session.commit()
-    
-    return session.to_dict()
+    try:
+        session = Session(**session_data)
+        db.session.add(session)
+        db.session.commit()
+        
+        return session.to_dict()
+    except Exception as e:
+        # Rollback transaction on any error
+        db.session.rollback()
+        print(f"Error creating session: {e}")
+        raise e
 
-def update(session_id: str, session_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def update(session_id, session_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
     Update a session
     
     Args:
-        session_id: The session ID
+        session_id: The session ID (int or str)
         session_data: The session data
         
     Returns:
         The updated session or None if not found
     """
-    session = Session.query.get(session_id)
-    if not session:
+    # Handle both int and str session_id types
+    try:
+        session_id_int = int(session_id)
+        session = Session.query.get(session_id_int)
+        if not session:
+            return None
+        
+        for key, value in session_data.items():
+            if hasattr(session, key):
+                setattr(session, key, value)
+        
+        db.session.commit()
+        
+        return session.to_dict()
+    except (ValueError, TypeError):
         return None
-    
-    for key, value in session_data.items():
-        if hasattr(session, key):
-            setattr(session, key, value)
-    
-    db.session.commit()
-    
-    return session.to_dict()
+    except Exception as e:
+        # Rollback transaction on any error
+        db.session.rollback()
+        print(f"Error updating session: {e}")
+        raise e
 
-def delete(session_id: str) -> bool:
+def delete(session_id) -> bool:
     """
     Delete a session
     
     Args:
-        session_id: The session ID
+        session_id: The session ID (int or str)
         
     Returns:
         True if deleted, False if not found
     """
-    session = Session.query.get(session_id)
-    if not session:
+    # Handle both int and str session_id types
+    try:
+        session_id_int = int(session_id)
+        session = Session.query.get(session_id_int)
+        if not session:
+            return False
+        
+        db.session.delete(session)
+        db.session.commit()
+        
+        return True
+    except (ValueError, TypeError):
         return False
-    
-    db.session.delete(session)
-    db.session.commit()
-    
-    return True
+    except Exception as e:
+        # Rollback transaction on any error
+        db.session.rollback()
+        print(f"Error deleting session: {e}")
+        raise e
 
 def get_sessions_count() -> int:
     """

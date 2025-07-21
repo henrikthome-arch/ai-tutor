@@ -464,44 +464,54 @@ def get_system_stats():
         except Exception as e:
             log_error('DATABASE', 'Error counting students', e)
         
-        # Count sessions today - handle datetime format issues
+        # Count sessions today - handle datetime format issues with PostgreSQL-compatible queries
         try:
             today = datetime.now().date()
-            today_str = today.isoformat()
             
-            # Try multiple approaches to filter by date
+            # Use PostgreSQL-compatible date filtering
             try:
-                # First try with string comparison (most reliable with SQL)
+                from sqlalchemy import func, cast, Date
+                
+                # Use PostgreSQL date function to compare dates properly
                 sessions_today = Session.query.filter(
-                    Session.start_datetime.like(f"{today_str}%")
+                    cast(Session.start_datetime, Date) == today
                 ).count()
                 
-                # If no results, try with datetime objects
                 if sessions_today == 0:
-                    # Convert strings to datetime objects for comparison
+                    # Fallback: use datetime range comparison
                     today_start = datetime.combine(today, datetime.min.time())
                     today_end = datetime.combine(today, datetime.max.time())
                     
                     sessions_today = Session.query.filter(
-                        Session.start_datetime >= today_start.isoformat(),
-                        Session.start_datetime <= today_end.isoformat()
+                        Session.start_datetime >= today_start,
+                        Session.start_datetime <= today_end
                     ).count()
                     
                     if sessions_today > 0:
-                        log_system('Used datetime object comparison for sessions_today', count=sessions_today)
+                        log_system('Used datetime range comparison for sessions_today', count=sessions_today)
             except Exception as date_error:
-                # Last resort: manual filtering
+                # Manual filtering as last resort
                 log_error('DATABASE', 'Using manual filtering for sessions_today', date_error)
-                all_sessions = Session.query.all()
-                sessions_today = 0
-                
-                for session in all_sessions:
-                    try:
-                        session_date_str = str(session.start_datetime).split('T')[0].split(' ')[0]
-                        if session_date_str == today_str:
-                            sessions_today += 1
-                    except:
-                        pass
+                try:
+                    all_sessions = Session.query.all()
+                    sessions_today = 0
+                    
+                    for session in all_sessions:
+                        try:
+                            if hasattr(session.start_datetime, 'date'):
+                                session_date = session.start_datetime.date()
+                            else:
+                                # Parse string datetime
+                                session_date_str = str(session.start_datetime).split('T')[0].split(' ')[0]
+                                session_date = datetime.strptime(session_date_str, '%Y-%m-%d').date()
+                            
+                            if session_date == today:
+                                sessions_today += 1
+                        except:
+                            pass
+                except Exception as manual_error:
+                    log_error('DATABASE', 'Manual filtering also failed', manual_error)
+                    sessions_today = 0
         except Exception as e:
             log_error('DATABASE', 'Error counting sessions today', e)
         
@@ -2550,6 +2560,10 @@ def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
                     print(f"👤 Student identified/created in new app context: {student_id}")
                     save_api_driven_session(call_id, student_id, customer_phone,
                                           duration, transcript, call_data)
+                else:
+                    log_error('WEBHOOK', f"Failed to identify or create student for call {call_id} in new app context",
+                             ValueError("No student_id returned"), call_id=call_id, phone=customer_phone)
+                    print(f"❌ Failed to identify or create student for call {call_id} in new app context")
         else:
             # Normal flow - we're already in an app context
             print(f"🔍 Identifying student for phone: {customer_phone}")
@@ -2567,6 +2581,8 @@ def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
                 log_error('WEBHOOK', f"Failed to identify or create student for call {call_id}",
                          ValueError("No student_id returned"), call_id=call_id, phone=customer_phone)
                 print(f"❌ Failed to identify or create student for call {call_id}")
+                print(f"❌ Cannot save session without valid student_id")
+                return  # Exit early if we can't create/identify a student
         
         # Trigger AI analysis
         # Always analyze transcript for profile extraction regardless of length
@@ -2706,8 +2722,10 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
             log_error('WEBHOOK', f"Database connection failed in identify_or_create_student", db_error, call_id=call_id)
         
         if not phone_number:
-            print(f"⚠️ No phone number provided, using unknown_caller_{call_id}")
-            return f"unknown_caller_{call_id}"
+            print(f"⚠️ No phone number provided, cannot create student")
+            log_webhook('no-phone-number', f"No phone number provided for call {call_id}",
+                       call_id=call_id)
+            return None
         
         # Clean and normalize phone number
         clean_phone = normalize_phone_number(phone_number)
@@ -2792,10 +2810,12 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
             log_webhook('student-created', f"Created new student {new_student_id}",
                        call_id=call_id, student_id=new_student_id, phone=clean_phone)
             print(f"✅ Successfully created new student: {new_student_id}")
+            return new_student_id
         else:
-            print(f"⚠️ Failed to create new student, got empty ID")
-        
-        return new_student_id
+            print(f"❌ Failed to create new student")
+            log_webhook('student-creation-failed', f"Failed to create new student for phone: {clean_phone}",
+                       call_id=call_id, phone=clean_phone)
+            return None
     
     except Exception as e:
         log_error('WEBHOOK', f"Error in identify_or_create_student", e,
@@ -2816,10 +2836,8 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
                      call_id=call_id)
             print(f"❌ Error rolling back database transaction: {rollback_error}")
         
-        # Return a temporary ID as fallback
-        temp_id = f"temp_{call_id[-6:]}"
-        print(f"⚠️ Returning temporary ID as fallback: {temp_id}")
-        return temp_id
+        # Return None to indicate failure
+        return None
     
     finally:
         # Pop the app context if we created one
@@ -2867,10 +2885,7 @@ def create_student_from_call(phone: str, call_id: str) -> str:
         last_name = phone_suffix if phone else f"Unknown_{call_id[-6:]}"
         print(f"👤 Creating student with name: {first_name} {last_name}")
         
-        # Get current timestamp for created_at field
-        current_time = datetime.now().isoformat()
-        
-        # Create student data with SQL-compatible fields
+        # Create student data with SQL-compatible fields - remove incompatible fields
         student_data = {
             'first_name': first_name,
             'last_name': last_name,
@@ -2879,11 +2894,8 @@ def create_student_from_call(phone: str, call_id: str) -> str:
             'student_type': 'International',  # Default value
             'school_id': None,
             'interests': [],
-            'learning_preferences': [],
-            'created_at': current_time,
-            'updated_at': current_time,
-            'grade': 'Unknown',  # Default grade
-            'age': None  # Default age
+            'learning_preferences': []
+            # Note: removed created_at, updated_at, grade, age as they're not in the Student model create method
         }
         
         log_webhook('creating-student', f"Creating student in database",
@@ -2897,24 +2909,24 @@ def create_student_from_call(phone: str, call_id: str) -> str:
             new_student = student_repository.create(student_data)
             print(f"📊 Repository returned: {json.dumps(new_student, indent=2) if new_student else 'None'}")
             
-            # Explicitly commit the transaction
-            print(f"💾 Committing database transaction")
-            db.session.commit()
-            log_webhook('db-commit-success', f"Student database transaction committed successfully",
+            # Don't call commit here - the repository handles it
+            print(f"💾 Student creation completed by repository")
+            log_webhook('db-commit-success', f"Student database transaction completed successfully",
                        call_id=call_id, phone=normalized_phone)
-            print(f"💾 Student database transaction committed successfully (Call ID: {call_id})")
+            print(f"💾 Student database transaction completed successfully (Call ID: {call_id})")
             
             if not new_student:
                 log_error('DATABASE', f"Failed to create student in database", ValueError("Database operation failed"),
                          call_id=call_id, phone=normalized_phone)
                 print(f"❌ Failed to create student in database - repository returned None")
-                # Return a temporary ID for fallback
-                temp_id = f"temp_{call_id[-6:]}"
-                print(f"⚠️ Returning temporary ID as fallback: {temp_id}")
-                return temp_id
+                # Return None to indicate failure - don't use temp IDs as they cause FK constraint violations
+                return None
         except Exception as db_error:
-            # Rollback transaction on error
-            db.session.rollback()
+            # The repository should handle rollback, but ensure we're in a clean state
+            try:
+                db.session.rollback()
+            except:
+                pass
             log_error('DATABASE', f"Error creating student in database", db_error,
                      call_id=call_id, phone=normalized_phone)
             print(f"❌ Error creating student in database: {db_error}")
@@ -2922,10 +2934,10 @@ def create_student_from_call(phone: str, call_id: str) -> str:
             import traceback
             print(f"🔍 Error stack trace: {traceback.format_exc()}")
             
-            # Re-raise to be caught by outer exception handler
-            raise
+            # Return None to indicate failure
+            return None
         
-        # Ensure student_id is a string
+        # Ensure student_id is a string representation of the integer ID
         student_id = str(new_student['id'])
         print(f"👤 New student created with ID: {student_id}")
         
@@ -2975,10 +2987,8 @@ def create_student_from_call(phone: str, call_id: str) -> str:
                      call_id=call_id)
             print(f"❌ Error rolling back database transaction: {rollback_error}")
         
-        # Return a temporary ID for fallback
-        temp_id = f"temp_{call_id[-6:]}"
-        print(f"⚠️ Returning temporary ID as fallback: {temp_id}")
-        return temp_id
+        # Return None to indicate failure - don't use temp IDs
+        return None
     
     finally:
         # Pop the app context if we created one
@@ -3592,6 +3602,39 @@ def admin_vapi_test():
         return jsonify({
             'error': str(e),
             'success': False
+        }), 500
+
+@app.route('/admin/production-test', methods=['POST'])
+def admin_production_test():
+    """Run comprehensive production tests for core functionality"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        # Import the production test system
+        from production_test_system import run_production_tests
+        
+        # Run the production test suite
+        results = run_production_tests()
+        
+        # Log the admin action
+        log_admin_action('production_test', session.get('admin_username', 'unknown'),
+                        success=results['summary']['overall_status'] == 'PASS',
+                        test_summary=results['summary'])
+        
+        return jsonify(results)
+        
+    except Exception as e:
+        log_error('ADMIN', f'Error in production test route: {str(e)}', e)
+        return jsonify({
+            'error': str(e),
+            'success': False,
+            'summary': {
+                'total_tests': 0,
+                'passed': 0,
+                'failed': 1,
+                'overall_status': 'ERROR'
+            }
         }), 500
 
 @app.route('/admin/logs/cleanup', methods=['POST'])

@@ -39,6 +39,11 @@ class SystemLogRepository:
             self.db_session.commit()
             return log
         except Exception as e:
+            # Ensure the transaction is rolled back on any error
+            try:
+                self.db_session.rollback()
+            except Exception as rollback_error:
+                print(f"Error rolling back transaction: {rollback_error}")
             print(f"Error creating log entry: {e}")
             return None
     
@@ -101,6 +106,11 @@ class SystemLogRepository:
             self.db_session.commit()
             return deleted
         except Exception as e:
+            # Ensure the transaction is rolled back on any error
+            try:
+                self.db_session.rollback()
+            except Exception as rollback_error:
+                print(f"Error rolling back transaction during cleanup: {rollback_error}")
             print(f"Error cleaning up old logs: {e}")
             return 0
     
@@ -194,8 +204,17 @@ class SystemLogger:
                 from flask import current_app
                 if current_app:
                     # We're in an application context
-                    repository = SystemLogRepository(db.session)
-                    repository.create(category, message, data, level)
+                    try:
+                        repository = SystemLogRepository(db.session)
+                        repository.create(category, message, data, level)
+                    except Exception as db_error:
+                        # If database logging fails, ensure session is clean for next attempt
+                        try:
+                            db.session.rollback()
+                        except Exception as rollback_error:
+                            print(f"[LOGGER ERROR] Failed to rollback session: {rollback_error}")
+                        # Still raise the original error to be caught by outer handler
+                        raise db_error
                 else:
                     # Not in application context, log to console only
                     timestamp = datetime.now()

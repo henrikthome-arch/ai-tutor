@@ -93,20 +93,29 @@ async function listFiles(dirPath: string): Promise<string[]> {
 
 // MCP Tool: Get student profile
 app.post('/mcp/get-student-profile', async (req, res) => {
+  const startTime = Date.now();
   try {
     const { student_id } = req.body;
     
+    console.log(`[${new Date().toISOString()}] MCP: get-student-profile called for student_id: ${student_id}`);
+    
     if (!student_id) {
+      console.log(`[${new Date().toISOString()}] MCP: get-student-profile error - student_id is required`);
       return res.status(400).json({ error: 'student_id is required' });
     }
 
     const profile = await readJsonFile(`students/${student_id}/profile.json`);
+    
+    const duration = Date.now() - startTime;
+    console.log(`[${new Date().toISOString()}] MCP: get-student-profile completed for ${student_id} in ${duration}ms`);
     
     res.json({
       success: true,
       data: profile
     });
   } catch (error) {
+    const duration = Date.now() - startTime;
+    console.log(`[${new Date().toISOString()}] MCP: get-student-profile error for ${req.body?.student_id} in ${duration}ms: ${error instanceof Error ? error.message : 'Unknown error'}`);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
@@ -320,132 +329,6 @@ app.post('/mcp/get-student-context', async (req, res) => {
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
-
-// MCP Tools manifest
-app.get('/mcp/tools', (req, res) => {
-  res.json({
-    tools: [
-      {
-        name: 'get-student-profile',
-        description: 'Get detailed profile information for a student including personality, interests, and learning preferences',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            student_id: {
-              type: 'string',
-              description: 'The unique identifier for the student (e.g., "emma_smith")'
-            }
-          },
-          required: ['student_id']
-        }
-      },
-      {
-        name: 'get-student-progress',
-        description: 'Get current progress assessment for a student across all subjects',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            student_id: {
-              type: 'string',
-              description: 'The unique identifier for the student'
-            }
-          },
-          required: ['student_id']
-        }
-      },
-      {
-        name: 'get-curriculum',
-        description: 'Get curriculum requirements and learning goals for a specific grade and subject',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            curriculum_name: {
-              type: 'string',
-              description: 'Name of the curriculum file (e.g., "international_school_greece")'
-            },
-            grade: {
-              type: 'string',
-              description: 'Grade level (optional, for filtering)'
-            },
-            subject: {
-              type: 'string',
-              description: 'Subject name (optional, for filtering)'
-            }
-          },
-          required: ['curriculum_name']
-        }
-      },
-      {
-        name: 'get-session-summary',
-        description: 'Get detailed summary and analysis of a specific tutoring session',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            student_id: {
-              type: 'string',
-              description: 'The unique identifier for the student'
-            },
-            session_date: {
-              type: 'string',
-              description: 'Date of the session in YYYY-MM-DD format'
-            }
-          },
-          required: ['student_id', 'session_date']
-        }
-      },
-      {
-        name: 'get-session-transcript',
-        description: 'Get the full conversation transcript from a specific tutoring session',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            student_id: {
-              type: 'string',
-              description: 'The unique identifier for the student'
-            },
-            session_date: {
-              type: 'string',
-              description: 'Date of the session in YYYY-MM-DD format'
-            }
-          },
-          required: ['student_id', 'session_date']
-        }
-      },
-      {
-        name: 'get-recent-sessions',
-        description: 'Get summaries of recent tutoring sessions for a student',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            student_id: {
-              type: 'string',
-              description: 'The unique identifier for the student'
-            },
-            limit: {
-              type: 'number',
-              description: 'Maximum number of recent sessions to retrieve (default: 5)'
-            }
-          },
-          required: ['student_id']
-        }
-      },
-      {
-        name: 'get-student-context',
-        description: 'Get comprehensive context for a student including profile, progress, recent sessions, and relevant curriculum data',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            student_id: {
-              type: 'string',
-              description: 'The unique identifier for the student'
-            }
-          },
-          required: ['student_id']
-        }
-      }
-    ]
-  });
 });
 
 // MCP Tool: Get system logs

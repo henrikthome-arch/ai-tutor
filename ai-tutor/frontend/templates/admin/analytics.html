@@ -102,7 +102,7 @@
             
             <div class="card">
                 <div class="card-header">
-                    <h5>Analytics Tools</h5>
+                    <h5>System Tools</h5>
                 </div>
                 <div class="card-body">
                     <div class="list-group">
@@ -115,6 +115,34 @@
                         <button id="runAggregationBtn" class="list-group-item list-group-item-action">
                             <i class="fas fa-sync"></i> Run Daily Aggregation
                         </button>
+                        <button id="runProductionTestBtn" class="list-group-item list-group-item-action">
+                            <i class="fas fa-flask"></i> Run Production Tests
+                        </button>
+                    </div>
+                    
+                    <!-- Production Test Results Modal -->
+                    <div class="modal fade" id="productionTestModal" tabindex="-1" role="dialog">
+                        <div class="modal-dialog modal-lg" role="document">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Production Test Results</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div id="testResults">
+                                        <div class="text-center">
+                                            <div class="spinner-border" role="status">
+                                                <span class="visually-hidden">Running tests...</span>
+                                            </div>
+                                            <p class="mt-2">Running production tests...</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -303,5 +331,82 @@
             });
         }
     });
+    
+    // Handle production test button
+    document.getElementById('runProductionTestBtn').addEventListener('click', function() {
+        if (confirm('Run comprehensive production tests? This will test all core functionality including database connections, student/session creation, MCP server integration, and webhook processing.')) {
+            const modal = new bootstrap.Modal(document.getElementById('productionTestModal'));
+            modal.show();
+            
+            // Reset modal content
+            document.getElementById('testResults').innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Running tests...</span>
+                    </div>
+                    <p class="mt-2">Running production tests...</p>
+                </div>
+            `;
+            
+            fetch('/admin/production-test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                displayTestResults(data);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('testResults').innerHTML = `
+                    <div class="alert alert-danger">
+                        <h5>Error</h5>
+                        <p>An error occurred while running the production tests: ${error.message}</p>
+                    </div>
+                `;
+            });
+        }
+    });
+    
+    function displayTestResults(results) {
+        let html = '';
+        
+        // Summary
+        const statusColor = results.summary.overall_status === 'PASS' ? 'success' : 'danger';
+        html += `
+            <div class="alert alert-${statusColor}">
+                <h5>Test Summary</h5>
+                <p><strong>Overall Status:</strong> ${results.summary.overall_status}</p>
+                <p><strong>Tests:</strong> ${results.summary.passed}/${results.summary.total_tests} passed</p>
+                ${results.summary.failed > 0 ? `<p><strong>Failed:</strong> ${results.summary.failed}</p>` : ''}
+            </div>
+        `;
+        
+        // Individual test results
+        if (results.tests && results.tests.length > 0) {
+            html += '<h6>Detailed Results:</h6>';
+            results.tests.forEach(test => {
+                const testStatusColor = test.status === 'PASS' ? 'success' : 'danger';
+                const icon = test.status === 'PASS' ? '✓' : '✗';
+                html += `
+                    <div class="card mb-2">
+                        <div class="card-body">
+                            <h6 class="card-title">
+                                <span class="badge bg-${testStatusColor}">${icon}</span>
+                                ${test.name}
+                            </h6>
+                            <p class="card-text">${test.description}</p>
+                            ${test.error ? `<div class="alert alert-danger"><small>${test.error}</small></div>` : ''}
+                            ${test.details ? `<div class="alert alert-info"><small>${test.details}</small></div>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        document.getElementById('testResults').innerHTML = html;
+    }
 </script>
 {% endblock %}
