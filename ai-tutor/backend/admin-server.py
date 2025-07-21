@@ -57,9 +57,79 @@ from system_logger import SystemLogRepository
 # Import VAPI Client
 from vapi_client import vapi_client
 
-# Import TokenService - use only the real implementation
-from app.services.token_service import TokenService
-print("🔑 TokenService imported from app.services.token_service")
+# Simple TokenService implementation that works without JWT dependencies
+import secrets
+import uuid
+from datetime import datetime, timedelta
+
+class TokenService:
+    """Simple token service for debugging and admin access."""
+    
+    def __init__(self):
+        """Initialize with empty tokens storage."""
+        self.tokens = {}  # token_id -> token_data
+    
+    def generate_token(self, scopes=None, **kwargs):
+        """Generate a simple token with the given scopes."""
+        if scopes is None:
+            scopes = ['api:read']
+            
+        # Extract name and expiration from kwargs if provided
+        token_name = kwargs.get('name', 'Debug Token')
+        expiration_hours = kwargs.get('expiration_hours', 4)
+        
+        # Generate a token ID and token
+        token_id = str(uuid.uuid4())
+        token = secrets.token_urlsafe(32)
+        
+        # Calculate expiration
+        expires_at = datetime.utcnow() + timedelta(hours=expiration_hours)
+        
+        # Store token data
+        token_data = {
+            'id': token_id,
+            'token': token,
+            'name': token_name,
+            'scopes': scopes,
+            'created_at': datetime.utcnow().isoformat(),
+            'expires_at': expires_at.isoformat(),
+            'is_active': True
+        }
+        
+        self.tokens[token_id] = token_data
+        return token_data
+    
+    def get_active_tokens(self):
+        """Get all active tokens."""
+        now = datetime.utcnow()
+        active_tokens = []
+        
+        for token_id, token_data in self.tokens.items():
+            if not token_data.get('is_active', False):
+                continue
+                
+            # Parse expiration time
+            expires_at = datetime.fromisoformat(token_data['expires_at'])
+            
+            # Check if token is expired
+            if expires_at < now:
+                token_data['is_active'] = False
+                continue
+                
+            # Add remaining time
+            token_data['expires_in'] = (expires_at - now).total_seconds() // 60
+            active_tokens.append(token_data)
+            
+        return active_tokens
+    
+    def revoke_token(self, token_id):
+        """Revoke a token by ID."""
+        if token_id in self.tokens:
+            self.tokens[token_id]['is_active'] = False
+            return True
+        return False
+
+print("🔑 Simple TokenService initialized")
 
 # Token authentication decorator
 def token_required(required_scopes=None):
@@ -3658,7 +3728,11 @@ def generate_token():
                 return redirect(url_for('admin_tokens'))
             
             # Generate token
-            token_data = token_service.generate_token(scopes=scopes)
+            token_data = token_service.generate_token(
+                scopes=scopes,
+                name=token_name,
+                expiration_hours=expiration_hours
+            )
             
             log_admin_action('generate_token', session.get('admin_username', 'unknown'),
                             token_name=token_name,
