@@ -34,8 +34,8 @@ from backend.app.services.student_service import StudentService
 from backend.app.services.session_service import SessionService
 from backend.app.services.ai_service import AIService
 
-# Create blueprint
-api = Blueprint('api', __name__)
+# Import the blueprint from parent module
+from app.api import bp as api
 
 # Initialize services
 student_service = StudentService()
@@ -672,4 +672,75 @@ def api_session_logs():
         return jsonify({
             'status': 'error',
             'message': f"Error retrieving session logs: {str(e)}"
+        }), 500
+
+# Token verification API endpoint
+@api.route('/admin/api/verify-token')
+@token_or_session_auth(required_scope='api:read')
+def verify_token():
+    """Verify token validity and return token information"""
+    try:
+        # If we reach here, the token is valid (decorator validates it)
+        return jsonify({
+            'status': 'valid',
+            'message': 'Token is valid and active',
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        log_error('API', f"Error verifying token: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Error verifying token: {str(e)}"
+        }), 500
+
+# Test transcript analysis endpoint
+@api.route('/admin/api/test-transcript-analysis', methods=['POST'])
+@token_or_session_auth(required_scope='api:read')
+def test_transcript_analysis():
+    """Test transcript analysis with sample data"""
+    try:
+        # Get request data
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'message': 'No JSON data provided'
+            }), 400
+        
+        transcript = data.get('transcript')
+        test_mode = data.get('test_mode', True)
+        
+        if not transcript:
+            return jsonify({
+                'status': 'error',
+                'message': 'Transcript is required'
+            }), 400
+        
+        # Check if AI POC is available
+        if not AI_POC_AVAILABLE:
+            return jsonify({
+                'status': 'error',
+                'message': 'AI analysis not available'
+            }), 503
+        
+        # Analyze transcript using the AI service
+        result = ai_service.analyze_transcript(
+            transcript=transcript,
+            session_id=f"test_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            async_mode=False  # Synchronous for testing
+        )
+        
+        return jsonify({
+            'status': 'success',
+            'analysis': result,
+            'test_mode': test_mode,
+            'transcript_length': len(transcript),
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        log_error('API', f"Error in test transcript analysis: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Analysis failed: {str(e)}"
         }), 500
