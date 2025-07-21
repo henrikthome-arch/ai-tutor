@@ -9,7 +9,7 @@ from .session import Session
 from .assessment import Assessment
 from .profile import Profile
 from .system_log import SystemLog
-from .analytics import Analytics
+from .analytics import SessionMetrics, DailyStats, StudentProgress, Analytics
 from .token import Token
 
 __all__ = [
@@ -20,6 +20,9 @@ __all__ = [
     'Assessment',
     'Profile',
     'SystemLog',
+    'SessionMetrics',
+    'DailyStats',
+    'StudentProgress',
     'Analytics',
     'Token'
 ]

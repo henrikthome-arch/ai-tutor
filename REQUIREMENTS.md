@@ -40,6 +40,7 @@ This document outlines the detailed requirements for the AI Tutor system, coveri
 -   **API Access Control**: All API endpoints must support token-based authentication with appropriate scope validation.
 -   **MCP Server Integration**: The MCP server must accept and validate access tokens for secure data retrieval operations.
 -   **AI Assistant Access**: The system must support providing temporary access tokens to AI assistants for debugging and troubleshooting purposes.
+-   **Persistent Token Storage**: All tokens must be stored in PostgreSQL database to ensure they survive application deployments and restarts.
 
 #### Token Requirements:
 - **Scope-Based Authorization**: Tokens must be issued with specific scopes limiting access to relevant functionality:
@@ -50,8 +51,18 @@ This document outlines the detailed requirements for the AI Tutor system, coveri
   - `admin:read` - Read access to admin dashboard data
 - **Short-Lived Tokens**: Tokens must have configurable expiration times (1 hour to 7 days maximum) to limit security exposure
 - **Token Revocation**: Admins must be able to immediately revoke active tokens
-- **Secure Storage**: Tokens must be securely generated using cryptographic standards
+- **Secure Storage**: Tokens must be securely generated using cryptographic standards and stored as SHA-256 hashes in the database
 - **Audit Trail**: Token generation, usage, and revocation must be logged for security auditing
+- **Deployment Persistence**: Tokens must survive application deployments, restarts, and scaling operations through PostgreSQL storage
+- **Usage Tracking**: The system must track token usage statistics including last used timestamp and total usage count
+- **Automatic Cleanup**: Expired tokens must be automatically cleaned up from the database to maintain performance
+
+#### Token Implementation:
+- **Database Model**: A dedicated `Token` model with fields for hashed tokens, scopes, expiration, usage tracking, and metadata
+- **Repository Pattern**: Token operations must use the repository pattern for clean database abstraction
+- **Secure Hashing**: Raw tokens are hashed using SHA-256 before database storage for security
+- **Transaction Safety**: Token operations must be wrapped in database transactions with proper error handling
+- **Browser Integration**: Admin dashboard must support automatic token validation for seamless browser-based access
 
 ## 2. Data Models and Functions
 

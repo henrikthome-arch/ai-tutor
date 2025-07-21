@@ -80,3 +80,7 @@ class StudentProgress(db.Model):
     
     def __repr__(self):
         return f"<StudentProgress(student_id={self.student_id}, subject={self.subject}, level={self.proficiency_level})>"
+
+
+# Backward compatibility alias
+Analytics = SessionMetrics  # Use SessionMetrics as the default Analytics class
