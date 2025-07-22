@@ -280,15 +280,51 @@ erDiagram
     sessions ||--?| session_metrics : "measured by"
 ```
 
-#### Curriculum Workflow & Features
+### 3.2. System Data Architecture Overview
 
--   **System-Wide Default:** A single curriculum (e.g., "Cambridge Primary") can be marked as the `is_default`. New students not associated with a specific school are automatically enrolled in subjects from this curriculum that match their grade level.
--   **School-Specific Templates:** School administrators can define their own curriculums (e.g., "International School of Greece - Grade 8"). These templates can combine subjects from national standards, international standards, and school-specific courses.
--   **School Default Curriculum Templates:** Each school defines default subject templates per grade level in the `school_default_subjects` table. This allows schools to specify exactly which subjects from their chosen curriculum should be automatically assigned to students entering each grade.
--   **Student Enrollment Process:** When a new student is enrolled at a school, the system automatically copies all entries from `school_default_subjects` for that student's grade level into the `student_subjects` table, creating a personalized starting curriculum.
--   **Student-Level Customization:** After initial enrollment, teachers can add or remove individual subjects, toggle AI tutoring status, and customize the learning experience without affecting the school's master template.
--   **Enhanced Progress Tracking:** The system tracks both quantitative progress (`progress_percentage` from 0.0 to 1.0) and qualitative assessments (`teacher_assessment` with detailed notes about student's current status, struggles, and mastery).
--   **Granular AI Control:** Teachers can guide the AI through subject-specific `teacher_notes` and can enable/disable AI tutoring per subject using the `is_active_for_tutoring` flag.
+The database schema supports four primary functional areas:
+
+#### 3.2.1. Educational Structure Management
+-   **Schools & Students**: Core institutional relationships with comprehensive student profiles including learning psychology, preferences, and family context
+-   **Curriculum System**: Flexible, multi-layered curriculum management supporting system defaults, school-specific templates, and individual student customization
+-   **Subject Enrollment**: Granular subject-level management with AI tutoring controls and progress tracking per subject
+
+#### 3.2.2. Session & Learning Analytics
+-   **Session Recording**: Complete conversation transcripts with AI-generated summaries and metadata
+-   **Assessment Tracking**: Subject-specific assessments tracking strengths, weaknesses, and mastery levels
+-   **Progress Monitoring**: Dual-tracking system with numeric progress percentages and descriptive teacher assessments
+-   **Performance Metrics**: Session quality metrics, duration tracking, and satisfaction scoring
+
+#### 3.2.3. System Operations & Security
+-   **Authentication Framework**: Secure token-based access control with scope-based permissions
+-   **Audit & Logging**: Comprehensive system event logging with categorized retention and real-time monitoring
+-   **Analytics Infrastructure**: Daily statistics, usage patterns, and system performance tracking
+
+#### 3.2.4. AI Integration Architecture
+-   **Student Profile Integration**: Rich student profiles with learning psychology data feed directly into AI tutoring sessions
+-   **Session Context Loading**: Complete student context (curriculum, progress, preferences) available to AI tutor
+-   **Post-Session Processing**: AI analysis updates student profiles, assessments, and learning recommendations
+-   **Adaptive Learning**: AI recommendations inform curriculum adjustments and teaching strategies
+
+#### 3.2.5. Key Workflows
+
+**Student Enrollment Workflow:**
+1. New student creation with basic demographics
+2. School's default curriculum template automatically copied to student subjects
+3. Individual subject customization and AI tutoring activation
+4. Continuous profile enhancement through AI session analysis
+
+**Tutoring Session Workflow:**
+1. Student call triggers profile and curriculum context loading
+2. AI tutor receives complete student context for personalized interaction
+3. Session transcript captured with quality metrics
+4. Post-session AI analysis updates progress tracking and recommendations
+
+**Curriculum Management Workflow:**
+1. System-wide curriculum definitions with subject mappings
+2. School-specific curriculum template creation
+3. Grade-level default subject assignment
+4. Individual student curriculum customization and progress tracking
 
 ### 3.2. Repository Pattern
 
