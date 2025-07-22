@@ -602,12 +602,26 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             # Prepare update data
             update_data = {}
             
-            # Add basic profile fields
-            if 'age' in extracted_info and (not student_data.get('age') or student_data.get('age') == 'Unknown'):
-                update_data['age'] = extracted_info['age']
+            # Add basic profile fields - update if missing, None, 'Unknown', or empty
+            if 'age' in extracted_info and extracted_info['age'] is not None:
+                current_age = student_data.get('age')
+                if (current_age is None or
+                    current_age == 'Unknown' or
+                    current_age == '' or
+                    str(current_age).lower() == 'none' or
+                    (isinstance(current_age, str) and current_age.strip() == '')):
+                    update_data['age'] = extracted_info['age']
+                    logger.info(f"Updating age from '{current_age}' to {extracted_info['age']}")
             
-            if 'grade' in extracted_info and (not student_data.get('grade') or student_data.get('grade') == 'Unknown'):
-                update_data['grade'] = extracted_info['grade']
+            if 'grade' in extracted_info and extracted_info['grade'] is not None:
+                current_grade = student_data.get('grade')
+                if (current_grade is None or
+                    current_grade == 'Unknown' or
+                    current_grade == '' or
+                    str(current_grade).lower() == 'none' or
+                    (isinstance(current_grade, str) and current_grade.strip() == '')):
+                    update_data['grade'] = extracted_info['grade']
+                    logger.info(f"Updating grade from '{current_grade}' to {extracted_info['grade']}")
             
             # Handle profile-specific fields
             profile_data = {}
