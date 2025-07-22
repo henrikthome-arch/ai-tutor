@@ -121,6 +121,32 @@ erDiagram
         int school_id FK
         int grade_level
         string student_type
+        
+        %% Profile Information (consolidated from separate profile table)
+        int age
+        string nationality
+        json languages "Array of languages spoken"
+        string school_type
+        string curriculum_background
+        
+        %% Learning Preferences & Psychology
+        json primary_interests "Student's main interests and hobbies"
+        json preferred_activity_style "Learning style preferences"
+        json motivational_triggers "What motivates the student"
+        json decision_making_autonomy "How student prefers choices presented"
+        json language_processing "Language processing preferences"
+        json cognitive_memory_patterns "How student learns and remembers best"
+        json social_emotional_signals "Emotional and social learning patterns"
+        
+        %% Session Management
+        json session_preferences "Optimal duration, break frequency, rewards"
+        json areas_for_growth "Areas needing improvement"
+        json family_context "Home environment and family support"
+        
+        %% AI Tutoring Guidance
+        json practical_session_guidance "Specific strategies for AI tutor"
+        timestamp profile_last_updated "When profile analysis was last run"
+        
         timestamp created_at
         timestamp updated_at
     }
