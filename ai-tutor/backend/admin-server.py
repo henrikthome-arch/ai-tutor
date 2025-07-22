@@ -352,7 +352,7 @@ try:
         log_system("AI Tutor Admin Dashboard startup completed",
                   flask_env=FLASK_ENV,
                   admin_username=ADMIN_USERNAME,
-                  has_vapi_secret=VAPI_SECRET != 'your_vapi_secret_here',
+                  has_vapi_secret=(os.getenv('VAPI_SECRET', 'your_vapi_secret_here') != 'your_vapi_secret_here'),
                   ai_poc_available=AI_POC_AVAILABLE,
                   database_type=database_url.split('://')[0] if '://' in database_url else 'unknown',
                   level="INFO")
@@ -363,7 +363,7 @@ except Exception as e:
     import traceback
     print(f"Stack trace: {traceback.format_exc()}")
 
-# VAPI Configuration
+# VAPI Configuration - Move this earlier to avoid undefined variable error
 VAPI_SECRET = os.getenv('VAPI_SECRET', 'your_vapi_secret_here')
 
 # Set secure secret key

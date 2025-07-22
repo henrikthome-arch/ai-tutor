@@ -185,7 +185,23 @@ class FileBasedPromptManager:
             return None
         
         try:
-            formatted_user_prompt = prompt.user_prompt_template.format(**kwargs)
+            # Provide default values for optional parameters
+            safe_kwargs = {
+                'transcript': kwargs.get('transcript', ''),
+                'phone_number': kwargs.get('phone_number', 'Unknown'),
+                'call_duration': kwargs.get('call_duration', 'Unknown'),
+                'call_datetime': kwargs.get('call_datetime', 'Unknown'),
+                'student_name': kwargs.get('student_name', 'Student'),
+                'student_age': kwargs.get('student_age', 'Unknown'),
+                'student_grade': kwargs.get('student_grade', 'Unknown'),
+                'subject_focus': kwargs.get('subject_focus', 'General'),
+                'learning_style': kwargs.get('learning_style', 'Mixed'),
+                'primary_interests': kwargs.get('primary_interests', 'Various'),
+                'motivational_triggers': kwargs.get('motivational_triggers', 'Achievement'),
+                **kwargs  # Override with any provided values
+            }
+            
+            formatted_user_prompt = prompt.user_prompt_template.format(**safe_kwargs)
             return {
                 'system_prompt': prompt.system_prompt,
                 'user_prompt': formatted_user_prompt,
@@ -194,7 +210,11 @@ class FileBasedPromptManager:
                 'file_path': prompt.file_path
             }
         except KeyError as e:
-            raise ValueError(f"Missing required parameter for prompt '{prompt_name}': {e}")
+            # Get the actual missing parameter name
+            missing_param = str(e).strip("'\"")
+            raise ValueError(f"Missing required parameter for prompt '{prompt_name}': '{missing_param}'")
+        except Exception as e:
+            raise ValueError(f"Error formatting prompt '{prompt_name}': {str(e)}")
     
     def reload_prompts(self):
         """Reload all prompts from files (useful for development)"""

@@ -139,15 +139,19 @@ class OpenAIProvider(SimpleAIProvider):
             api_params = {
                 "model": self.model,
                 "messages": messages,
-                "temperature": self.temperature,
                 "timeout": self.timeout
             }
             
-            # Use max_completion_tokens for o3 models, max_tokens for others
+            # Handle temperature parameter - o3 models only support default temperature (1.0)
             if "o3" in self.model.lower():
+                # o3 models don't support custom temperature, use default (1.0)
                 api_params["max_completion_tokens"] = self.max_tokens
+                logger.info(f"Using o3 model {self.model} with default temperature (1.0)")
             else:
+                # Other models support custom temperature
+                api_params["temperature"] = self.temperature
                 api_params["max_tokens"] = self.max_tokens
+                logger.info(f"Using model {self.model} with temperature {self.temperature}")
             
             response = await self.openai.chat.completions.create(**api_params)
             
