@@ -565,6 +565,33 @@ def get_student_data(student_id):
             print(f"❌ Student {student_id} not found in repository")
             return None
         
+        # Get student's profile data from database to include interests
+        profile_data = {}
+        try:
+            from app.models.student import Student
+            student_obj = Student.query.get(student_id)
+            if student_obj and student_obj.profile:
+                profile_data = student_obj.profile.to_dict()
+                print(f"📊 Profile data retrieved: {json.dumps(profile_data, indent=2)}")
+                
+                # Add profile data to student data
+                student['interests'] = profile_data.get('interests', [])
+                student['learning_preferences'] = profile_data.get('learning_preferences', [])
+                student['motivational_triggers'] = profile_data.get('motivational_triggers', [])
+                print(f"✅ Enhanced student data with profile interests: {student.get('interests', [])}")
+            else:
+                print(f"ℹ️ No profile found for student {student_id}")
+                student['interests'] = []
+                student['learning_preferences'] = []
+                student['motivational_triggers'] = []
+        except Exception as profile_error:
+            log_error('DATABASE', f'Error getting profile for student: {str(profile_error)}', profile_error, student_id=student_id)
+            print(f"❌ Error getting profile: {profile_error}")
+            # Continue with empty profile data
+            student['interests'] = []
+            student['learning_preferences'] = []
+            student['motivational_triggers'] = []
+        
         # Get student sessions with error handling
         sessions = []
         try:
@@ -1167,7 +1194,11 @@ def admin_student_detail(student_id):
                 'learning_preferences': profile.get('learning_preferences', []) if isinstance(profile.get('learning_preferences'), list) else []
             }
             
+            # Debug logging for interests
+            interests_count = len(student.get('interests', []))
             print(f"👤 Student object created: {json.dumps(student, indent=2)}")
+            print(f"🎯 Interests found: {interests_count} items - {student.get('interests', [])}")
+            
         except Exception as profile_error:
             log_error('ADMIN', f'Error processing student profile data: {str(profile_error)}', profile_error, student_id=student_id)
             print(f"❌ Error processing student profile: {profile_error}")
@@ -1181,6 +1212,7 @@ def admin_student_detail(student_id):
                 'interests': [],
                 'learning_preferences': []
             }
+            print(f"🔄 Using fallback student object with empty interests")
         
         # Process sessions for recent sessions display with comprehensive error handling
         recent_sessions = []
