@@ -589,99 +589,122 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             return False
         
         try:
-            # Import student repository
-            from app.repositories import student_repository
+            # Import models and app context
+            from app.models.student import Student
             from app.models.profile import Profile
+            from app import db
+            import flask
             
-            # Get student from database
-            student_data = student_repository.get_by_id(student_id)
-            if not student_data:
-                logger.warning(f"Student {student_id} not found in database")
+            # Ensure we have app context
+            if not flask.has_app_context():
+                logger.error("No Flask app context for profile update")
                 return False
             
-            # Prepare update data
-            update_data = {}
+            # Get student from database
+            try:
+                student = Student.query.get(student_id)
+                if not student:
+                    logger.warning(f"Student {student_id} not found in database")
+                    return False
+            except Exception as e:
+                logger.error(f"Error getting student {student_id}: {e}")
+                return False
             
-            # Add basic profile fields - update if missing, None, 'Unknown', or empty
+            # Get or create profile for student
+            try:
+                profile = student.profile
+                if not profile:
+                    logger.info(f"Creating new profile for student {student_id}")
+                    profile = Profile(student_id=student_id)
+                    db.session.add(profile)
+                    db.session.flush()  # Get the ID
+                    
+                    # Update student relationship
+                    student.profile = profile
+            except Exception as e:
+                logger.error(f"Error getting/creating profile for student {student_id}: {e}")
+                return False
+            
+            # Track changes
+            updated_fields = []
+            
+            # Update age in profile if provided and not already set
             if 'age' in extracted_info and extracted_info['age'] is not None:
-                current_age = student_data.get('age')
+                current_age = profile.age_value
                 if (current_age is None or
-                    current_age == 'Unknown' or
-                    current_age == '' or
-                    str(current_age).lower() == 'none' or
-                    (isinstance(current_age, str) and current_age.strip() == '')):
-                    update_data['age'] = extracted_info['age']
+                    current_age == 0 or
+                    str(current_age).lower() == 'none'):
+                    profile.age_value = int(extracted_info['age'])
+                    updated_fields.append('age')
                     logger.info(f"Updating age from '{current_age}' to {extracted_info['age']}")
             
+            # Update grade in profile if provided and not already set
             if 'grade' in extracted_info and extracted_info['grade'] is not None:
-                current_grade = student_data.get('grade')
+                current_grade = profile.grade_value
                 if (current_grade is None or
                     current_grade == 'Unknown' or
                     current_grade == '' or
-                    str(current_grade).lower() == 'none' or
-                    (isinstance(current_grade, str) and current_grade.strip() == '')):
-                    update_data['grade'] = extracted_info['grade']
+                    str(current_grade).lower() == 'none'):
+                    profile.grade_value = str(extracted_info['grade'])
+                    updated_fields.append('grade')
                     logger.info(f"Updating grade from '{current_grade}' to {extracted_info['grade']}")
             
-            # Handle profile-specific fields
-            profile_data = {}
-            
             # Handle interests
-            if 'interests' in extracted_info:
-                # Get current interests from profile
-                current_interests = student_data.get('interests', [])
-                # Add new interests
+            if 'interests' in extracted_info and extracted_info['interests']:
+                current_interests = profile.interests or []
+                new_interests = []
                 for interest in extracted_info['interests']:
-                    if interest not in current_interests:
+                    if interest and interest not in current_interests:
+                        new_interests.append(interest)
                         current_interests.append(interest)
-                profile_data['interests'] = current_interests
+                
+                if new_interests:
+                    profile.interests = current_interests
+                    updated_fields.append('interests')
+                    logger.info(f"Added new interests: {new_interests}")
             
             # Handle learning preferences
-            if 'learning_preferences' in extracted_info:
-                current_prefs = student_data.get('learning_preferences', [])
+            if 'learning_preferences' in extracted_info and extracted_info['learning_preferences']:
+                current_prefs = profile.learning_preferences or []
+                new_prefs = []
                 for pref in extracted_info['learning_preferences']:
-                    if pref not in current_prefs:
+                    if pref and pref not in current_prefs:
+                        new_prefs.append(pref)
                         current_prefs.append(pref)
-                profile_data['learning_preferences'] = current_prefs
-            
-            # Handle subjects
-            if 'subjects' in extracted_info:
-                if 'favorite' in extracted_info['subjects']:
-                    current_favorites = student_data.get('favorite_subjects', [])
-                    for subj in extracted_info['subjects']['favorite']:
-                        if subj not in current_favorites:
-                            current_favorites.append(subj)
-                    profile_data['favorite_subjects'] = current_favorites
                 
-                if 'challenging' in extracted_info['subjects']:
-                    current_challenging = student_data.get('challenging_subjects', [])
-                    for subj in extracted_info['subjects']['challenging']:
-                        if subj not in current_challenging:
-                            current_challenging.append(subj)
-                    profile_data['challenging_subjects'] = current_challenging
+                if new_prefs:
+                    profile.learning_preferences = current_prefs
+                    updated_fields.append('learning_preferences')
+                    logger.info(f"Added new learning preferences: {new_prefs}")
             
-            # Add profile data to update data if it exists
-            if profile_data:
-                update_data['interests'] = profile_data.get('interests', [])
-                update_data['learning_preferences'] = profile_data.get('learning_preferences', [])
-            
-            # Update student in database if there are changes
-            if update_data:
-                updated_student = student_repository.update(student_id, update_data)
-                if updated_student:
-                    logger.info(f"Updated profile for student {student_id} with {extracted_info}")
+            # Save changes if any were made
+            if updated_fields:
+                try:
+                    db.session.commit()
+                    logger.info(f"Updated profile for student {student_id} with fields: {updated_fields}")
                     
                     # Log successful update to system logger
                     from system_logger import log_ai_analysis
                     log_ai_analysis("Successfully updated student profile in database",
-                                   updated_fields=list(update_data.keys()),
+                                   updated_fields=updated_fields,
                                    student_id=student_id)
                     return True
-            
-            return False
+                except Exception as e:
+                    db.session.rollback()
+                    logger.error(f"Error saving profile updates for student {student_id}: {e}")
+                    return False
+            else:
+                logger.info(f"No profile updates needed for student {student_id}")
+                return True
             
         except Exception as e:
             logger.error(f"Error updating profile for student {student_id}: {e}")
+            
+            # Rollback any pending changes
+            try:
+                db.session.rollback()
+            except:
+                pass
             
             # Log error to system logger
             from system_logger import log_error

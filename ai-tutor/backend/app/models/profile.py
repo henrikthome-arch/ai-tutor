@@ -12,6 +12,8 @@ class Profile(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False, unique=True)
+    age_value = db.Column(db.Integer, nullable=True)  # Extracted age from transcript
+    grade_value = db.Column(db.String(20), nullable=True)  # Extracted grade from transcript
     interests = db.Column(ARRAY(db.String), default=[])
     learning_preferences = db.Column(ARRAY(db.String), default=[])
     motivational_triggers = db.Column(ARRAY(db.String), default=[])
@@ -29,6 +31,8 @@ class Profile(db.Model):
         return {
             'id': self.id,
             'student_id': self.student_id,
+            'age_value': self.age_value,
+            'grade_value': self.grade_value,
             'interests': self.interests,
             'learning_preferences': self.learning_preferences,
             'motivational_triggers': self.motivational_triggers,
