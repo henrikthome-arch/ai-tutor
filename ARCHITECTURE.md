@@ -143,23 +143,36 @@ erDiagram
         bool is_active_for_tutoring "Can be toggled by teachers/parents"
         text teacher_notes "For guiding the AI on focus areas"
         text ai_tutor_notes "AI's own notes on student progress"
-        string progress_status "e.g., 'not_started', 'in_progress', 'mastered'"
+        float progress_percentage "Numeric progress from 0.0 to 1.0 (0% to 100%)"
+        text teacher_assessment "Descriptive assessment by teacher about student's current status"
+    }
+
+    school_default_subjects {
+        int id PK
+        int school_id FK
+        int curriculum_detail_id FK "Default subject template for the school"
+        int grade_level "Grade level this applies to"
     }
 
     schools ||--o{ students : "has"
+    schools ||--o{ school_default_subjects : "defines default curriculum for"
     schools }o--?| curriculums : "uses as default"
     curriculums ||--|{ curriculum_details : "is defined by"
     subjects ||--|{ curriculum_details : "is part of"
     students ||--o{ student_subjects : "is enrolled in"
     curriculum_details ||--o{ student_subjects : "is instance of"
+    curriculum_details ||--o{ school_default_subjects : "is part of school template"
 ```
 
 #### Curriculum Workflow & Features
 
 -   **System-Wide Default:** A single curriculum (e.g., "Cambridge Primary") can be marked as the `is_default`. New students not associated with a specific school are automatically enrolled in subjects from this curriculum that match their grade level.
 -   **School-Specific Templates:** School administrators can define their own curriculums (e.g., "International School of Greece - Grade 8"). These templates can combine subjects from national standards, international standards, and school-specific courses.
--   **Student-Level Customization:** When a student is enrolled, the system creates a personalized set of records in the `student_subjects` table based on the relevant template. This allows for individual modifications, such as adding or removing optional subjects, without altering the master template.
--   **Granular AI Control:** The `student_subjects` table allows teachers to guide the AI by toggling tutoring for specific subjects (`is_active_for_tutoring`) and adding instructional notes (`teacher_notes`).
+-   **School Default Curriculum Templates:** Each school defines default subject templates per grade level in the `school_default_subjects` table. This allows schools to specify exactly which subjects from their chosen curriculum should be automatically assigned to students entering each grade.
+-   **Student Enrollment Process:** When a new student is enrolled at a school, the system automatically copies all entries from `school_default_subjects` for that student's grade level into the `student_subjects` table, creating a personalized starting curriculum.
+-   **Student-Level Customization:** After initial enrollment, teachers can add or remove individual subjects, toggle AI tutoring status, and customize the learning experience without affecting the school's master template.
+-   **Enhanced Progress Tracking:** The system tracks both quantitative progress (`progress_percentage` from 0.0 to 1.0) and qualitative assessments (`teacher_assessment` with detailed notes about student's current status, struggles, and mastery).
+-   **Granular AI Control:** Teachers can guide the AI through subject-specific `teacher_notes` and can enable/disable AI tutoring per subject using the `is_active_for_tutoring` flag.
 
 ### 3.2. Repository Pattern
 

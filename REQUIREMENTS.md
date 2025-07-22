@@ -81,7 +81,8 @@ The system's data will be stored in a managed PostgreSQL database.
 | **curriculums** | A named educational framework (e.g., 'Cambridge 2025', 'ISG - Grade 8'). Can be marked as the system-wide default. | `id`, `name`, `description`, `is_default` |
 | **subjects** | A master list of all unique subjects (e.g., 'Mathematics'). | `id`, `name`, `description` |
 | **curriculum_details**| Links a subject to a specific curriculum for a given grade level, marking it as mandatory or optional. | `id`, `curriculum_id` (FK), `subject_id` (FK), `grade_level`, `is_mandatory` |
-| **student_subjects**| A student's specific enrollment in a subject from a curriculum. This is the core of personalization. | `id`, `student_id` (FK), `curriculum_detail_id` (FK), `is_active_for_tutoring`, `teacher_notes`, `progress_status` |
+| **student_subjects**| A student's specific enrollment in a subject from a curriculum. This is the core of personalization. | `id`, `student_id` (FK), `curriculum_detail_id` (FK), `is_active_for_tutoring`, `teacher_notes`, `progress_percentage` (0.0-1.0), `teacher_assessment` (Text) |
+| **school_default_subjects**| Defines the default subject template for each grade level at a school. Used to auto-populate student subjects when enrolling new students. | `id`, `school_id` (FK), `curriculum_detail_id` (FK), `grade_level` |
 | **Session**| Represents a tutoring session. | `id`, `student_id` (FK), `session_type`, `start_datetime`, `duration`, `transcript`, `summary` (Text) |
 | **SystemLog**| Records system events. | `id`, `timestamp`, `level`, `category`, `message`|
 
@@ -168,6 +169,73 @@ The admin dashboard will be the central control panel for the system.
 **Phase 3: Database Integration**
 4.  Create a script for initial data seeding (e.g., default curriculums).
 1.  Set up a managed PostgreSQL database on Render.
+
+## 5. Admin UI Requirements
+
+### 5.1. Curriculum Management Interface
+
+#### 5.1.1. CSV Upload System
+- **Generic File Upload Location**: A dedicated "System > File Uploads" section in the admin dashboard
+- **Supported Upload Types**:
+  - **Curriculums CSV Format**: `name,description,is_default`
+    - Example: `"Cambridge Primary 2025","Cambridge Primary Curriculum for 2025",false`
+  - **Subjects CSV Format**: `name,description`
+    - Example: `"Mathematics","Mathematical concepts and problem solving"`
+  - **Curriculum Details CSV Format**: `curriculum_name,subject_name,grade_level,is_mandatory`
+    - Example: `"Cambridge Primary 2025","Mathematics",4,true`
+- **Upload Validation**: Real-time validation with clear error messages for format issues
+- **File Processing**: Batch processing with progress indicators and detailed success/failure reports
+
+#### 5.1.2. Curriculum Data Management
+- **View All Types**: Tabular views for curriculums, subjects, and curriculum details with search and filtering
+- **Individual Entry Deletion**: Ability to delete individual entries with confirmation dialogs
+- **Bulk Operations**: Select multiple entries for deletion or status changes
+- **Data Integrity Checks**: Prevent deletion of entries that would break foreign key relationships
+
+### 5.2. School Default Curriculum Management
+
+#### 5.2.1. School Template Configuration
+- **Per-School Grade Templates**: Interface to define which curriculum details apply to each grade at each school
+- **Grade-Level Views**: Organized by grade level showing all subjects for that grade
+- **Template Copying**: Ability to copy curriculum templates between grades or schools
+- **Template Validation**: Ensure mandatory subjects are included for each grade
+
+#### 5.2.2. Student Curriculum Assignment
+- **Apply School Default**: One-click application of school's default curriculum for a student's grade
+  - **Process**: Copy all entries from `school_default_subjects` for the student's grade to `student_subjects`
+  - **Conflict Handling**: Options to merge with existing subjects or replace entirely
+- **Manual Subject Management**: 
+  - **Add Subjects**: Filter by curriculum and grade to add individual subjects to a student
+  - **Remove Subjects**: Remove individual subjects from student's curriculum
+  - **Subject Status**: Toggle `is_active_for_tutoring` for individual subjects
+  - **Progress Tracking**: Update `progress_percentage` (0-100% slider) and `teacher_assessment` (rich text editor)
+
+### 5.3. Student Progress Management Interface
+
+#### 5.3.1. Individual Student Views
+- **Subject Progress Dashboard**: Visual progress indicators (progress bars, charts) for each subject
+- **Teacher Assessment Editor**: Rich text editor for detailed teacher assessments
+- **AI Tutor Notes**: Display and edit AI-generated notes about student progress
+- **Progress History**: Timeline view of progress changes over time
+
+#### 5.3.2. Bulk Progress Management
+- **Grade-Level Views**: See progress across all students in a grade for specific subjects
+- **Export Capabilities**: Generate progress reports in PDF/Excel format
+- **Progress Analytics**: Charts showing class averages, individual progress trends
+
+### 5.4. File Management System
+
+#### 5.4.1. Upload History and Management
+- **Upload Log**: History of all file uploads with timestamps, user info, and processing results
+- **File Validation Results**: Detailed reports of what was successfully imported vs. errors
+- **Rollback Capability**: Ability to undo recent imports if errors are discovered
+- **Template Downloads**: Provide CSV templates for each upload type with proper formatting
+
+#### 5.4.2. Data Export Capabilities
+- **Full Data Export**: Export complete curriculum structure to CSV/Excel
+- **Selective Export**: Export filtered subsets (e.g., specific school's curriculum)
+- **Backup Functionality**: Regular automated exports for data backup purposes
+
 2.  Define the complete database schema using SQLAlchemy.
 3.  Implement the repository and service layers for all data entities.
 
