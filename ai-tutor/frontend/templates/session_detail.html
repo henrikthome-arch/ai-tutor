@@ -105,14 +105,14 @@
             <div style="display: flex; flex-direction: column; gap: 0.5rem;">
                 <div style="display: flex; justify-content: space-between;">
                     <span>Has Transcript:</span>
-                    <strong style="color: {% if transcript %}#27ae60{% else %}#e74c3c{% endif %};">
-                        {% if transcript %}✅ Yes{% else %}❌ No{% endif %}
+                    <strong style="color: {% if session_data.has_transcript_display %}#27ae60{% else %}#e74c3c{% endif %};">
+                        {% if session_data.has_transcript_display %}✅ Yes{% else %}❌ No{% endif %}
                     </strong>
                 </div>
                 <div style="display: flex; justify-content: space-between;">
                     <span>AI Analysis:</span>
-                    <strong style="color: {% if analysis %}#27ae60{% else %}#e74c3c{% endif %};">
-                        {% if analysis %}✅ Complete{% else %}❌ Missing{% endif %}
+                    <strong style="color: {% if session_data.has_analysis_display %}#27ae60{% else %}#e74c3c{% endif %};">
+                        {% if session_data.has_analysis_display %}✅ Complete{% else %}❌ Missing{% endif %}
                     </strong>
                 </div>
                 {% if transcript %}
