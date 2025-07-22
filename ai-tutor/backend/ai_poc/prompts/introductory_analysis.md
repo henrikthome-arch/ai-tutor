@@ -43,8 +43,8 @@ You must respond with ONLY valid JSON in exactly this structure:
   "student_profile": {{
     "name": "string - student's full name or 'Unknown' if not provided",
     "preferred_name": "string - what they like to be called",
-    "age": "string - estimated or stated age (e.g., '12' or '10-12 years')",
-    "grade_level": "string - current grade or estimated level",
+    "age": "number - exact age as integer (e.g., 12) or null if unknown",
+    "grade_level": "number - exact grade as integer (e.g., 4) or null if unknown",
     "school_name": "string - school name if mentioned or 'Not specified'",
     "subjects_mentioned": ["array of subjects discussed"],
     "learning_style_indicators": {{

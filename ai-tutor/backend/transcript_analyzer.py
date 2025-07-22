@@ -69,15 +69,15 @@ You must provide extracted information in JSON format with these fields:
   "confidence_score": <float between 0.0 and 1.0>
 }
 
-For each field, provide the exact information mentioned by the student. If the information is not present, use null for numeric fields and empty arrays for lists.""",
+IMPORTANT: For age and grade, return ONLY numeric values (e.g., 12, not "12 years old"). For each field, provide the exact information mentioned by the student. If the information is not present, use null for numeric fields and empty arrays for lists.""",
             user_prompt_template="""Please extract student profile information from this conversation transcript.
 
 CONVERSATION TRANSCRIPT:
 {transcript}
 
 Extract only information that is explicitly stated by the student. Format your response as a valid JSON object with the following fields:
-- age: The student's age (integer or null if not mentioned)
-- grade: The student's grade level (integer or null if not mentioned)
+- age: The student's age (integer only, e.g., 10, not "10 years old")
+- grade: The student's grade level (integer only, e.g., 4, not "4th grade")
 - interests: List of the student's interests or hobbies
 - learning_preferences: List of how the student prefers to learn
 - subjects: Object containing favorite and challenging subjects
@@ -86,6 +86,7 @@ Extract only information that is explicitly stated by the student. Format your r
 If information for a field is not present in the transcript, use null for numeric fields and empty arrays for lists.
 
 IMPORTANT: Look for statements like "I'm 10" or "I'm in 4th grade" or "I like playing games" and extract them accurately.
+For age and grade, return ONLY the numeric value - no text formatting.
 Do not include any explanatory text in your response, ONLY the JSON object.
 """,
             
@@ -273,9 +274,11 @@ EXTRACTION RULES:
 1. Look for explicit statements like "I'm 8 years old", "I'm in 3rd grade", "I like soccer"
 2. Extract hobbies, interests, sports, activities mentioned by the student
 3. Note any subjects or topics the student mentions liking or finding difficult
-4. If the student mentions grade level with words like "third grade", convert to number: 3
-5. Be very careful to extract ALL mentioned interests and hobbies
-6. Return confidence_score as 0.9 if you found clear information, 0.5 if uncertain, 0.1 if very little found
+4. For age: ONLY return the numeric value (e.g., 8, not "8 years old")
+5. For grade: ONLY return the numeric value (e.g., 3, not "third grade" or "Grade 3")
+6. If the student mentions grade level with words like "third grade", convert to number: 3
+7. Be very careful to extract ALL mentioned interests and hobbies
+8. Return confidence_score as 0.9 if you found clear information, 0.5 if uncertain, 0.1 if very little found
 
 IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
 """
@@ -382,7 +385,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
         if 'interests' in extracted_info and isinstance(extracted_info['interests'], list):
             clean_info['interests'] = [
                 interest.strip() for interest in extracted_info['interests']
-                if isinstance(interest, str) and 3 <= len(interest.strip()) <= 50
+                if isinstance(interest, str) and 1 <= len(interest.strip()) <= 100
             ]
         
         # Process learning preferences
