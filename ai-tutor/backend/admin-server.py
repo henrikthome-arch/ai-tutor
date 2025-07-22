@@ -2426,9 +2426,17 @@ def admin_all_sessions():
             except Exception:
                 session['duration'] = 'Unknown'
             
-            # Set transcript and analysis flags
-            session['has_transcript'] = bool(session.get('transcript'))
-            session['has_analysis'] = bool(session.get('summary') or session.get('analysis'))
+            # Set transcript and analysis flags - check database boolean flags first, then content
+            session['has_transcript'] = (
+                session.get('has_transcript', False) or
+                bool(session.get('transcript')) or
+                (session.get('transcript_length', 0) > 0)
+            )
+            session['has_analysis'] = (
+                session.get('has_summary', False) or
+                session.get('has_analysis', False) or
+                bool(session.get('summary') or session.get('analysis'))
+            )
         
         # Sort by date and time (newest first) - with error handling
         try:
@@ -2494,9 +2502,17 @@ def view_student_sessions(student_id):
             # Set duration
             session['duration'] = session.get('duration_minutes', session.get('duration', 0) // 60 if session.get('duration') else 'Unknown')
             
-            # Set transcript and analysis flags
-            session['has_transcript'] = bool(session.get('transcript'))
-            session['has_analysis'] = bool(session.get('summary') or session.get('analysis'))
+            # Set transcript and analysis flags - check database boolean flags first, then content
+            session['has_transcript'] = (
+                session.get('has_transcript', False) or
+                bool(session.get('transcript')) or
+                (session.get('transcript_length', 0) > 0)
+            )
+            session['has_analysis'] = (
+                session.get('has_summary', False) or
+                session.get('has_analysis', False) or
+                bool(session.get('summary') or session.get('analysis'))
+            )
             
             # Set file name for compatibility with template
             session['file'] = f"session_{session.get('id')}"

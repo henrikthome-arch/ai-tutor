@@ -71,8 +71,8 @@ class OpenAIProvider(SimpleAIProvider):
             self.temperature = self.config['temperature']
             self.timeout = self.config['timeout']
             
-            # Set API key
-            self.openai.api_key = self.api_key
+            # Initialize async client for proper async support
+            self.client = openai.AsyncOpenAI(api_key=self.api_key)
             
             logger.info(f"OpenAI provider initialized with model: {self.model}")
         except ImportError:
@@ -153,7 +153,7 @@ class OpenAIProvider(SimpleAIProvider):
                 api_params["max_tokens"] = self.max_tokens
                 logger.info(f"Using model {self.model} with temperature {self.temperature}")
             
-            response = await self.openai.chat.completions.create(**api_params)
+            response = await self.client.chat.completions.create(**api_params)
             
             # Extract the response content
             raw_response = response.choices[0].message.content
