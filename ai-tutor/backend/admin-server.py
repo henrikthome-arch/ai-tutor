@@ -1902,13 +1902,23 @@ def admin_system():
         
         # First, add all existing file-based mappings
         for phone_num, student_id in phone_mappings.items():
-            if student_id in students_info:
-                comprehensive_phone_mappings[phone_num] = students_info[student_id]
-            else:
-                comprehensive_phone_mappings[phone_num] = {'name': 'Student not found', 'id': student_id, 'grade': 'Unknown'}
+            # Ensure consistent data types for lookup - convert student_id to int for comparison
+            try:
+                student_id_int = int(student_id)
+                if student_id_int in students_info:
+                    comprehensive_phone_mappings[phone_num] = students_info[student_id_int]
+                    print(f"📞 File mapping found: {phone_num} → {student_id_int} ({students_info[student_id_int]['name']})")
+                else:
+                    comprehensive_phone_mappings[phone_num] = {'name': 'Student not found', 'id': student_id, 'grade': 'Unknown'}
+                    print(f"📞 File mapping orphaned: {phone_num} → {student_id} (student not in database)")
+            except (ValueError, TypeError):
+                # Handle non-numeric student_id
+                comprehensive_phone_mappings[phone_num] = {'name': 'Invalid student ID', 'id': student_id, 'grade': 'Unknown'}
+                print(f"📞 File mapping invalid: {phone_num} → {student_id} (non-numeric ID)")
         
         # Then, add all students with phone numbers from database (this ensures new students appear)
         for phone_num, student_info in phone_to_student_mapping.items():
+            # This will override file mappings if they exist, giving priority to database data
             comprehensive_phone_mappings[phone_num] = student_info
             print(f"📞 Added database phone mapping: {phone_num} → {student_info['id']} ({student_info['name']})")
         
