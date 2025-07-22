@@ -32,9 +32,14 @@ class Student(db.Model):
     @property
     def age(self):
         """Calculate age from date of birth or get from profile"""
-        # First try to get age from profile if it exists
-        if self.profile and hasattr(self.profile, 'age_value'):
-            return getattr(self.profile, 'age_value', None)
+        # First try to get age from profile learning_preferences (stored as "age:12")
+        if self.profile and self.profile.learning_preferences:
+            for pref in self.profile.learning_preferences:
+                if pref.startswith('age:'):
+                    try:
+                        return int(pref.split(':')[1])
+                    except (ValueError, IndexError):
+                        pass
         
         # Otherwise calculate from date_of_birth
         if not self.date_of_birth:
@@ -45,9 +50,14 @@ class Student(db.Model):
         )
     
     def get_grade(self):
-        """Get grade from profile"""
-        if self.profile and hasattr(self.profile, 'grade_value'):
-            return getattr(self.profile, 'grade_value', None)
+        """Get grade from profile learning_preferences (stored as "grade:7th")"""
+        if self.profile and self.profile.learning_preferences:
+            for pref in self.profile.learning_preferences:
+                if pref.startswith('grade:'):
+                    try:
+                        return pref.split(':', 1)[1]
+                    except IndexError:
+                        pass
         return None
     
     @property

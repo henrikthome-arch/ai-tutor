@@ -628,26 +628,33 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             # Track changes
             updated_fields = []
             
-            # Update age in profile if provided and not already set
-            if 'age' in extracted_info and extracted_info['age'] is not None:
-                current_age = profile.age_value
-                if (current_age is None or
-                    current_age == 0 or
-                    str(current_age).lower() == 'none'):
-                    profile.age_value = int(extracted_info['age'])
-                    updated_fields.append('age')
-                    logger.info(f"Updating age from '{current_age}' to {extracted_info['age']}")
+            # Initialize learning_preferences if None
+            if profile.learning_preferences is None:
+                profile.learning_preferences = []
             
-            # Update grade in profile if provided and not already set
+            # Get current learning preferences and remove old age/grade entries
+            learning_prefs = list(profile.learning_preferences) if profile.learning_preferences else []
+            original_prefs = [pref for pref in learning_prefs if not (pref.startswith('age:') or pref.startswith('grade:'))]
+            
+            # Update age in profile if provided (store in learning_preferences as "age:12")
+            if 'age' in extracted_info and extracted_info['age'] is not None:
+                try:
+                    age_val = int(extracted_info['age'])
+                    original_prefs.append(f"age:{age_val}")
+                    updated_fields.append('age')
+                    logger.info(f"Updating age to {age_val}")
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid age value: {extracted_info['age']}")
+            
+            # Update grade in profile if provided (store in learning_preferences as "grade:7th")
             if 'grade' in extracted_info and extracted_info['grade'] is not None:
-                current_grade = profile.grade_value
-                if (current_grade is None or
-                    current_grade == 'Unknown' or
-                    current_grade == '' or
-                    str(current_grade).lower() == 'none'):
-                    profile.grade_value = str(extracted_info['grade'])
-                    updated_fields.append('grade')
-                    logger.info(f"Updating grade from '{current_grade}' to {extracted_info['grade']}")
+                grade_val = str(extracted_info['grade'])
+                original_prefs.append(f"grade:{grade_val}")
+                updated_fields.append('grade')
+                logger.info(f"Updating grade to {grade_val}")
+            
+            # Update the learning_preferences with age/grade data
+            profile.learning_preferences = original_prefs
             
             # Handle interests
             if 'interests' in extracted_info and extracted_info['interests']:
