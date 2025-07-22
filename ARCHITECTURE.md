@@ -266,7 +266,7 @@ erDiagram
     %% Relationships
     schools ||--o{ students : "enrolls"
     schools ||--o{ school_default_subjects : "defines templates"
-    schools }o--?| curriculums : "uses default"
+    schools }o--|| curriculums : "uses default"
     
     students ||--o{ student_subjects : "enrolled in"
     students ||--o{ sessions : "participates in"
@@ -277,7 +277,7 @@ erDiagram
     curriculum_details ||--o{ student_subjects : "instantiated as"
     curriculum_details ||--o{ school_default_subjects : "template includes"
     
-    sessions ||--?| session_metrics : "measured by"
+    sessions ||--o| session_metrics : "measured by"
 ```
 
 ### 3.2. System Data Architecture Overview
