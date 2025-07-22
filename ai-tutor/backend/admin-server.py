@@ -366,9 +366,6 @@ except Exception as e:
 # VAPI Configuration
 VAPI_SECRET = os.getenv('VAPI_SECRET', 'your_vapi_secret_here')
 
-# VAPI Configuration
-VAPI_SECRET = os.getenv('VAPI_SECRET', 'your_vapi_secret_here')
-
 # Set secure secret key
 app.secret_key = FLASK_SECRET_KEY
 
@@ -1878,17 +1875,35 @@ def admin_system():
         # Get students info for phone mapping display with proper field access - handle dictionaries
         students = get_all_students()
         students_info = {}
+        phone_to_student_mapping = {}  # Map phone numbers to student info
+        
         for student in students:
             # Create proper name from first_name and last_name - use .get() for dictionaries
             first_name = student.get('first_name', '')
             last_name = student.get('last_name', '')
             full_name = f"{first_name} {last_name}".strip() or 'Unknown'
             
-            students_info[student.get('id', 'unknown')] = {
+            student_info = {
                 'name': full_name,
                 'id': student.get('id', 'unknown'),
                 'grade': student.get('grade', 'Unknown')
             }
+            
+            students_info[student.get('id', 'unknown')] = student_info
+            
+            # Also map by phone number for direct lookup
+            phone_number = student.get('phone_number') or student.get('phone')
+            if phone_number:
+                phone_to_student_mapping[phone_number] = student_info
+                print(f"📞 Mapped phone {phone_number} to student {full_name} (ID: {student.get('id')})")
+        
+        # Update phone_mappings to include students found by phone number
+        for phone_num in list(phone_mappings.keys()):
+            if phone_num in phone_to_student_mapping:
+                # Update the mapping to point to the correct student
+                student_info = phone_to_student_mapping[phone_num]
+                phone_mappings[phone_num] = student_info['id']
+                print(f"📞 Updated phone mapping: {phone_num} → {student_info['id']} ({student_info['name']})")
         
         # Check for environmental issues
         environmental_issues = check_environmental_issues()

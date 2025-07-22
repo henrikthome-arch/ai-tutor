@@ -467,18 +467,43 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                                extracted_fields=list(k for k in extracted_info.keys() if not k.startswith('_')),
                                student_id=student_id,
                                provider=self.provider_manager.current_provider)
+                
+                return extracted_info
             else:
-                logger.warning("No information extracted from transcript with conditional prompts")
+                logger.warning("No information extracted from transcript with conditional prompts - trying fallback")
                 
-                # Log failed extraction to system logger
-                from system_logger import log_ai_analysis
-                log_ai_analysis("Failed to extract information with conditional prompts",
-                               level="WARNING",
-                               transcript_length=len(transcript),
-                               student_id=student_id,
-                               provider=self.provider_manager.current_provider)
-                
-            return extracted_info
+                # Try fallback to legacy analysis if conditional prompts failed
+                try:
+                    logger.info("Attempting fallback to legacy transcript analysis")
+                    fallback_info = self.analyze_transcript(transcript, student_id)
+                    
+                    if fallback_info:
+                        logger.info("Fallback analysis succeeded")
+                        from system_logger import log_ai_analysis
+                        log_ai_analysis("Fallback analysis extracted information after conditional prompts failed",
+                                       extracted_fields=list(fallback_info.keys()),
+                                       student_id=student_id,
+                                       provider=self.provider_manager.current_provider)
+                        return fallback_info
+                    else:
+                        logger.warning("Both conditional and fallback analysis failed")
+                        from system_logger import log_ai_analysis
+                        log_ai_analysis("Failed to extract information with conditional prompts and fallback",
+                                       level="WARNING",
+                                       transcript_length=len(transcript),
+                                       student_id=student_id,
+                                       provider=self.provider_manager.current_provider)
+                        return {}
+                        
+                except Exception as fallback_error:
+                    logger.error(f"Fallback analysis also failed: {fallback_error}")
+                    from system_logger import log_ai_analysis
+                    log_ai_analysis("Failed to extract information with conditional prompts",
+                                   level="WARNING",
+                                   transcript_length=len(transcript),
+                                   student_id=student_id,
+                                   provider=self.provider_manager.current_provider)
+                    return {}
         except Exception as e:
             logger.error(f"Error in conditional prompt analysis: {e}")
             # Fallback to legacy analysis
