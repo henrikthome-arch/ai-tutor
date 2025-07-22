@@ -70,21 +70,33 @@ This document outlines the detailed requirements for the AI Tutor system, coveri
 - **Transaction Safety**: Token operations must be wrapped in database transactions with proper error handling
 - **Browser Integration**: Admin dashboard must support automatic token validation for seamless browser-based access
 
-## 2. Data Models and Functions
+## 2. Core Data Entities & Functions
 
-The system's data will be stored in a managed PostgreSQL database.
+The system manages educational data through a comprehensive PostgreSQL database schema (detailed technical specification available in [`ARCHITECTURE.md`](ARCHITECTURE.md)). The core functional data entities include:
 
-| Data Model | Description | Key Attributes |
-| :--- | :--- | :--- |
-| **schools** | Represents a school, which can define its own default curriculum. | `id`, `name`, `default_curriculum_id` (FK) |
-| **students** | Represents a student, linked to a school and grade level. | `id`, `name`, `school_id` (FK), `grade_level` |
-| **curriculums** | A named educational framework (e.g., 'Cambridge 2025', 'ISG - Grade 8'). Can be marked as the system-wide default. | `id`, `name`, `description`, `is_default` |
-| **subjects** | A master list of all unique subjects (e.g., 'Mathematics'). | `id`, `name`, `description` |
-| **curriculum_details**| Links a subject to a specific curriculum for a given grade level, marking it as mandatory or optional. | `id`, `curriculum_id` (FK), `subject_id` (FK), `grade_level`, `is_mandatory` |
-| **student_subjects**| A student's specific enrollment in a subject from a curriculum. This is the core of personalization. | `id`, `student_id` (FK), `curriculum_detail_id` (FK), `is_active_for_tutoring`, `teacher_notes`, `progress_percentage` (0.0-1.0), `teacher_assessment` (Text) |
-| **school_default_subjects**| Defines the default subject template for each grade level at a school. Used to auto-populate student subjects when enrolling new students. | `id`, `school_id` (FK), `curriculum_detail_id` (FK), `grade_level` |
-| **Session**| Represents a tutoring session. | `id`, `student_id` (FK), `session_type`, `start_datetime`, `duration`, `transcript`, `summary` (Text) |
-| **SystemLog**| Records system events. | `id`, `timestamp`, `level`, `category`, `message`|
+### 2.1. Educational Structure
+-   **Schools**: Educational institutions with customizable curriculum templates
+-   **Students**: Individual learners linked to schools and grade levels
+-   **Curriculums**: Named educational frameworks (e.g., 'Cambridge Primary 2025')
+-   **Subjects**: Master catalog of academic subjects across all curriculums
+-   **Curriculum Composition**: Flexible mapping of subjects to curriculums by grade level (mandatory/optional)
+
+### 2.2. Personalized Learning Management
+-   **School Templates**: Default subject combinations per grade level for each school
+-   **Student Curriculum**: Individual student enrollment in specific subjects with:
+    -   AI tutoring activation controls per subject
+    -   Teacher guidance notes for AI personalization
+    -   Dual progress tracking (numeric percentage + descriptive assessment)
+
+### 2.3. Session & Assessment Tracking
+-   **Tutoring Sessions**: Complete conversation records with AI-generated summaries
+-   **Academic Assessments**: Subject-specific progress evaluations with strengths, weaknesses, and mastery levels
+-   **Progress Analytics**: Session metrics, daily statistics, and learning trend analysis
+
+### 2.4. System Operations
+-   **Authentication**: Secure token-based access control with scope limitations
+-   **Audit Logging**: Comprehensive system event tracking for security and debugging
+-   **Performance Monitoring**: Session quality metrics and system health indicators
 
 ## 3. Prompt Management
 

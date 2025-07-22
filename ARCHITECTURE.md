@@ -96,29 +96,49 @@ The AI Tutor system is a cloud-native, PostgreSQL-backed platform that provides 
 
 ## 3. Data Architecture
 
-### 3.1. Core Database Schema & Curriculum Model
+### 3.1. Complete Database Schema
 
-The data model is implemented in PostgreSQL and extended to support a highly flexible, multi-layered curriculum system. This allows for customization at the system, school, and individual student level.
+The data model is implemented in PostgreSQL with a comprehensive schema supporting curriculum management, session tracking, authentication, and system monitoring.
 
 ```mermaid
 erDiagram
+    %% Core Educational Entities
     schools {
         int id PK
         string name
+        string country
+        string city
+        text description
         int default_curriculum_id FK "Optional: School's preferred curriculum"
     }
 
+    students {
+        int id PK
+        string first_name
+        string last_name
+        date date_of_birth
+        string phone_number
+        int school_id FK
+        int grade_level
+        string student_type
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    %% Curriculum System
     curriculums {
         int id PK
         string name
-        string description
+        text description
         bool is_default "The system-wide default curriculum"
+        timestamp created_at
     }
 
     subjects {
         int id PK
         string name "e.g., 'Mathematics', 'History'"
-        string description
+        text description
+        timestamp created_at
     }
 
     curriculum_details {
@@ -129,11 +149,11 @@ erDiagram
         bool is_mandatory
     }
 
-    students {
+    school_default_subjects {
         int id PK
-        string name
         int school_id FK
-        int grade_level
+        int curriculum_detail_id FK "Default subject template for the school"
+        int grade_level "Grade level this applies to"
     }
 
     student_subjects {
@@ -145,23 +165,93 @@ erDiagram
         text ai_tutor_notes "AI's own notes on student progress"
         float progress_percentage "Numeric progress from 0.0 to 1.0 (0% to 100%)"
         text teacher_assessment "Descriptive assessment by teacher about student's current status"
+        timestamp created_at
+        timestamp updated_at
     }
 
-    school_default_subjects {
+    %% Session Management
+    sessions {
         int id PK
-        int school_id FK
-        int curriculum_detail_id FK "Default subject template for the school"
-        int grade_level "Grade level this applies to"
+        int student_id FK
+        string session_type
+        timestamp start_datetime
+        int duration_seconds
+        text transcript
+        text summary
+        timestamp created_at
     }
 
-    schools ||--o{ students : "has"
-    schools ||--o{ school_default_subjects : "defines default curriculum for"
-    schools }o--?| curriculums : "uses as default"
-    curriculums ||--|{ curriculum_details : "is defined by"
-    subjects ||--|{ curriculum_details : "is part of"
-    students ||--o{ student_subjects : "is enrolled in"
-    curriculum_details ||--o{ student_subjects : "is instance of"
-    curriculum_details ||--o{ school_default_subjects : "is part of school template"
+    assessments {
+        int id PK
+        int student_id FK
+        string grade
+        string subject
+        text strengths
+        text weaknesses
+        string mastery_level
+        text comments_tutor
+        text comments_teacher
+        float completion_percentage
+        string grade_score
+        text grade_motivation
+        timestamp last_updated
+        timestamp created_at
+    }
+
+    %% System Infrastructure
+    system_logs {
+        int id PK
+        timestamp timestamp
+        string level
+        string category
+        text message
+        text metadata
+    }
+
+    tokens {
+        int id PK
+        string token_hash
+        string scopes
+        timestamp expires_at
+        timestamp created_at
+        timestamp last_used
+        int usage_count
+        bool is_active
+    }
+
+    %% Analytics & Metrics
+    session_metrics {
+        int id PK
+        int session_id FK
+        int duration_seconds
+        float satisfaction_score
+        timestamp created_at
+    }
+
+    daily_stats {
+        int id PK
+        date date
+        int total_sessions
+        float avg_duration
+        int total_users
+        int active_students
+    }
+
+    %% Relationships
+    schools ||--o{ students : "enrolls"
+    schools ||--o{ school_default_subjects : "defines templates"
+    schools }o--?| curriculums : "uses default"
+    
+    students ||--o{ student_subjects : "enrolled in"
+    students ||--o{ sessions : "participates in"
+    students ||--o{ assessments : "has"
+    
+    curriculums ||--|{ curriculum_details : "contains"
+    subjects ||--|{ curriculum_details : "part of curriculum"
+    curriculum_details ||--o{ student_subjects : "instantiated as"
+    curriculum_details ||--o{ school_default_subjects : "template includes"
+    
+    sessions ||--?| session_metrics : "measured by"
 ```
 
 #### Curriculum Workflow & Features
