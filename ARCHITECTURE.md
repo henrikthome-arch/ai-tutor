@@ -96,24 +96,70 @@ The AI Tutor system is a cloud-native, PostgreSQL-backed platform that provides 
 
 ## 3. Data Architecture
 
-### 3.1. Database Schema
+### 3.1. Core Database Schema & Curriculum Model
 
-```sql
--- Core Entities
-Students (id, first_name, last_name, phone_number, school_id, ...)
-Schools (id, name, country, city, description)
-Sessions (id, student_id, transcript, summary, start_datetime, ...)
-Assessments (id, student_id, grade, subject, mastery_level, ...)
+The data model is implemented in PostgreSQL and extended to support a highly flexible, multi-layered curriculum system. This allows for customization at the system, school, and individual student level.
 
--- System Infrastructure
-SystemLogs (id, timestamp, level, category, message)
-Tokens (id, token_hash, scopes, expires_at, created_at, last_used, ...)
+```mermaid
+erDiagram
+    schools {
+        int id PK
+        string name
+        int default_curriculum_id FK "Optional: School's preferred curriculum"
+    }
 
--- Analytics & Metrics
-SessionMetrics (id, session_id, duration_seconds, satisfaction, ...)
-DailyStats (id, date, total_sessions, avg_duration, total_users, ...)
-StudentProgress (id, student_id, subject, proficiency_level, ...)
+    curriculums {
+        int id PK
+        string name
+        string description
+        bool is_default "The system-wide default curriculum"
+    }
+
+    subjects {
+        int id PK
+        string name "e.g., 'Mathematics', 'History'"
+        string description
+    }
+
+    curriculum_details {
+        int id PK
+        int curriculum_id FK
+        int subject_id FK
+        int grade_level
+        bool is_mandatory
+    }
+
+    students {
+        int id PK
+        string name
+        int school_id FK
+        int grade_level
+    }
+
+    student_subjects {
+        int id PK
+        int student_id FK
+        int curriculum_detail_id FK "Links to a specific subject in a specific curriculum"
+        bool is_active_for_tutoring "Can be toggled by teachers/parents"
+        text teacher_notes "For guiding the AI on focus areas"
+        text ai_tutor_notes "AI's own notes on student progress"
+        string progress_status "e.g., 'not_started', 'in_progress', 'mastered'"
+    }
+
+    schools ||--o{ students : "has"
+    schools }o--?| curriculums : "uses as default"
+    curriculums ||--|{ curriculum_details : "is defined by"
+    subjects ||--|{ curriculum_details : "is part of"
+    students ||--o{ student_subjects : "is enrolled in"
+    curriculum_details ||--o{ student_subjects : "is instance of"
 ```
+
+#### Curriculum Workflow & Features
+
+-   **System-Wide Default:** A single curriculum (e.g., "Cambridge Primary") can be marked as the `is_default`. New students not associated with a specific school are automatically enrolled in subjects from this curriculum that match their grade level.
+-   **School-Specific Templates:** School administrators can define their own curriculums (e.g., "International School of Greece - Grade 8"). These templates can combine subjects from national standards, international standards, and school-specific courses.
+-   **Student-Level Customization:** When a student is enrolled, the system creates a personalized set of records in the `student_subjects` table based on the relevant template. This allows for individual modifications, such as adding or removing optional subjects, without altering the master template.
+-   **Granular AI Control:** The `student_subjects` table allows teachers to guide the AI by toggling tutoring for specific subjects (`is_active_for_tutoring`) and adding instructional notes (`teacher_notes`).
 
 ### 3.2. Repository Pattern
 

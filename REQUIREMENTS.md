@@ -9,6 +9,9 @@ This document outlines the detailed requirements for the AI Tutor system, coveri
 -   **Multi-Channel Interaction**: Support for tutoring sessions via phone calls, with a design that accommodates future channels like web and mobile apps.
 -   **Context-Aware Conversation**: Provide the AI tutor with relevant student context at the start of each session.
 -   **Post-Session Processing**: Automatically process session transcripts to generate summaries and update student profiles and assessments.
+-   **Flexible Curriculum Management**: The system must support a multi-layered curriculum model, allowing for default system-wide curriculums, school-specific curriculum templates, and student-level customization.
+-   **School-Defined Curriculums**: School administrators must be able to define custom curriculum templates combining subjects from various standards (e.g., national, international, school-specific).
+-   **Student-Level Subject Management**: Teachers and admins must be able to activate or deactivate specific subjects for AI tutoring for individual students and add guiding notes for the AI.
 -   **AI-Powered Profile Extraction**: Automatically extract and update student information (age, grade, interests, learning preferences) from conversation transcripts using AI analysis.
 -   **Conditional Prompt System**: The system must automatically detect call type (introductory vs tutoring) based on phone number lookup and apply appropriate AI prompts for analysis.
 -   **JSON-Structured AI Responses**: All AI prompts must generate structured JSON output for consistent data extraction and processing.
@@ -73,11 +76,13 @@ The system's data will be stored in a managed PostgreSQL database.
 
 | Data Model | Description | Key Attributes |
 | :--- | :--- | :--- |
-| **School** | Represents a school. | `id`, `name`, `country`, `city`, `description` |
-| **Student** | Represents a student. | `id`, `first_name`, `last_name`, `date_of_birth`, `phone_number`, `school_id` (FK), `student_type` |
-| **Curriculum** | Defines the educational framework. | `id`, `school_id` (FK), `grade`, `subject`, `student_type`, `goals` (Text) |
+| **schools** | Represents a school, which can define its own default curriculum. | `id`, `name`, `default_curriculum_id` (FK) |
+| **students** | Represents a student, linked to a school and grade level. | `id`, `name`, `school_id` (FK), `grade_level` |
+| **curriculums** | A named educational framework (e.g., 'Cambridge 2025', 'ISG - Grade 8'). Can be marked as the system-wide default. | `id`, `name`, `description`, `is_default` |
+| **subjects** | A master list of all unique subjects (e.g., 'Mathematics'). | `id`, `name`, `description` |
+| **curriculum_details**| Links a subject to a specific curriculum for a given grade level, marking it as mandatory or optional. | `id`, `curriculum_id` (FK), `subject_id` (FK), `grade_level`, `is_mandatory` |
+| **student_subjects**| A student's specific enrollment in a subject from a curriculum. This is the core of personalization. | `id`, `student_id` (FK), `curriculum_detail_id` (FK), `is_active_for_tutoring`, `teacher_notes`, `progress_status` |
 | **Session**| Represents a tutoring session. | `id`, `student_id` (FK), `session_type`, `start_datetime`, `duration`, `transcript`, `summary` (Text) |
-| **Assessment**| Tracks academic progress. | `id`, `student_id` (FK), `grade`, `subject`, `strengths`, `weaknesses`, `mastery_level`, `comments_tutor` (Text), `comments_teacher` (Text), `completion_percentage`, `grade_score`, `grade_motivation` (Text), `last_updated` (DateTime) |
 | **SystemLog**| Records system events. | `id`, `timestamp`, `level`, `category`, `message`|
 
 ## 3. Prompt Management
