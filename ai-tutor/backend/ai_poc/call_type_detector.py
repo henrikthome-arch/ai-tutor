@@ -48,6 +48,24 @@ class CallTypeDetector:
             r'^\+?1?[-.\s]?\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})$',  # US/Canada
             r'^\+?(\d{1,3})[-.\s]?(\d{1,4})[-.\s]?(\d{1,4})[-.\s]?(\d{1,4})$',  # International
         ]
+        
+        # Always try to use database connection from Flask app context
+        self._ensure_database_connection()
+    
+    def _ensure_database_connection(self):
+        """Ensure we have access to database through Flask app context"""
+        try:
+            import flask
+            if flask.has_app_context():
+                # We have app context, database should be available
+                self.db_connection = True  # Flag that database is available
+                logger.info("Database connection available through Flask app context")
+            else:
+                logger.warning("No Flask app context - database operations will be limited")
+                self.db_connection = None
+        except ImportError:
+            logger.warning("Flask not available - database operations will be limited")
+            self.db_connection = None
     
     def normalize_phone_number(self, phone_number: str) -> str:
         """

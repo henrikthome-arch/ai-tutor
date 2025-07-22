@@ -1897,13 +1897,23 @@ def admin_system():
                 phone_to_student_mapping[phone_number] = student_info
                 print(f"📞 Mapped phone {phone_number} to student {full_name} (ID: {student.get('id')})")
         
-        # Update phone_mappings to include students found by phone number
-        for phone_num in list(phone_mappings.keys()):
-            if phone_num in phone_to_student_mapping:
-                # Update the mapping to point to the correct student
-                student_info = phone_to_student_mapping[phone_num]
-                phone_mappings[phone_num] = student_info['id']
-                print(f"📞 Updated phone mapping: {phone_num} → {student_info['id']} ({student_info['name']})")
+        # Create comprehensive phone mappings that include both file mappings and database phone numbers
+        comprehensive_phone_mappings = {}
+        
+        # First, add all existing file-based mappings
+        for phone_num, student_id in phone_mappings.items():
+            if student_id in students_info:
+                comprehensive_phone_mappings[phone_num] = students_info[student_id]
+            else:
+                comprehensive_phone_mappings[phone_num] = {'name': 'Student not found', 'id': student_id, 'grade': 'Unknown'}
+        
+        # Then, add all students with phone numbers from database (this ensures new students appear)
+        for phone_num, student_info in phone_to_student_mapping.items():
+            comprehensive_phone_mappings[phone_num] = student_info
+            print(f"📞 Added database phone mapping: {phone_num} → {student_info['id']} ({student_info['name']})")
+        
+        # Update the phone_mappings variable to use the comprehensive mapping
+        phone_mappings = comprehensive_phone_mappings
         
         # Check for environmental issues
         environmental_issues = check_environmental_issues()
@@ -2545,8 +2555,24 @@ def view_session_detail(student_id, session_id):
         # Get transcript from session data
         transcript = session_data.get('transcript')
         
+        # Ensure transcript status is properly set for template
+        session_data['has_transcript_display'] = (
+            session_data.get('has_transcript', False) or
+            bool(transcript) or
+            (session_data.get('transcript_length', 0) > 0)
+        )
+        
         # Get analysis if available (implement based on your database schema)
-        analysis = None
+        analysis = session_data.get('summary') or session_data.get('analysis')
+        
+        # Ensure analysis status is properly set for template
+        session_data['has_analysis_display'] = (
+            session_data.get('has_summary', False) or
+            session_data.get('has_analysis', False) or
+            bool(analysis)
+        )
+        
+        print(f"📊 Session {session_id} display status: transcript={session_data['has_transcript_display']}, analysis={session_data['has_analysis_display']}")
         
         return render_template('session_detail.html',
                              student_id=student_id,
