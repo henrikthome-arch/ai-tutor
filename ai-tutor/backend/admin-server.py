@@ -2428,7 +2428,7 @@ def admin_all_sessions():
             
             # Set transcript and analysis flags
             session['has_transcript'] = bool(session.get('transcript'))
-            session['has_analysis'] = False  # Set based on your database schema
+            session['has_analysis'] = bool(session.get('summary') or session.get('analysis'))
         
         # Sort by date and time (newest first) - with error handling
         try:
@@ -2496,7 +2496,7 @@ def view_student_sessions(student_id):
             
             # Set transcript and analysis flags
             session['has_transcript'] = bool(session.get('transcript'))
-            session['has_analysis'] = False  # Set based on your database schema
+            session['has_analysis'] = bool(session.get('summary') or session.get('analysis'))
             
             # Set file name for compatibility with template
             session['file'] = f"session_{session.get('id')}"
