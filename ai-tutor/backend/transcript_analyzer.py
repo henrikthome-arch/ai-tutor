@@ -17,6 +17,8 @@ from app import db
 from ai_poc.session_processor import session_processor
 from ai_poc.prompts import prompt_manager
 from ai_poc.providers import provider_manager
+from ai_poc.call_type_detector import default_prompt_selector, CallType
+from ai_poc.prompts_file_loader import file_prompt_manager
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +100,146 @@ Do not include any explanatory text in your response, ONLY the JSON object.
         self.prompt_manager.add_custom_prompt(profile_prompt)
         logger.info("Created profile extraction prompt template")
     
+    async def analyze_transcript_with_conditional_prompts(
+        self,
+        transcript: str,
+        phone_number: Optional[str] = None,
+        subject_hint: Optional[str] = None,
+        additional_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Analyze transcript using conditional prompt selection based on call type
+        
+        Args:
+            transcript: The conversation transcript
+            phone_number: Caller's phone number for call type detection
+            subject_hint: Optional subject hint (math, reading, etc.)
+            additional_context: Additional context for analysis
+            
+        Returns:
+            Dictionary containing extracted information and analysis results
+        """
+        if not transcript:
+            return {}
+        
+        try:
+            logger.info(f"Analyzing transcript with conditional prompts. Phone: {phone_number}, Subject: {subject_hint}")
+            
+            # Use prompt selector to determine call type and appropriate prompt
+            if phone_number:
+                selected_prompt, call_type_result = default_prompt_selector.select_prompt(
+                    phone_number=phone_number,
+                    subject_hint=subject_hint,
+                    additional_context=additional_context
+                )
+                
+                logger.info(f"Selected prompt: {selected_prompt}, Call type: {call_type_result.call_type.value}")
+                
+                # Enhance context with call type information
+                enhanced_context = default_prompt_selector.get_prompt_context_for_call_type(
+                    call_type_result,
+                    additional_context or {}
+                )
+            else:
+                # Fallback to session analysis if no phone number provided
+                selected_prompt = 'session_analysis'
+                call_type_result = None
+                enhanced_context = additional_context or {}
+                logger.warning("No phone number provided, using default session_analysis prompt")
+            
+            # Get the formatted prompt from file manager
+            prompt_params = {
+                'transcript': transcript,
+                'phone_number': phone_number or 'Unknown',
+                'call_duration': enhanced_context.get('call_duration', 'Unknown'),
+                'call_datetime': enhanced_context.get('call_datetime', 'Unknown')
+            }
+            
+            # Add additional context parameters if available
+            if enhanced_context:
+                prompt_params.update(enhanced_context)
+            
+            # Format the selected prompt
+            formatted_prompt = file_prompt_manager.format_prompt(selected_prompt, **prompt_params)
+            
+            if not formatted_prompt:
+                logger.error(f"Failed to format prompt: {selected_prompt}")
+                # Fallback to legacy method
+                return await self.analyze_transcript_with_ai(transcript)
+            
+            logger.info(f"Successfully formatted {selected_prompt} prompt")
+            
+            # Use the provider manager to analyze with the formatted prompt
+            provider = self.provider_manager.providers[self.provider_manager.current_provider]
+            logger.info(f"Using AI provider: {self.provider_manager.current_provider}")
+            
+            # Create analysis context
+            analysis_context = {
+                "prompt_type": selected_prompt,
+                "call_type": call_type_result.call_type.value if call_type_result else "unknown",
+                "formatted_prompt": formatted_prompt['user_prompt']
+            }
+            
+            # Add the formatted prompt to context for the provider
+            analysis_context["prompt"] = formatted_prompt['user_prompt']
+            
+            # Log AI analysis attempt
+            from system_logger import log_ai_analysis
+            log_ai_analysis("Starting conditional prompt analysis",
+                           provider=self.provider_manager.current_provider,
+                           prompt_type=selected_prompt,
+                           call_type=call_type_result.call_type.value if call_type_result else "unknown",
+                           transcript_length=len(transcript))
+            
+            # Get AI analysis
+            analysis = await provider.analyze_session(transcript, analysis_context)
+            logger.info(f"Received analysis response from provider")
+            
+            # Extract and process the JSON response
+            try:
+                raw_response = analysis.raw_response
+                logger.info(f"Received AI response with {len(raw_response) if raw_response else 0} characters")
+                
+                # Parse JSON response (all new prompts generate JSON)
+                try:
+                    extracted_info = json.loads(raw_response)
+                    logger.info(f"Successfully parsed JSON response for {selected_prompt}")
+                except json.JSONDecodeError:
+                    # Try to extract JSON from the text
+                    import re
+                    json_match = re.search(r'({[\s\S]*})', raw_response)
+                    if json_match:
+                        extracted_info = json.loads(json_match.group(1))
+                        logger.info(f"Extracted JSON from response text")
+                    else:
+                        logger.error("Could not extract JSON from AI response")
+                        logger.error(f"Raw response: {raw_response}")
+                        return {}
+                
+                # Add metadata about the analysis
+                extracted_info['_analysis_metadata'] = {
+                    'prompt_used': selected_prompt,
+                    'call_type': call_type_result.call_type.value if call_type_result else "unknown",
+                    'call_type_confidence': call_type_result.confidence if call_type_result else 0.0,
+                    'provider_used': self.provider_manager.current_provider,
+                    'processing_time': analysis.processing_time,
+                    'analysis_timestamp': analysis.timestamp.isoformat()
+                }
+                
+                logger.info(f"Successfully processed conditional prompt analysis")
+                return extracted_info
+                
+            except Exception as e:
+                logger.error(f"Error parsing conditional prompt response: {e}")
+                logger.error(f"Raw response: {analysis.raw_response if hasattr(analysis, 'raw_response') else 'No raw response'}")
+                return {}
+                
+        except Exception as e:
+            logger.error(f"Error in conditional prompt analysis: {e}")
+            # Fallback to legacy analysis
+            logger.info("Falling back to legacy analysis method")
+            return await self.analyze_transcript_with_ai(transcript)
+
     async def analyze_transcript_with_ai(self, transcript: str) -> Dict[str, Any]:
         """Analyze transcript and extract student information using AI"""
         if not transcript:
@@ -271,10 +413,108 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
         
         return clean_info
     
-    def analyze_transcript(self, transcript, student_id=None):
-        """Analyze transcript and extract student information (synchronous wrapper)"""
+    def analyze_transcript_with_conditional_prompts_sync(
+        self,
+        transcript: str,
+        phone_number: Optional[str] = None,
+        subject_hint: Optional[str] = None,
+        additional_context: Optional[Dict[str, Any]] = None,
+        student_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Synchronous wrapper for conditional prompt analysis
+        
+        Args:
+            transcript: The conversation transcript
+            phone_number: Caller's phone number for call type detection
+            subject_hint: Optional subject hint (math, reading, etc.)
+            additional_context: Additional context for analysis
+            student_id: Optional student ID for logging
+            
+        Returns:
+            Dictionary containing extracted information and analysis results
+        """
         if not transcript:
             return {}
+        
+        # Create event loop if needed
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        # Run the async conditional analysis
+        try:
+            extracted_info = loop.run_until_complete(
+                self.analyze_transcript_with_conditional_prompts(
+                    transcript=transcript,
+                    phone_number=phone_number,
+                    subject_hint=subject_hint,
+                    additional_context=additional_context
+                )
+            )
+            
+            # Log the result
+            if extracted_info:
+                logger.info(f"Successfully extracted information using conditional prompts")
+                
+                # Log successful extraction to system logger
+                from system_logger import log_ai_analysis
+                log_ai_analysis("Successfully extracted information with conditional prompts",
+                               prompt_type=extracted_info.get('_analysis_metadata', {}).get('prompt_used', 'unknown'),
+                               call_type=extracted_info.get('_analysis_metadata', {}).get('call_type', 'unknown'),
+                               extracted_fields=list(k for k in extracted_info.keys() if not k.startswith('_')),
+                               student_id=student_id,
+                               provider=self.provider_manager.current_provider)
+            else:
+                logger.warning("No information extracted from transcript with conditional prompts")
+                
+                # Log failed extraction to system logger
+                from system_logger import log_ai_analysis
+                log_ai_analysis("Failed to extract information with conditional prompts",
+                               level="WARNING",
+                               transcript_length=len(transcript),
+                               student_id=student_id,
+                               provider=self.provider_manager.current_provider)
+                
+            return extracted_info
+        except Exception as e:
+            logger.error(f"Error in conditional prompt analysis: {e}")
+            # Fallback to legacy analysis
+            logger.info("Falling back to legacy analysis method")
+            return self.analyze_transcript(transcript, student_id)
+
+    def analyze_transcript(self, transcript, student_id=None, phone_number=None, subject_hint=None, additional_context=None):
+        """
+        Analyze transcript and extract student information (synchronous wrapper)
+        
+        Args:
+            transcript: The conversation transcript
+            student_id: Optional student ID for logging
+            phone_number: Optional phone number for conditional prompt selection
+            subject_hint: Optional subject hint for prompt selection
+            additional_context: Optional additional context
+            
+        Returns:
+            Dictionary containing extracted information
+        """
+        if not transcript:
+            return {}
+        
+        # Use conditional prompts if phone number is provided
+        if phone_number:
+            logger.info(f"Using conditional prompt analysis for phone: {phone_number}")
+            return self.analyze_transcript_with_conditional_prompts_sync(
+                transcript=transcript,
+                phone_number=phone_number,
+                subject_hint=subject_hint,
+                additional_context=additional_context,
+                student_id=student_id
+            )
+        
+        # Fallback to legacy analysis for backwards compatibility
+        logger.info("Using legacy analysis method (no phone number provided)")
         
         # Create event loop if needed
         try:

@@ -10,6 +10,9 @@ This document outlines the detailed requirements for the AI Tutor system, coveri
 -   **Context-Aware Conversation**: Provide the AI tutor with relevant student context at the start of each session.
 -   **Post-Session Processing**: Automatically process session transcripts to generate summaries and update student profiles and assessments.
 -   **AI-Powered Profile Extraction**: Automatically extract and update student information (age, grade, interests, learning preferences) from conversation transcripts using AI analysis.
+-   **Conditional Prompt System**: The system must automatically detect call type (introductory vs tutoring) based on phone number lookup and apply appropriate AI prompts for analysis.
+-   **JSON-Structured AI Responses**: All AI prompts must generate structured JSON output for consistent data extraction and processing.
+-   **Call Type Detection**: Automatic determination of new vs returning students based on phone number presence in the database.
 -   **VAPI Integration**: Complete integration with VAPI for voice call handling, including webhook processing, call data retrieval, and transcript analysis.
 -   **Automatic Student Registration**: System must automatically create student profiles for new callers using phone number identification and conversation analysis.
 -   **Phone Number Management**: Robust phone number normalization, mapping, and international format handling for student identification.
@@ -80,6 +83,55 @@ The system's data will be stored in a managed PostgreSQL database.
 ## 3. Prompt Management
 
 All prompts used in the system (for both VAPI and internal AI processing) will be stored as individual Markdown files in a dedicated `prompts` directory. This approach provides a clear separation of concerns and makes it easy to manage and version control the prompts.
+
+### 3.1. Conditional Prompt System Requirements
+
+The system must implement a conditional prompt selection mechanism to provide appropriate AI analysis based on the caller's status (new vs returning student).
+
+#### 3.1.1. Call Type Detection Requirements
+- **Phone Number Lookup**: System must query PostgreSQL database to check if caller's phone number exists in the students table
+- **Call Classification**:
+  - **Introductory Call**: When phone number is NOT found in students table (new student)
+  - **Tutoring Session**: When phone number IS found in students table (existing student)
+- **Database Query Performance**: Phone number lookup must be optimized with appropriate database indexing
+- **Error Handling**: System must gracefully handle database connection issues during call type detection
+
+#### 3.1.2. Prompt Template Requirements
+- **Template Organization**: Prompts must be organized by call type in the file system
+- **Introductory Call Prompts**:
+  - `introductory_analysis.md`: New student profile creation and initial assessment
+  - Focus on student discovery, learning preferences, and initial capability assessment
+- **Tutoring Session Prompts**:
+  - `session_analysis.md`: General tutoring session analysis for existing students
+  - `math_analysis.md`: Mathematics-focused analysis
+  - `reading_analysis.md`: Reading comprehension analysis
+  - `quick_assessment.md`: Rapid capability assessment
+  - `progress_tracking.md`: Learning progress evaluation
+
+#### 3.1.3. JSON Response Format Requirements
+- **Standardized Structure**: All prompts must generate JSON responses with consistent field naming
+- **Required JSON Fields**:
+  - `student_profile`: Student information and characteristics
+  - `session_analysis`: Session content analysis and insights
+  - `recommendations`: Action items and next steps
+  - `metadata`: Call type, confidence scores, and processing timestamps
+- **Data Validation**: System must validate JSON structure before database storage
+- **Error Recovery**: Invalid JSON responses must be logged and trigger fallback processing
+- **Schema Versioning**: JSON schema must support future extensions without breaking existing functionality
+
+#### 3.1.4. Prompt Selection Logic Requirements
+- **Automatic Detection**: System must automatically select appropriate prompts without manual intervention
+- **Fallback Mechanism**: If call type detection fails, system must default to general session analysis
+- **Logging**: All prompt selection decisions must be logged for debugging and monitoring
+- **Performance**: Prompt selection must complete within 100ms to avoid call processing delays
+- **Context Injection**: Selected prompts must receive appropriate student context based on call type
+
+#### 3.1.5. Integration Requirements
+- **VAPI Webhook Integration**: Call type detection must integrate seamlessly with existing VAPI webhook processing
+- **Transcript Analyzer Updates**: Existing transcript analyzer must be updated to use conditional prompt selection
+- **AI Provider Compatibility**: JSON output format must be compatible with both OpenAI and Anthropic providers
+- **Database Storage**: Structured JSON responses must be stored efficiently in PostgreSQL
+- **Admin Dashboard**: Admin interface must display call type information and prompt selection results
 
 ## 4. User Experience (UX)
 

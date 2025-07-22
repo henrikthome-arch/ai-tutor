@@ -76,14 +76,16 @@ The AI Tutor system is a cloud-native, PostgreSQL-backed platform that provides 
   - Curriculum and school data
 
 #### 2.1.4. AI Analysis System (`ai-tutor/backend/ai_poc/`)
-- **Purpose**: AI-powered analysis of tutoring session transcripts
+- **Purpose**: AI-powered analysis of tutoring session transcripts with conditional prompt selection
 - **Framework**: Python with OpenAI/Anthropic API integration
 - **Responsibilities**:
   - File-based prompt management (Markdown templates)
+  - Conditional prompt selection based on call type (introductory vs tutoring)
   - Multi-provider AI analysis (OpenAI, Anthropic)
-  - Structured response parsing and extraction
+  - JSON-structured response parsing and extraction
   - Session quality validation
   - Student profile enhancement from transcripts
+  - Call type detection (new vs returning students)
 
 ### 2.2. External Integrations
 
@@ -202,11 +204,68 @@ GET  /api/v1/logs              # System logs (with filtering)
 ### 6.3. AI Prompt Management Flow
 ```
 1. System startup → FileBasedPromptManager loads all .md files
-2. Prompt request → Template lookup by name (e.g., 'session_analysis')
-3. Parameter injection → Template formatting with student context
-4. AI provider call → Formatted prompt sent to OpenAI/Anthropic
-5. Response parsing → Structured analysis extraction
-6. Database storage → Results saved to PostgreSQL
+2. Call processing → Phone number lookup to determine call type
+3. Conditional prompt selection:
+   - New student (phone not in system) → Introductory call prompts
+   - Existing student (phone in system) → Tutoring session prompts
+4. Template lookup → Load appropriate prompt based on call type
+5. Parameter injection → Template formatting with student context
+6. AI provider call → Formatted prompt sent to OpenAI/Anthropic
+7. JSON response parsing → Structured data extraction
+8. Database storage → Results saved to PostgreSQL
+```
+
+### 6.4. Conditional Prompt System Architecture
+
+#### 6.4.1. Call Type Detection Logic
+```
+1. VAPI webhook receives call data with phone number
+2. Student lookup in PostgreSQL database:
+   - SELECT * FROM students WHERE phone_number = caller_phone
+3. Call type determination:
+   - If student exists → TUTORING_SESSION
+   - If student not found → INTRODUCTORY_CALL
+4. Prompt selection based on call type
+```
+
+#### 6.4.2. Prompt Template Organization
+```
+ai-tutor/backend/ai_poc/prompts/
+├── introductory_analysis.md     # New student profile creation
+├── session_analysis.md          # General tutoring session analysis
+├── math_analysis.md             # Mathematics-focused analysis
+├── reading_analysis.md          # Reading comprehension analysis
+├── quick_assessment.md          # Rapid capability assessment
+└── progress_tracking.md         # Learning progress evaluation
+```
+
+#### 6.4.3. JSON Response Format
+All prompts generate structured JSON responses with standardized fields:
+```json
+{
+  "student_profile": {
+    "name": "string",
+    "grade_level": "string",
+    "subjects_discussed": ["array"],
+    "learning_style": "string"
+  },
+  "session_analysis": {
+    "key_topics": ["array"],
+    "understanding_level": "string",
+    "areas_for_improvement": ["array"],
+    "strengths": ["array"]
+  },
+  "recommendations": {
+    "next_steps": ["array"],
+    "focus_areas": ["array"],
+    "suggested_resources": ["array"]
+  },
+  "metadata": {
+    "call_type": "introductory|tutoring",
+    "confidence_score": "number",
+    "analysis_timestamp": "string"
+  }
+}
 ```
 
 ### 6.2. Admin Dashboard Flow

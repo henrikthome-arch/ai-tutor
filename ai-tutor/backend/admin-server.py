@@ -3566,20 +3566,43 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
             # Re-raise to be caught by outer exception handler
             raise
         
-        # Always analyze transcript for profile information if there's content
+        # Always analyze transcript for profile information if there's content using conditional prompts
         if transcript and len(transcript) > 100:  # Only analyze if there's meaningful content
             try:
                 from transcript_analyzer import TranscriptAnalyzer
                 analyzer = TranscriptAnalyzer()
-                log_webhook('transcript-analysis-start', f"Starting transcript analysis for profile extraction",
+                log_webhook('conditional-transcript-analysis-start', f"Starting conditional prompt transcript analysis for profile extraction",
                              call_id=call_id, student_id=student_id,
-                             transcript_length=len(transcript))
-                print(f"🔍 Analyzing transcript for student {student_id} profile information...")
+                             transcript_length=len(transcript), phone_number=phone)
+                print(f"🔍 Analyzing transcript for student {student_id} using conditional prompts...")
                 print(f"📄 Transcript preview: {transcript[:200]}...")
                 
-                print(f"🔍 Calling analyzer.analyze_transcript()")
-                extracted_info = analyzer.analyze_transcript(transcript, student_id)
-                print(f"📊 Extracted info: {json.dumps(extracted_info, indent=2) if extracted_info else 'None'}")
+                # Use conditional prompt analysis with phone number for call type detection
+                if phone:
+                    print(f"🔍 Calling analyzer.analyze_transcript_with_conditional_prompts_sync() with phone {phone}")
+                    analysis_result = analyzer.analyze_transcript_with_conditional_prompts_sync(
+                        transcript=transcript,
+                        student_id=student_id,
+                        phone_number=phone
+                    )
+                    print(f"📊 Conditional analysis result: {json.dumps(analysis_result, indent=2)[:500] if analysis_result else 'None'}...")
+                    
+                    # Extract profile information from the analysis result
+                    extracted_info = None
+                    if analysis_result and isinstance(analysis_result, dict):
+                        # Check if this is a JSON response from conditional prompts
+                        if 'student_profile' in analysis_result:
+                            extracted_info = analysis_result.get('student_profile', {})
+                        elif 'analysis_type' in analysis_result:
+                            # This is metadata about the analysis, extract any profile info
+                            extracted_info = analysis_result.get('extracted_profile_info', {})
+                        else:
+                            # Fallback - treat the whole result as extracted info
+                            extracted_info = analysis_result
+                else:
+                    print(f"🔍 Calling standard analyzer.analyze_transcript() (no phone number)")
+                    extracted_info = analyzer.analyze_transcript(transcript, student_id)
+                    print(f"📊 Standard extracted info: {json.dumps(extracted_info, indent=2) if extracted_info else 'None'}")
                 
                 if extracted_info:
                     # Wrap profile update in try-except to handle database errors
@@ -3589,27 +3612,27 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
                         # Explicitly commit the profile update transaction
                         print(f"💾 Committing profile update transaction")
                         db.session.commit()
-                        log_webhook('profile-updated', f"Updated student profile from transcript",
+                        log_webhook('profile-updated', f"Updated student profile from conditional prompt transcript analysis",
                                      call_id=call_id, student_id=student_id,
-                                     extracted_info=extracted_info)
+                                     extracted_info=extracted_info, phone_number=phone)
                         print(f"👤 Updated profile for student {student_id} with extracted information: {extracted_info}")
                     except Exception as profile_error:
                         # Rollback transaction on error
                         db.session.rollback()
-                        log_error('DATABASE', f"Error updating student profile", profile_error,
-                                 call_id=call_id, student_id=student_id)
+                        log_error('DATABASE', f"Error updating student profile from conditional analysis", profile_error,
+                                 call_id=call_id, student_id=student_id, phone_number=phone)
                         print(f"❌ Error updating student profile: {profile_error}")
                         # Print stack trace for debugging
                         import traceback
                         print(f"🔍 Error stack trace: {traceback.format_exc()}")
                 else:
-                    log_webhook('profile-no-info', f"No profile information extracted from transcript",
-                                 call_id=call_id, student_id=student_id)
-                    print(f"ℹ️ No profile information extracted from transcript for student {student_id}")
+                    log_webhook('profile-no-info', f"No profile information extracted from conditional prompt transcript analysis",
+                                 call_id=call_id, student_id=student_id, phone_number=phone)
+                    print(f"ℹ️ No profile information extracted from conditional prompt transcript analysis for student {student_id}")
             except Exception as e:
-                log_error('TRANSCRIPT_ANALYSIS', f"Error analyzing transcript", e,
-                           call_id=call_id, student_id=student_id)
-                print(f"⚠️ Error analyzing transcript: {e}")
+                log_error('TRANSCRIPT_ANALYSIS', f"Error in conditional prompt transcript analysis", e,
+                           call_id=call_id, student_id=student_id, phone_number=phone)
+                print(f"⚠️ Error in conditional prompt transcript analysis: {e}")
                 # Print stack trace for debugging
                 import traceback
                 print(f"🔍 Error stack trace: {traceback.format_exc()}")
@@ -3736,15 +3759,38 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
             try:
                 from transcript_analyzer import TranscriptAnalyzer
                 analyzer = TranscriptAnalyzer()
-                log_webhook('transcript-analysis-start', f"Starting webhook transcript analysis for profile extraction",
+                log_webhook('conditional-transcript-analysis-start', f"Starting conditional prompt webhook transcript analysis for profile extraction",
                            call_id=call_id, student_id=student_id,
-                           transcript_length=len(combined_transcript))
-                print(f"🔍 Analyzing webhook transcript for student {student_id} profile information...")
+                           transcript_length=len(combined_transcript), phone_number=customer_phone)
+                print(f"🔍 Analyzing webhook transcript for student {student_id} using conditional prompts...")
                 print(f"📄 Transcript preview: {combined_transcript[:200]}...")
                 
-                print(f"🔍 Calling analyzer.analyze_transcript()")
-                extracted_info = analyzer.analyze_transcript(combined_transcript, student_id)
-                print(f"📊 Extracted info: {json.dumps(extracted_info, indent=2) if extracted_info else 'None'}")
+                # Use conditional prompt analysis with phone number for call type detection
+                if customer_phone:
+                    print(f"🔍 Calling analyzer.analyze_transcript_with_conditional_prompts_sync() with phone {customer_phone}")
+                    analysis_result = analyzer.analyze_transcript_with_conditional_prompts_sync(
+                        transcript=combined_transcript,
+                        student_id=student_id,
+                        phone_number=customer_phone
+                    )
+                    print(f"📊 Conditional analysis result: {json.dumps(analysis_result, indent=2)[:500] if analysis_result else 'None'}...")
+                    
+                    # Extract profile information from the analysis result
+                    extracted_info = None
+                    if analysis_result and isinstance(analysis_result, dict):
+                        # Check if this is a JSON response from conditional prompts
+                        if 'student_profile' in analysis_result:
+                            extracted_info = analysis_result.get('student_profile', {})
+                        elif 'analysis_type' in analysis_result:
+                            # This is metadata about the analysis, extract any profile info
+                            extracted_info = analysis_result.get('extracted_profile_info', {})
+                        else:
+                            # Fallback - treat the whole result as extracted info
+                            extracted_info = analysis_result
+                else:
+                    print(f"🔍 Calling standard analyzer.analyze_transcript() (no phone number)")
+                    extracted_info = analyzer.analyze_transcript(combined_transcript, student_id)
+                    print(f"📊 Standard extracted info: {json.dumps(extracted_info, indent=2) if extracted_info else 'None'}")
                 
                 if extracted_info:
                     # Wrap profile update in try-except to handle database errors
@@ -3754,23 +3800,23 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
                         # Explicitly commit the profile update transaction
                         print(f"💾 Committing profile update transaction")
                         db.session.commit()
-                        log_webhook('profile-updated', f"Updated student profile from webhook transcript",
+                        log_webhook('profile-updated', f"Updated student profile from conditional prompt webhook transcript analysis",
                                    call_id=call_id, student_id=student_id,
-                                   extracted_info=extracted_info)
+                                   extracted_info=extracted_info, phone_number=customer_phone)
                         print(f"👤 Updated profile for student {student_id} with extracted information: {extracted_info}")
                     except Exception as profile_error:
                         # Rollback transaction on error
                         db.session.rollback()
-                        log_error('DATABASE', f"Error updating student profile from webhook", profile_error,
-                                 call_id=call_id, student_id=student_id)
+                        log_error('DATABASE', f"Error updating student profile from conditional prompt webhook analysis", profile_error,
+                                 call_id=call_id, student_id=student_id, phone_number=customer_phone)
                         print(f"❌ Error updating student profile from webhook: {profile_error}")
                         # Print stack trace for debugging
                         import traceback
                         print(f"🔍 Error stack trace: {traceback.format_exc()}")
                 else:
-                    log_webhook('profile-no-info', f"No profile information extracted from webhook transcript",
-                               call_id=call_id, student_id=student_id)
-                    print(f"ℹ️ No profile information extracted from webhook transcript for student {student_id}")
+                    log_webhook('profile-no-info', f"No profile information extracted from conditional prompt webhook transcript analysis",
+                               call_id=call_id, student_id=student_id, phone_number=customer_phone)
+                    print(f"ℹ️ No profile information extracted from conditional prompt webhook transcript analysis for student {student_id}")
             except Exception as e:
                 log_error('TRANSCRIPT_ANALYSIS', f"Error analyzing webhook transcript", e,
                          call_id=call_id, student_id=student_id)
@@ -3782,8 +3828,8 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
         # Always analyze transcript for profile extraction regardless of length
         # Only skip if transcript is extremely short or empty
         if student_id and combined_transcript.strip() and len(combined_transcript) > 100 and AI_POC_AVAILABLE:
-            print(f"🤖 Triggering AI analysis for webhook transcript")
-            trigger_ai_analysis_async(student_id, combined_transcript, call_id)
+            print(f"🤖 Triggering conditional prompt AI analysis for webhook transcript")
+            trigger_ai_analysis_async(student_id, combined_transcript, call_id, customer_phone)
         elif combined_transcript.strip() and len(combined_transcript) <= 100:
             log_ai_analysis("Skipping AI analysis for extremely short webhook transcript",
                            call_id=call_id, student_id=student_id,
@@ -3819,8 +3865,8 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
                        call_id=call_id if 'call_id' in locals() else 'unknown')
             print(f"🔄 Removed app context for webhook fallback processing")
 
-def trigger_ai_analysis_async(student_id, transcript, call_id):
-    """Trigger AI analysis for VAPI transcript (async)"""
+def trigger_ai_analysis_async(student_id, transcript, call_id, phone_number=None):
+    """Trigger AI analysis for VAPI transcript using conditional prompts (async)"""
     if not AI_POC_AVAILABLE:
         log_ai_analysis("AI POC not available for analysis",
                        call_id=call_id,
@@ -3829,88 +3875,89 @@ def trigger_ai_analysis_async(student_id, transcript, call_id):
         return
     
     try:
-        log_ai_analysis("Starting AI analysis for VAPI transcript",
+        log_ai_analysis("Starting conditional prompt AI analysis for VAPI transcript",
                        call_id=call_id,
                        student_id=student_id,
-                       transcript_length=len(transcript))
+                       transcript_length=len(transcript),
+                       phone_number=phone_number)
         
         # Ensure student_id is a string
         student_id_str = str(student_id)
         
-        # Get student context
-        student_data = get_student_data(student_id_str)
-        student_context = {}
-        
-        if student_data and student_data.get('profile'):
-            profile = student_data['profile']
-            student_context = {
-                'name': profile.get('name', profile.get('first_name', '') + ' ' + profile.get('last_name', '')).strip() or 'Unknown',
-                'age': profile.get('age', 'Unknown'),
-                'grade': profile.get('grade', 'Unknown'),
-                'curriculum': profile.get('curriculum', 'Unknown'),
-                'primary_interests': profile.get('interests', 'Unknown'),
-                'learning_style': profile.get('learning_style', 'Unknown'),
-                'motivational_triggers': profile.get('motivational_triggers', 'Unknown')
-            }
-        else:
-            student_context = {
-                'name': student_id,
-                'age': 'Unknown',
-                'grade': 'Unknown',
-                'curriculum': 'Unknown',
-                'primary_interests': 'Unknown',
-                'learning_style': 'Unknown',
-                'motivational_triggers': 'Unknown'
-            }
-        
-        # Run async analysis in background
-        def run_analysis():
+        # Run async analysis in background using conditional prompts
+        def run_conditional_analysis():
             try:
-                log_ai_analysis("Running AI analysis in background thread",
-                               call_id=call_id,
-                               student_id=student_id)
-                
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                # Construct the correct path for the analysis results
-                analysis_filename = f"ai_analysis_{call_id}.json"
-                analysis_path = os.path.join('../data/students', student_id, 'sessions', analysis_filename)
-
-                analysis, validation = loop.run_until_complete(
-                    session_processor.process_session_transcript(
-                        transcript=transcript,
-                        student_context=student_context,
-                        save_results=True,
-                        session_file_path=analysis_path
-                    )
-                )
-                
-                loop.close()
-                
-                log_ai_analysis("AI analysis completed successfully",
+                log_ai_analysis("Running conditional prompt AI analysis in background thread",
                                call_id=call_id,
                                student_id=student_id,
-                               analysis_summary=analysis.conceptual_understanding if analysis else 'No analysis')
-                print(f"✅ AI analysis completed for call {call_id}")
+                               phone_number=phone_number)
+                
+                # Import transcript analyzer for conditional prompts
+                from transcript_analyzer import TranscriptAnalyzer
+                
+                # Create analyzer instance
+                analyzer = TranscriptAnalyzer()
+                
+                # Use conditional prompt analysis with phone number for call type detection
+                if phone_number:
+                    log_ai_analysis("Using conditional prompt analysis with phone number",
+                                   call_id=call_id,
+                                   student_id=student_id,
+                                   phone_number=phone_number)
+                    print(f"🤖 Running conditional prompt analysis for call {call_id} with phone {phone_number}")
+                    
+                    # Use the conditional analysis method
+                    analysis_result = analyzer.analyze_transcript_with_conditional_prompts_sync(
+                        transcript=transcript,
+                        student_id=student_id_str,
+                        phone_number=phone_number
+                    )
+                else:
+                    log_ai_analysis("Using standard analysis without phone number",
+                                   call_id=call_id,
+                                   student_id=student_id)
+                    print(f"🤖 Running standard analysis for call {call_id} (no phone number)")
+                    
+                    # Fallback to standard analysis
+                    analysis_result = analyzer.analyze_transcript(transcript, student_id_str)
+                
+                if analysis_result:
+                    log_ai_analysis("Conditional prompt AI analysis completed successfully",
+                                   call_id=call_id,
+                                   student_id=student_id,
+                                   analysis_type=analysis_result.get('analysis_type', 'unknown'),
+                                   call_type=analysis_result.get('call_type', 'unknown'))
+                    print(f"✅ Conditional prompt AI analysis completed for call {call_id}")
+                    print(f"📊 Analysis type: {analysis_result.get('analysis_type', 'unknown')}")
+                    print(f"📞 Call type: {analysis_result.get('call_type', 'unknown')}")
+                else:
+                    log_ai_analysis("Conditional prompt AI analysis returned no results",
+                                   call_id=call_id,
+                                   student_id=student_id)
+                    print(f"⚠️ Conditional prompt AI analysis returned no results for call {call_id}")
                 
             except Exception as e:
-                log_error('AI_ANALYSIS', f"AI analysis failed for call {call_id}", e,
+                log_error('AI_ANALYSIS', f"Conditional prompt AI analysis failed for call {call_id}", e,
                          call_id=call_id,
-                         student_id=student_id)
-                print(f"❌ AI analysis failed for call {call_id}: {e}")
+                         student_id=student_id,
+                         phone_number=phone_number)
+                print(f"❌ Conditional prompt AI analysis failed for call {call_id}: {e}")
+                # Print stack trace for debugging
+                import traceback
+                print(f"🔍 Error stack trace: {traceback.format_exc()}")
         
         # Run in background thread to not block webhook response
         import threading
-        thread = threading.Thread(target=run_analysis)
+        thread = threading.Thread(target=run_conditional_analysis)
         thread.daemon = True
         thread.start()
         
     except Exception as e:
-        log_error('AI_ANALYSIS', f"Error triggering AI analysis for call {call_id}", e,
+        log_error('AI_ANALYSIS', f"Error triggering conditional prompt AI analysis for call {call_id}", e,
                  call_id=call_id,
-                 student_id=student_id)
-        print(f"❌ Error triggering AI analysis: {e}")
+                 student_id=student_id,
+                 phone_number=phone_number)
+        print(f"❌ Error triggering conditional prompt AI analysis: {e}")
 
 # System Logs Routes
 @app.route('/admin/logs')

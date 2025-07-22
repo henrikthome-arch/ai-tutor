@@ -25,7 +25,7 @@ class PromptTemplate:
     last_updated: datetime
 
 class FileBasedPromptManager:
-    """Manages prompts loaded from individual markdown files"""
+    """Manages prompts loaded from individual markdown files with call-type support"""
     
     def __init__(self, prompts_dir: str = None):
         if prompts_dir is None:
@@ -36,6 +36,10 @@ class FileBasedPromptManager:
             self.prompts_dir = Path(prompts_dir)
         
         self.prompts = {}
+        self.call_type_prompts = {
+            'introductory': ['introductory_analysis'],
+            'tutoring': ['session_analysis', 'math_analysis', 'reading_analysis', 'quick_assessment', 'progress_tracking']
+        }
         self._load_all_prompts()
     
     def _load_all_prompts(self):
@@ -46,8 +50,9 @@ class FileBasedPromptManager:
         
         # Map of file names to prompt keys
         prompt_files = {
+            'introductory_analysis.md': 'introductory_analysis',
             'session_analysis.md': 'session_analysis',
-            'quick_assessment.md': 'quick_assessment', 
+            'quick_assessment.md': 'quick_assessment',
             'math_analysis.md': 'math_analysis',
             'reading_analysis.md': 'reading_analysis',
             'progress_tracking.md': 'progress_tracking'
@@ -221,6 +226,91 @@ class FileBasedPromptManager:
         for prompt_name, prompt in self.prompts.items():
             files[prompt_name] = prompt.file_path
         return files
+    
+    def get_prompts_by_call_type(self, call_type: str) -> Dict[str, PromptTemplate]:
+        """Get all prompts for a specific call type"""
+        if call_type not in self.call_type_prompts:
+            return {}
+        
+        relevant_prompts = {}
+        for prompt_name in self.call_type_prompts[call_type]:
+            if prompt_name in self.prompts:
+                relevant_prompts[prompt_name] = self.prompts[prompt_name]
+        
+        return relevant_prompts
+    
+    def get_default_prompt_for_call_type(self, call_type: str) -> Optional[str]:
+        """Get the default prompt name for a specific call type"""
+        defaults = {
+            'introductory': 'introductory_analysis',
+            'tutoring': 'session_analysis'
+        }
+        return defaults.get(call_type)
+    
+    def format_conditional_prompt(self, call_type: str, subject: str = None, **kwargs) -> Optional[Dict[str, str]]:
+        """Format a prompt based on call type and optional subject specialization"""
+        # Determine the best prompt for this call type and subject
+        prompt_name = self._select_best_prompt(call_type, subject)
+        
+        if not prompt_name:
+            return None
+        
+        return self.format_prompt(prompt_name, **kwargs)
+    
+    def _select_best_prompt(self, call_type: str, subject: str = None) -> Optional[str]:
+        """Select the best prompt based on call type and subject"""
+        if call_type == 'introductory':
+            return 'introductory_analysis'
+        elif call_type == 'tutoring':
+            # For tutoring sessions, consider subject specialization
+            if subject and subject.lower() in ['math', 'mathematics']:
+                return 'math_analysis'
+            elif subject and subject.lower() in ['reading', 'literacy', 'english']:
+                return 'reading_analysis'
+            else:
+                # Default to general session analysis
+                return 'session_analysis'
+        
+        return None
+    
+    def get_call_type_info(self) -> Dict[str, Any]:
+        """Get information about available call types and their prompts"""
+        info = {}
+        for call_type, prompt_names in self.call_type_prompts.items():
+            available_prompts = [name for name in prompt_names if name in self.prompts]
+            info[call_type] = {
+                'available_prompts': available_prompts,
+                'default_prompt': self.get_default_prompt_for_call_type(call_type),
+                'count': len(available_prompts)
+            }
+        return info
+    
+    def validate_conditional_setup(self) -> Dict[str, Any]:
+        """Validate that all required prompts for conditional system are available"""
+        validation = {
+            'valid': True,
+            'missing_prompts': [],
+            'available_prompts': list(self.prompts.keys()),
+            'call_type_coverage': {}
+        }
+        
+        required_prompts = ['introductory_analysis', 'session_analysis']
+        
+        for prompt in required_prompts:
+            if prompt not in self.prompts:
+                validation['missing_prompts'].append(prompt)
+                validation['valid'] = False
+        
+        # Check coverage for each call type
+        for call_type, prompt_names in self.call_type_prompts.items():
+            available = [name for name in prompt_names if name in self.prompts]
+            validation['call_type_coverage'][call_type] = {
+                'required': prompt_names,
+                'available': available,
+                'coverage_percent': (len(available) / len(prompt_names)) * 100 if prompt_names else 100
+            }
+        
+        return validation
 
 # Global file-based prompt manager instance
 file_prompt_manager = FileBasedPromptManager()

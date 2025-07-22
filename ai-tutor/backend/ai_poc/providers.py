@@ -83,98 +83,41 @@ class OpenAIProvider(SimpleAIProvider):
             raise
     
     async def analyze_session(self, transcript: str, student_context: Dict[str, Any]) -> BasicAnalysis:
-        """Analyze session with OpenAI"""
+        """Analyze session with OpenAI - JSON response handling for all prompts"""
         start_time = datetime.now()
         
         try:
-            # Check if we have a custom prompt for profile extraction
+            # Determine which prompt to use
             if 'prompt' in student_context:
+                # Custom prompt provided (from conditional prompt system)
                 prompt = student_context['prompt']
                 logger.info(f"Using custom prompt for OpenAI: {prompt[:50]}...")
                 
                 # Create messages for the API call
                 messages = [
-                    {"role": "system", "content": "You are an expert educational data analyst."},
+                    {"role": "system", "content": "You are an expert educational data analyst. Always respond with valid JSON."},
                     {"role": "user", "content": prompt}
                 ]
                 
-                # Make the API call
-                logger.info(f"Calling OpenAI API with model: {self.model}")
+                prompt_type = "custom"
                 
-                # Handle different parameter names for different models
-                api_params = {
-                    "model": self.model,
-                    "messages": messages,
-                    "temperature": self.temperature,
-                    "timeout": self.timeout
+            else:
+                # Standard session analysis using file-based prompt system
+                logger.info("No custom prompt provided, using session_analysis prompt template")
+                
+                # Prepare parameters for the session analysis prompt
+                prompt_params = {
+                    'student_name': student_context.get('name', 'Student'),
+                    'student_age': student_context.get('age', 'Unknown'),
+                    'student_grade': student_context.get('grade', 'Unknown'),
+                    'subject_focus': student_context.get('subject', 'General'),
+                    'learning_style': student_context.get('learning_style', 'Mixed'),
+                    'primary_interests': student_context.get('interests', 'Various'),
+                    'motivational_triggers': student_context.get('motivational_triggers', 'Achievement'),
+                    'transcript': transcript
                 }
                 
-                # Use max_completion_tokens for o3 models, max_tokens for others
-                if "o3" in self.model.lower():
-                    api_params["max_completion_tokens"] = self.max_tokens
-                else:
-                    api_params["max_tokens"] = self.max_tokens
-                
-                response = await self.openai.chat.completions.create(**api_params)
-                
-                # Extract the response content
-                raw_response = response.choices[0].message.content
-                logger.info(f"Received response from OpenAI: {raw_response[:100]}...")
-                
-                # For profile extraction, we expect a JSON response
-                try:
-                    # Try to parse the entire response as JSON
-                    extracted_info = json.loads(raw_response)
-                    logger.info(f"Successfully parsed JSON response from OpenAI")
-                except json.JSONDecodeError:
-                    # If that fails, try to extract JSON from the text
-                    import re
-                    json_match = re.search(r'({[\s\S]*})', raw_response)
-                    if json_match:
-                        extracted_info = json.loads(json_match.group(1))
-                        logger.info(f"Extracted JSON from OpenAI response text")
-                    else:
-                        logger.error("Could not extract JSON from OpenAI response")
-                        extracted_info = {}
-                
-                # Create a standard analysis response
-                understanding = f"OpenAI Analysis: Student demonstrated good conceptual grasp of the lesson material."
-                engagement = "Student showed consistent engagement throughout the tutoring session."
-                progress = "Steady learning progress observed. Student building confidence in the subject area."
-                recommendations = "Continue current approach. Consider introducing more challenging concepts gradually."
-                
-                processing_time = (datetime.now() - start_time).total_seconds()
-                
-                return BasicAnalysis(
-                    conceptual_understanding=understanding,
-                    engagement_level=engagement,
-                    progress_indicators=progress,
-                    recommendations=recommendations,
-                    confidence_score=0.9,
-                    provider_used="openai",
-                    processing_time=processing_time,
-                    cost_estimate=self.estimate_cost(len(transcript)),
-                    timestamp=datetime.now(),
-                    raw_response=raw_response
-                )
-            
-            # Standard session analysis using file-based prompt system
-            logger.info("No custom prompt provided, using session_analysis prompt template")
-            
-            # Prepare parameters for the session analysis prompt
-            prompt_params = {
-                'student_name': student_context.get('name', 'Student'),
-                'student_age': student_context.get('age', 'Unknown'),
-                'student_grade': student_context.get('grade', 'Unknown'),
-                'subject_focus': student_context.get('subject', 'General'),
-                'learning_style': student_context.get('learning_style', 'Mixed'),
-                'primary_interests': student_context.get('interests', 'Various'),
-                'motivational_triggers': student_context.get('motivational_triggers', 'Achievement'),
-                'transcript': transcript
-            }
-            
-            # Format the session analysis prompt
-            try:
+                # Format the session analysis prompt
                 formatted_prompt = file_prompt_manager.format_prompt('session_analysis', **prompt_params)
                 if not formatted_prompt:
                     raise ValueError("session_analysis prompt not available")
@@ -187,53 +130,51 @@ class OpenAIProvider(SimpleAIProvider):
                     {"role": "user", "content": formatted_prompt['user_prompt']}
                 ]
                 
-                # Make the API call
-                logger.info(f"Calling OpenAI API with session_analysis prompt and model: {self.model}")
-                
-                # Handle different parameter names for different models
-                api_params = {
-                    "model": self.model,
-                    "messages": messages,
-                    "temperature": self.temperature,
-                    "timeout": self.timeout
-                }
-                
-                # Use max_completion_tokens for o3 models, max_tokens for others
-                if "o3" in self.model.lower():
-                    api_params["max_completion_tokens"] = self.max_tokens
-                else:
-                    api_params["max_tokens"] = self.max_tokens
-                
-                response = await self.openai.chat.completions.create(**api_params)
-                
-                # Extract the response content
-                raw_response = response.choices[0].message.content
-                logger.info(f"Received session analysis response from OpenAI: {raw_response[:100]}...")
-                
-                # Parse the structured response based on the prompt format
-                understanding = self._extract_section_content(raw_response, "CONCEPTUAL UNDERSTANDING")
-                engagement = self._extract_section_content(raw_response, "ENGAGEMENT LEVEL")
-                progress = self._extract_section_content(raw_response, "PROGRESS INDICATORS")
-                recommendations = self._extract_section_content(raw_response, "RECOMMENDATIONS")
-                
-                processing_time = (datetime.now() - start_time).total_seconds()
-                
-                return BasicAnalysis(
-                    conceptual_understanding=understanding,
-                    engagement_level=engagement,
-                    progress_indicators=progress,
-                    recommendations=recommendations,
-                    confidence_score=0.9,
-                    provider_used="openai",
-                    processing_time=processing_time,
-                    cost_estimate=self.estimate_cost(len(transcript)),
-                    timestamp=datetime.now(),
-                    raw_response=raw_response
-                )
-                
-            except Exception as prompt_error:
-                logger.error(f"Error using session_analysis prompt: {prompt_error}")
-                raise
+                prompt_type = "session_analysis"
+            
+            # Make the API call
+            logger.info(f"Calling OpenAI API with {prompt_type} prompt and model: {self.model}")
+            
+            # Handle different parameter names for different models
+            api_params = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": self.temperature,
+                "timeout": self.timeout
+            }
+            
+            # Use max_completion_tokens for o3 models, max_tokens for others
+            if "o3" in self.model.lower():
+                api_params["max_completion_tokens"] = self.max_tokens
+            else:
+                api_params["max_tokens"] = self.max_tokens
+            
+            response = await self.openai.chat.completions.create(**api_params)
+            
+            # Extract the response content
+            raw_response = response.choices[0].message.content
+            logger.info(f"Received response from OpenAI: {raw_response[:100]}...")
+            
+            # All prompts now generate JSON - parse the response
+            parsed_json = self._parse_json_response(raw_response)
+            
+            # Extract analysis components based on JSON structure
+            analysis_data = self._extract_analysis_from_json(parsed_json, prompt_type)
+            
+            processing_time = (datetime.now() - start_time).total_seconds()
+            
+            return BasicAnalysis(
+                conceptual_understanding=analysis_data['understanding'],
+                engagement_level=analysis_data['engagement'],
+                progress_indicators=analysis_data['progress'],
+                recommendations=analysis_data['recommendations'],
+                confidence_score=analysis_data.get('confidence', 0.9),
+                provider_used="openai",
+                processing_time=processing_time,
+                cost_estimate=self.estimate_cost(len(transcript)),
+                timestamp=datetime.now(),
+                raw_response=raw_response
+            )
             
         except Exception as e:
             logger.error(f"Error in OpenAI analysis: {e}")
@@ -271,6 +212,67 @@ class OpenAIProvider(SimpleAIProvider):
             content = defaults.get(section_name.upper(), "Analysis completed successfully.")
         
         return content
+    
+    def _parse_json_response(self, raw_response: str) -> dict:
+        """Parse JSON response from AI provider with fallback handling"""
+        try:
+            # Try to parse the entire response as JSON
+            return json.loads(raw_response)
+        except json.JSONDecodeError:
+            # If that fails, try to extract JSON from the text
+            import re
+            json_match = re.search(r'({[\s\S]*})', raw_response)
+            if json_match:
+                try:
+                    return json.loads(json_match.group(1))
+                except json.JSONDecodeError:
+                    logger.error("Failed to parse extracted JSON from OpenAI response")
+                    return {}
+            else:
+                logger.error("Could not extract JSON from OpenAI response")
+                return {}
+    
+    def _extract_analysis_from_json(self, parsed_json: dict, prompt_type: str) -> dict:
+        """Extract analysis components from parsed JSON response"""
+        # Handle different JSON structures based on prompt type
+        if prompt_type == "custom":
+            # For conditional prompts (introductory vs tutoring)
+            if 'student_profile' in parsed_json:
+                # Introductory analysis format
+                return {
+                    'understanding': parsed_json.get('initial_assessment', {}).get('academic_level', 'Student shows learning potential'),
+                    'engagement': parsed_json.get('conversation_analysis', {}).get('engagement_level', 'Active participation observed'),
+                    'progress': parsed_json.get('initial_assessment', {}).get('learning_readiness', 'Ready for learning progression'),
+                    'recommendations': str(parsed_json.get('recommendations', {}).get('immediate_next_steps', ['Continue current approach'])),
+                    'confidence': 0.9
+                }
+            elif 'session_analysis' in parsed_json:
+                # Tutoring session format
+                return {
+                    'understanding': parsed_json.get('session_analysis', {}).get('conceptual_understanding', 'Good understanding demonstrated'),
+                    'engagement': parsed_json.get('performance_assessment', {}).get('engagement_level', 'Strong engagement throughout'),
+                    'progress': parsed_json.get('performance_assessment', {}).get('progress_indicators', 'Positive learning trajectory'),
+                    'recommendations': str(parsed_json.get('recommendations', {}).get('next_session_focus', ['Continue building on current progress'])),
+                    'confidence': 0.9
+                }
+            else:
+                # Generic JSON structure
+                return {
+                    'understanding': str(parsed_json.get('conceptual_understanding', 'Learning progress observed')),
+                    'engagement': str(parsed_json.get('engagement_level', 'Active participation')),
+                    'progress': str(parsed_json.get('progress_indicators', 'Steady development')),
+                    'recommendations': str(parsed_json.get('recommendations', 'Continue current approach')),
+                    'confidence': float(parsed_json.get('confidence_score', 0.9))
+                }
+        else:
+            # For standard session_analysis prompts (now JSON format)
+            return {
+                'understanding': str(parsed_json.get('conceptual_understanding', 'Good understanding demonstrated')),
+                'engagement': str(parsed_json.get('engagement_level', 'Strong engagement throughout')),
+                'progress': str(parsed_json.get('progress_indicators', 'Positive learning trajectory')),
+                'recommendations': str(parsed_json.get('recommendations', 'Continue building on current progress')),
+                'confidence': float(parsed_json.get('confidence_score', 0.9))
+            }
     
     def get_provider_name(self) -> str:
         return f"OpenAI ({self.model})"
@@ -317,17 +319,15 @@ class AnthropicProvider(SimpleAIProvider):
             raise
     
     async def analyze_session(self, transcript: str, student_context: Dict[str, Any]) -> BasicAnalysis:
-        """Analyze session with Anthropic"""
+        """Analyze session with Anthropic - JSON response handling for all prompts"""
         start_time = datetime.now()
         
         try:
-            # Check if we have a custom prompt for profile extraction
+            # Determine which prompt to use
             if 'prompt' in student_context:
+                # Custom prompt provided (from conditional prompt system)
                 prompt = student_context['prompt']
                 logger.info(f"Using custom prompt for Anthropic: {prompt[:50]}...")
-                
-                # Make the API call
-                logger.info(f"Calling Anthropic API with model: {self.model}")
                 
                 # Create a coroutine for the API call
                 async def call_anthropic():
@@ -335,85 +335,37 @@ class AnthropicProvider(SimpleAIProvider):
                         model=self.model,
                         max_tokens=self.max_tokens,
                         temperature=self.temperature,
-                        system="You are an expert educational data analyst.",
+                        system="You are an expert educational data analyst. Always respond with valid JSON.",
                         messages=[
                             {"role": "user", "content": prompt}
                         ]
                     )
                     return response
                 
-                # Run the coroutine with a timeout
-                response = await asyncio.wait_for(call_anthropic(), timeout=self.timeout)
+                prompt_type = "custom"
                 
-                # Extract the response content
-                raw_response = response.content[0].text
-                logger.info(f"Received response from Anthropic: {raw_response[:100]}...")
+            else:
+                # Standard session analysis using file-based prompt system
+                logger.info("No custom prompt provided, using session_analysis prompt template")
                 
-                # For profile extraction, we expect a JSON response
-                try:
-                    # Try to parse the entire response as JSON
-                    extracted_info = json.loads(raw_response)
-                    logger.info(f"Successfully parsed JSON response from Anthropic")
-                except json.JSONDecodeError:
-                    # If that fails, try to extract JSON from the text
-                    import re
-                    json_match = re.search(r'({[\s\S]*})', raw_response)
-                    if json_match:
-                        extracted_info = json.loads(json_match.group(1))
-                        logger.info(f"Extracted JSON from Anthropic response text")
-                    else:
-                        logger.error("Could not extract JSON from Anthropic response")
-                        extracted_info = {}
+                # Prepare parameters for the session analysis prompt
+                prompt_params = {
+                    'student_name': student_context.get('name', 'Student'),
+                    'student_age': student_context.get('age', 'Unknown'),
+                    'student_grade': student_context.get('grade', 'Unknown'),
+                    'subject_focus': student_context.get('subject', 'General'),
+                    'learning_style': student_context.get('learning_style', 'Mixed'),
+                    'primary_interests': student_context.get('interests', 'Various'),
+                    'motivational_triggers': student_context.get('motivational_triggers', 'Achievement'),
+                    'transcript': transcript
+                }
                 
-                # Create a standard analysis response
-                understanding = f"Claude Analysis: Student shows thoughtful engagement with the learning material."
-                engagement = "Positive learning attitude - student actively participating and showing intellectual curiosity."
-                progress = "Steady academic growth with good foundation building."
-                recommendations = "Continue fostering critical thinking. Introduce more independent exploration opportunities."
-                
-                processing_time = (datetime.now() - start_time).total_seconds()
-                
-                return BasicAnalysis(
-                    conceptual_understanding=understanding,
-                    engagement_level=engagement,
-                    progress_indicators=progress,
-                    recommendations=recommendations,
-                    confidence_score=0.9,
-                    provider_used="anthropic",
-                    processing_time=processing_time,
-                    cost_estimate=self.estimate_cost(len(transcript)),
-                    timestamp=datetime.now(),
-                    raw_response=raw_response
-                )
-            
-            # Standard session analysis if no custom prompt
-            # This would be implemented for full session analysis
-            # For now, we're focusing on profile extraction
-            # Standard session analysis using file-based prompt system
-            logger.info("No custom prompt provided, using session_analysis prompt template")
-            
-            # Prepare parameters for the session analysis prompt
-            prompt_params = {
-                'student_name': student_context.get('name', 'Student'),
-                'student_age': student_context.get('age', 'Unknown'),
-                'student_grade': student_context.get('grade', 'Unknown'),
-                'subject_focus': student_context.get('subject', 'General'),
-                'learning_style': student_context.get('learning_style', 'Mixed'),
-                'primary_interests': student_context.get('interests', 'Various'),
-                'motivational_triggers': student_context.get('motivational_triggers', 'Achievement'),
-                'transcript': transcript
-            }
-            
-            # Format the session analysis prompt
-            try:
+                # Format the session analysis prompt
                 formatted_prompt = file_prompt_manager.format_prompt('session_analysis', **prompt_params)
                 if not formatted_prompt:
                     raise ValueError("session_analysis prompt not available")
                     
                 logger.info("Successfully formatted session_analysis prompt")
-                
-                # Make the API call
-                logger.info(f"Calling Anthropic API with session_analysis prompt and model: {self.model}")
                 
                 # Create a coroutine for the API call
                 async def call_anthropic():
@@ -428,37 +380,38 @@ class AnthropicProvider(SimpleAIProvider):
                     )
                     return response
                 
-                # Run the coroutine with a timeout
-                response = await asyncio.wait_for(call_anthropic(), timeout=self.timeout)
-                
-                # Extract the response content
-                raw_response = response.content[0].text
-                logger.info(f"Received session analysis response from Anthropic: {raw_response[:100]}...")
-                
-                # Parse the structured response based on the prompt format
-                understanding = self._extract_section_content(raw_response, "CONCEPTUAL UNDERSTANDING")
-                engagement = self._extract_section_content(raw_response, "ENGAGEMENT LEVEL")
-                progress = self._extract_section_content(raw_response, "PROGRESS INDICATORS")
-                recommendations = self._extract_section_content(raw_response, "RECOMMENDATIONS")
-                
-                processing_time = (datetime.now() - start_time).total_seconds()
-                
-                return BasicAnalysis(
-                    conceptual_understanding=understanding,
-                    engagement_level=engagement,
-                    progress_indicators=progress,
-                    recommendations=recommendations,
-                    confidence_score=0.9,
-                    provider_used="anthropic",
-                    processing_time=processing_time,
-                    cost_estimate=self.estimate_cost(len(transcript)),
-                    timestamp=datetime.now(),
-                    raw_response=raw_response
-                )
-                
-            except Exception as prompt_error:
-                logger.error(f"Error using session_analysis prompt: {prompt_error}")
-                raise
+                prompt_type = "session_analysis"
+            
+            # Make the API call
+            logger.info(f"Calling Anthropic API with {prompt_type} prompt and model: {self.model}")
+            
+            # Run the coroutine with a timeout
+            response = await asyncio.wait_for(call_anthropic(), timeout=self.timeout)
+            
+            # Extract the response content
+            raw_response = response.content[0].text
+            logger.info(f"Received response from Anthropic: {raw_response[:100]}...")
+            
+            # All prompts now generate JSON - parse the response
+            parsed_json = self._parse_json_response(raw_response)
+            
+            # Extract analysis components based on JSON structure
+            analysis_data = self._extract_analysis_from_json(parsed_json, prompt_type)
+            
+            processing_time = (datetime.now() - start_time).total_seconds()
+            
+            return BasicAnalysis(
+                conceptual_understanding=analysis_data['understanding'],
+                engagement_level=analysis_data['engagement'],
+                progress_indicators=analysis_data['progress'],
+                recommendations=analysis_data['recommendations'],
+                confidence_score=analysis_data.get('confidence', 0.9),
+                provider_used="anthropic",
+                processing_time=processing_time,
+                cost_estimate=self.estimate_cost(len(transcript)),
+                timestamp=datetime.now(),
+                raw_response=raw_response
+            )
             
         except Exception as e:
             logger.error(f"Error in Anthropic analysis: {e}")
@@ -496,6 +449,67 @@ class AnthropicProvider(SimpleAIProvider):
             content = defaults.get(section_name.upper(), "Claude analysis completed successfully.")
         
         return content
+    
+    def _parse_json_response(self, raw_response: str) -> dict:
+        """Parse JSON response from AI provider with fallback handling"""
+        try:
+            # Try to parse the entire response as JSON
+            return json.loads(raw_response)
+        except json.JSONDecodeError:
+            # If that fails, try to extract JSON from the text
+            import re
+            json_match = re.search(r'({[\s\S]*})', raw_response)
+            if json_match:
+                try:
+                    return json.loads(json_match.group(1))
+                except json.JSONDecodeError:
+                    logger.error("Failed to parse extracted JSON from Anthropic response")
+                    return {}
+            else:
+                logger.error("Could not extract JSON from Anthropic response")
+                return {}
+    
+    def _extract_analysis_from_json(self, parsed_json: dict, prompt_type: str) -> dict:
+        """Extract analysis components from parsed JSON response"""
+        # Handle different JSON structures based on prompt type
+        if prompt_type == "custom":
+            # For conditional prompts (introductory vs tutoring)
+            if 'student_profile' in parsed_json:
+                # Introductory analysis format
+                return {
+                    'understanding': parsed_json.get('initial_assessment', {}).get('academic_level', 'Student shows thoughtful learning approach'),
+                    'engagement': parsed_json.get('conversation_analysis', {}).get('engagement_level', 'Active intellectual curiosity observed'),
+                    'progress': parsed_json.get('initial_assessment', {}).get('learning_readiness', 'Ready for academic growth'),
+                    'recommendations': str(parsed_json.get('recommendations', {}).get('immediate_next_steps', ['Foster critical thinking development'])),
+                    'confidence': 0.9
+                }
+            elif 'session_analysis' in parsed_json:
+                # Tutoring session format
+                return {
+                    'understanding': parsed_json.get('session_analysis', {}).get('conceptual_understanding', 'Thoughtful understanding demonstrated'),
+                    'engagement': parsed_json.get('performance_assessment', {}).get('engagement_level', 'Deep engagement with material'),
+                    'progress': parsed_json.get('performance_assessment', {}).get('progress_indicators', 'Strong learning trajectory'),
+                    'recommendations': str(parsed_json.get('recommendations', {}).get('next_session_focus', ['Continue building analytical skills'])),
+                    'confidence': 0.9
+                }
+            else:
+                # Generic JSON structure
+                return {
+                    'understanding': str(parsed_json.get('conceptual_understanding', 'Thoughtful learning progress observed')),
+                    'engagement': str(parsed_json.get('engagement_level', 'Active intellectual participation')),
+                    'progress': str(parsed_json.get('progress_indicators', 'Steady academic development')),
+                    'recommendations': str(parsed_json.get('recommendations', 'Continue fostering critical thinking')),
+                    'confidence': float(parsed_json.get('confidence_score', 0.9))
+                }
+        else:
+            # For standard session_analysis prompts (now JSON format)
+            return {
+                'understanding': str(parsed_json.get('conceptual_understanding', 'Thoughtful understanding demonstrated')),
+                'engagement': str(parsed_json.get('engagement_level', 'Deep engagement with material')),
+                'progress': str(parsed_json.get('progress_indicators', 'Strong learning trajectory')),
+                'recommendations': str(parsed_json.get('recommendations', 'Continue building analytical skills')),
+                'confidence': float(parsed_json.get('confidence_score', 0.9))
+            }
     
     def get_provider_name(self) -> str:
         return f"Anthropic ({self.model})"
