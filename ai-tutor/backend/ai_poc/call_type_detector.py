@@ -144,31 +144,65 @@ class CallTypeDetector:
         Returns:
             Student information dictionary or None if not found
         """
-        if not self.db_connection:
-            return None
-        
         try:
-            # This is a placeholder for actual database query
-            # In the real implementation, this would query the students table
-            # and potentially join with sessions table to get session count
-            
-            # Example query structure:
-            # SELECT s.id, s.first_name, s.last_name, s.phone_number, 
-            #        COUNT(sess.id) as session_count
-            # FROM students s 
-            # LEFT JOIN sessions sess ON s.id = sess.student_id 
-            # WHERE s.phone_number = %s 
-            # GROUP BY s.id
+            # Import Flask app context and repositories
+            from app.repositories import student_repository, session_repository
+            from app import db
+            import flask
             
             logger.info(f"Database lookup for phone: {normalized_phone}")
             
-            # For now, return None to indicate no database implementation
-            # This will be implemented when integrated with the main backend
-            return None
+            # Ensure we have an app context
+            if not flask.has_app_context():
+                logger.warning("No Flask app context - cannot perform database lookup")
+                return None
+            
+            # Query students by phone number
+            try:
+                # Get all students and check phone numbers
+                all_students = student_repository.get_all()
+                if not all_students:
+                    logger.info("No students found in database")
+                    return None
+                
+                # Find student with matching phone number
+                matching_student = None
+                for student in all_students:
+                    student_phone = student.get('phone_number', '')
+                    # Normalize the student's phone for comparison
+                    normalized_student_phone = self.normalize_phone_number(student_phone)
+                    
+                    if normalized_student_phone == normalized_phone:
+                        matching_student = student
+                        break
+                
+                if not matching_student:
+                    logger.info(f"No student found with phone: {normalized_phone}")
+                    return None
+                
+                # Get session count for this student
+                student_id = matching_student.get('id')
+                sessions = session_repository.get_by_student_id(str(student_id))
+                session_count = len(sessions) if sessions else 0
+                
+                # Create student info with session count
+                student_info = {
+                    'id': str(student_id),
+                    'name': f"{matching_student.get('first_name', '')} {matching_student.get('last_name', '')}".strip(),
+                    'phone_number': matching_student.get('phone_number', ''),
+                    'session_count': session_count
+                }
+                
+                logger.info(f"Found student: {student_info['name']} (ID: {student_info['id']}) with {session_count} sessions")
+                return student_info
+                
+            except Exception as db_error:
+                logger.error(f"Database query error: {db_error}")
+                return None
             
         except Exception as e:
-            logger.error(f"Database query failed: {e}")
-            raise
+            logger.error(f"Database lookup failed: {e}")
+            return None
     
     def _fallback_detection(
         self, 

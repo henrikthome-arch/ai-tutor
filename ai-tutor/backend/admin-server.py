@@ -430,8 +430,7 @@ def get_all_students():
                 print(f"⚠️ Error loading phone mappings: {load_error}")
                 phone_mappings = {}
         
-        # Convert to SimpleNamespace objects for template compatibility
-        from types import SimpleNamespace
+        # Keep students as dictionaries for better compatibility
         result = []
         
         print(f"🔄 Processing {len(students)} students...")
@@ -442,15 +441,19 @@ def get_all_students():
                 print(f"👤 Processing student {i+1}/{len(students)}: {student.get('id', 'unknown_id')}")
                 
                 student_id = str(student['id'])
-                # Find phone number for this student
-                phone = None
-                for phone_num, sid in phone_mappings.items():
-                    if sid == student_id:
-                        phone = phone_num
-                        break
-                student['phone'] = phone
                 
-                print(f"📞 Phone mapping for student {student_id}: {phone}")
+                # Use the phone number from the student record directly instead of phone mappings
+                # Phone mappings are for backwards compatibility, but student.phone_number is authoritative
+                phone = student.get('phone_number')
+                if not phone:
+                    # Fallback to phone mappings if no phone in student record
+                    for phone_num, sid in phone_mappings.items():
+                        if sid == student_id:
+                            phone = phone_num
+                            break
+                
+                student['phone'] = phone
+                print(f"📞 Phone for student {student_id}: {phone}")
                 
             except Exception as e:
                 log_error('DATABASE', f'Error processing phone mapping for student', e, student_id=student.get('id'))
@@ -511,16 +514,15 @@ def get_all_students():
                 last_name = student.get('last_name', '')
                 student['display_name'] = f"{first_name} {last_name}".strip() or 'Unknown'
                 
-                # Create template-compatible fields
+                # Create template-compatible fields while keeping as dictionary
                 student['name'] = student['display_name']
                 student['grade'] = student.get('grade', 'Unknown')  # Add grade field
                 student['progress'] = 75  # Default progress percentage (could be calculated from sessions)
                 
                 print(f"👤 Student processed: {student['name']} (grade: {student['grade']}, sessions: {student['session_count']})")
                 
-                # Convert dictionary to SimpleNamespace for template attribute access
-                student_obj = SimpleNamespace(**student)
-                result.append(student_obj)
+                # Keep as dictionary for better compatibility
+                result.append(student)
                 
             except Exception as name_error:
                 log_error('DATABASE', f'Error processing student name/attributes for student {student_id}', name_error, student_id=student_id)
@@ -1022,22 +1024,22 @@ def admin_dashboard():
             all_students.sort(key=lambda s: s.get('id', 0), reverse=True)
             recent_students = all_students[:5] if all_students else []  # Get 5 most recent
             
-            # Create students_info with proper field access
+            # Create students_info with proper field access - handle dictionaries
             students_info = {}
             for student in all_students:
-                # Create proper name from first_name and last_name - use getattr for SimpleNamespace
-                first_name = getattr(student, 'first_name', '')
-                last_name = getattr(student, 'last_name', '')
+                # Create proper name from first_name and last_name - use .get() for dictionaries
+                first_name = student.get('first_name', '')
+                last_name = student.get('last_name', '')
                 full_name = f"{first_name} {last_name}".strip() or 'Unknown'
                 
                 # Add session count if available
-                session_count = getattr(student, 'session_count', 0)
+                session_count = student.get('session_count', 0)
                 
-                students_info[getattr(student, 'id', 'unknown')] = {
+                students_info[student.get('id', 'unknown')] = {
                     'name': full_name,
-                    'id': getattr(student, 'id', 'unknown'),
-                    'grade': getattr(student, 'grade', 'Unknown'),
-                    'phone': getattr(student, 'phone', 'None'),
+                    'id': student.get('id', 'unknown'),
+                    'grade': student.get('grade', 'Unknown'),
+                    'phone': student.get('phone', 'None'),
                     'session_count': session_count
                 }
                 
@@ -1088,10 +1090,10 @@ def admin_students():
     try:
         students = get_all_students()
         
-        # Calculate additional statistics for the template
-        active_students = len([s for s in students if getattr(s, 'session_count', 0) > 0])
-        avg_progress = sum(getattr(s, 'progress', 0) for s in students) / len(students) if students else 0
-        total_sessions = sum(getattr(s, 'session_count', 0) for s in students)
+        # Calculate additional statistics for the template - handle dictionaries
+        active_students = len([s for s in students if s.get('session_count', 0) > 0])
+        avg_progress = sum(s.get('progress', 0) for s in students) / len(students) if students else 0
+        total_sessions = sum(s.get('session_count', 0) for s in students)
         
         return render_template('students.html',
                              students=students,
@@ -1873,19 +1875,19 @@ def admin_system():
                 log_error('ADMIN', f'Error loading phone mappings: {str(load_error)}', load_error)
                 phone_mappings = {}
         
-        # Get students info for phone mapping display with proper field access
+        # Get students info for phone mapping display with proper field access - handle dictionaries
         students = get_all_students()
         students_info = {}
         for student in students:
-            # Create proper name from first_name and last_name - use getattr for SimpleNamespace
-            first_name = getattr(student, 'first_name', '')
-            last_name = getattr(student, 'last_name', '')
+            # Create proper name from first_name and last_name - use .get() for dictionaries
+            first_name = student.get('first_name', '')
+            last_name = student.get('last_name', '')
             full_name = f"{first_name} {last_name}".strip() or 'Unknown'
             
-            students_info[getattr(student, 'id', 'unknown')] = {
+            students_info[student.get('id', 'unknown')] = {
                 'name': full_name,
-                'id': getattr(student, 'id', 'unknown'),
-                'grade': getattr(student, 'grade', 'Unknown')
+                'id': student.get('id', 'unknown'),
+                'grade': student.get('grade', 'Unknown')
             }
         
         # Check for environmental issues
@@ -2349,17 +2351,10 @@ def admin_all_sessions():
             student_id = session.get('student_id')
             student = students_dict.get(student_id, {})
             
-            # Handle SimpleNamespace objects for students - use getattr instead of .get()
-            if hasattr(student, 'first_name'):
-                # Student is a SimpleNamespace object
-                first_name = getattr(student, 'first_name', '')
-                last_name = getattr(student, 'last_name', '')
-                grade = getattr(student, 'grade', 'Unknown')
-            else:
-                # Student is a dictionary
-                first_name = student.get('first_name', '')
-                last_name = student.get('last_name', '')
-                grade = student.get('grade', 'Unknown')
+            # Handle dictionaries properly - students are now dictionaries, not SimpleNamespace
+            first_name = student.get('first_name', '')
+            last_name = student.get('last_name', '')
+            grade = student.get('grade', 'Unknown')
             
             full_name = f"{first_name} {last_name}".strip() or 'Unknown'
             
@@ -3032,12 +3027,12 @@ def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
                 print(f"❌ Cannot save session without valid student_id")
                 return  # Exit early if we can't create/identify a student
         
-        # Trigger AI analysis
+        # Trigger AI analysis with phone number for conditional prompts
         # Always analyze transcript for profile extraction regardless of length
         # Only skip if transcript is extremely short or empty
         if student_id and transcript and len(transcript) > 100 and AI_POC_AVAILABLE:
-            print(f"🤖 Triggering AI analysis for student {student_id}")
-            trigger_ai_analysis_async(student_id, transcript, call_id)
+            print(f"🤖 Triggering AI analysis for student {student_id} with phone {customer_phone}")
+            trigger_ai_analysis_async(student_id, transcript, call_id, customer_phone)
         elif transcript and len(transcript) <= 100:
             log_ai_analysis("Skipping AI analysis for extremely short transcript",
                            call_id=call_id, student_id=student_id,
@@ -3828,7 +3823,7 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
         # Always analyze transcript for profile extraction regardless of length
         # Only skip if transcript is extremely short or empty
         if student_id and combined_transcript.strip() and len(combined_transcript) > 100 and AI_POC_AVAILABLE:
-            print(f"🤖 Triggering conditional prompt AI analysis for webhook transcript")
+            print(f"🤖 Triggering conditional prompt AI analysis for webhook transcript with phone {customer_phone}")
             trigger_ai_analysis_async(student_id, combined_transcript, call_id, customer_phone)
         elif combined_transcript.strip() and len(combined_transcript) <= 100:
             log_ai_analysis("Skipping AI analysis for extremely short webhook transcript",
@@ -3906,11 +3901,13 @@ def trigger_ai_analysis_async(student_id, transcript, call_id, phone_number=None
                                    phone_number=phone_number)
                     print(f"🤖 Running conditional prompt analysis for call {call_id} with phone {phone_number}")
                     
-                    # Use the conditional analysis method
+                    # Use the conditional analysis method with all parameters
                     analysis_result = analyzer.analyze_transcript_with_conditional_prompts_sync(
                         transcript=transcript,
-                        student_id=student_id_str,
-                        phone_number=phone_number
+                        phone_number=phone_number,
+                        subject_hint=None,
+                        additional_context={'call_id': call_id},
+                        student_id=student_id_str
                     )
                 else:
                     log_ai_analysis("Using standard analysis without phone number",
@@ -3922,14 +3919,19 @@ def trigger_ai_analysis_async(student_id, transcript, call_id, phone_number=None
                     analysis_result = analyzer.analyze_transcript(transcript, student_id_str)
                 
                 if analysis_result:
+                    # Extract metadata if available
+                    metadata = analysis_result.get('_analysis_metadata', {})
+                    analysis_type = metadata.get('prompt_used', 'unknown')
+                    call_type = metadata.get('call_type', 'unknown')
+                    
                     log_ai_analysis("Conditional prompt AI analysis completed successfully",
                                    call_id=call_id,
                                    student_id=student_id,
-                                   analysis_type=analysis_result.get('analysis_type', 'unknown'),
-                                   call_type=analysis_result.get('call_type', 'unknown'))
+                                   analysis_type=analysis_type,
+                                   call_type=call_type)
                     print(f"✅ Conditional prompt AI analysis completed for call {call_id}")
-                    print(f"📊 Analysis type: {analysis_result.get('analysis_type', 'unknown')}")
-                    print(f"📞 Call type: {analysis_result.get('call_type', 'unknown')}")
+                    print(f"📊 Analysis type: {analysis_type}")
+                    print(f"📞 Call type: {call_type}")
                 else:
                     log_ai_analysis("Conditional prompt AI analysis returned no results",
                                    call_id=call_id,
