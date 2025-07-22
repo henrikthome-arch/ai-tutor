@@ -2436,17 +2436,42 @@ def admin_all_sessions():
             except Exception:
                 session['duration'] = 'Unknown'
             
-            # Set transcript and analysis flags - check database boolean flags first, then content
-            session['has_transcript'] = (
-                session.get('has_transcript', False) or
-                bool(session.get('transcript')) or
-                (session.get('transcript_length', 0) > 0)
-            )
-            session['has_analysis'] = (
-                session.get('has_summary', False) or
-                session.get('has_analysis', False) or
-                bool(session.get('summary') or session.get('analysis'))
-            )
+            # Set transcript and analysis flags based on actual content availability
+            # Get the Session object to check actual content
+            try:
+                session_obj = Session.query.get(session.get('id'))
+                if session_obj:
+                    session_with_content = session_obj.to_dict_with_content()
+                    transcript = session_with_content.get('transcript')
+                    analysis = session_with_content.get('summary')
+                    session['has_transcript'] = bool(transcript and len(transcript.strip()) > 0)
+                    session['has_analysis'] = bool(analysis and len(analysis.strip()) > 0)
+                else:
+                    # Fallback to metadata flags if session object not found
+                    session['has_transcript'] = (
+                        session.get('has_transcript', False) or
+                        bool(session.get('transcript')) or
+                        (session.get('transcript_length', 0) > 0)
+                    )
+                    session['has_analysis'] = (
+                        session.get('has_summary', False) or
+                        session.get('has_analysis', False) or
+                        bool(session.get('summary') or session.get('analysis'))
+                    )
+            except Exception as content_error:
+                log_error('ADMIN', f'Error checking session content: {content_error}', content_error,
+                         session_id=session.get('id'))
+                # Fallback to metadata flags on error
+                session['has_transcript'] = (
+                    session.get('has_transcript', False) or
+                    bool(session.get('transcript')) or
+                    (session.get('transcript_length', 0) > 0)
+                )
+                session['has_analysis'] = (
+                    session.get('has_summary', False) or
+                    session.get('has_analysis', False) or
+                    bool(session.get('summary') or session.get('analysis'))
+                )
         
         # Sort by date and time (newest first) - with error handling
         try:
@@ -2512,17 +2537,42 @@ def view_student_sessions(student_id):
             # Set duration
             session['duration'] = session.get('duration_minutes', session.get('duration', 0) // 60 if session.get('duration') else 'Unknown')
             
-            # Set transcript and analysis flags - check database boolean flags first, then content
-            session['has_transcript'] = (
-                session.get('has_transcript', False) or
-                bool(session.get('transcript')) or
-                (session.get('transcript_length', 0) > 0)
-            )
-            session['has_analysis'] = (
-                session.get('has_summary', False) or
-                session.get('has_analysis', False) or
-                bool(session.get('summary') or session.get('analysis'))
-            )
+            # Set transcript and analysis flags based on actual content availability
+            # Get the Session object to check actual content
+            try:
+                session_obj = Session.query.get(session.get('id'))
+                if session_obj:
+                    session_with_content = session_obj.to_dict_with_content()
+                    transcript = session_with_content.get('transcript')
+                    analysis = session_with_content.get('summary')
+                    session['has_transcript'] = bool(transcript and len(transcript.strip()) > 0)
+                    session['has_analysis'] = bool(analysis and len(analysis.strip()) > 0)
+                else:
+                    # Fallback to metadata flags if session object not found
+                    session['has_transcript'] = (
+                        session.get('has_transcript', False) or
+                        bool(session.get('transcript')) or
+                        (session.get('transcript_length', 0) > 0)
+                    )
+                    session['has_analysis'] = (
+                        session.get('has_summary', False) or
+                        session.get('has_analysis', False) or
+                        bool(session.get('summary') or session.get('analysis'))
+                    )
+            except Exception as content_error:
+                log_error('ADMIN', f'Error checking session content: {content_error}', content_error,
+                         session_id=session.get('id'))
+                # Fallback to metadata flags on error
+                session['has_transcript'] = (
+                    session.get('has_transcript', False) or
+                    bool(session.get('transcript')) or
+                    (session.get('transcript_length', 0) > 0)
+                )
+                session['has_analysis'] = (
+                    session.get('has_summary', False) or
+                    session.get('has_analysis', False) or
+                    bool(session.get('summary') or session.get('analysis'))
+                )
             
             # Set file name for compatibility with template
             session['file'] = f"session_{session.get('id')}"
@@ -2546,31 +2596,22 @@ def view_session_detail(student_id, session_id):
         return redirect(url_for('admin_login'))
     
     try:
-        # Get session from database
-        session_data = session_repository.get_by_id(session_id)
-        if not session_data:
+        # Get session from database with full content
+        session = Session.query.get(session_id)
+        if not session:
             flash('Session not found', 'error')
             return redirect(url_for('view_student_sessions', student_id=student_id))
         
-        # Get transcript from session data
+        # Get session data with content
+        session_data = session.to_dict_with_content()
+        
+        # Get transcript and analysis from session data
         transcript = session_data.get('transcript')
+        analysis = session_data.get('summary')
         
-        # Ensure transcript status is properly set for template
-        session_data['has_transcript_display'] = (
-            session_data.get('has_transcript', False) or
-            bool(transcript) or
-            (session_data.get('transcript_length', 0) > 0)
-        )
-        
-        # Get analysis if available (implement based on your database schema)
-        analysis = session_data.get('summary') or session_data.get('analysis')
-        
-        # Ensure analysis status is properly set for template
-        session_data['has_analysis_display'] = (
-            session_data.get('has_summary', False) or
-            session_data.get('has_analysis', False) or
-            bool(analysis)
-        )
+        # Set display flags based on actual content
+        session_data['has_transcript_display'] = bool(transcript and len(transcript.strip()) > 0)
+        session_data['has_analysis_display'] = bool(analysis and len(analysis.strip()) > 0)
         
         print(f"📊 Session {session_id} display status: transcript={session_data['has_transcript_display']}, analysis={session_data['has_analysis_display']}")
         

@@ -44,7 +44,7 @@ You must respond with ONLY valid JSON in exactly this structure:
     "name": "string - student's full name or 'Unknown' if not provided",
     "preferred_name": "string - what they like to be called",
     "age": "number - exact age as integer (e.g., 12) or null if unknown",
-    "grade_level": "number - exact grade as integer (e.g., 4) or null if unknown",
+    "grade": "number - exact grade as integer (e.g., 4) or null if unknown",
     "school_name": "string - school name if mentioned or 'Not specified'",
     "subjects_mentioned": ["array of subjects discussed"],
     "learning_style_indicators": {{
@@ -53,7 +53,7 @@ You must respond with ONLY valid JSON in exactly this structure:
       "kinesthetic": "number - confidence 0.0-1.0",
       "reading_writing": "number - confidence 0.0-1.0"
     }},
-    "interests_and_hobbies": ["array of mentioned interests"],
+    "interests": ["array of mentioned interests and hobbies"],
     "academic_confidence_level": "string - high/medium/low with reasoning",
     "communication_style": "string - description of how student communicates",
     "motivation_indicators": ["array of things that seem to motivate the student"]
