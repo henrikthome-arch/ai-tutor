@@ -105,4 +105,157 @@
         </a>
     </div>
 </div>
+
+<div class="card" style="border-left: 4px solid #e74c3c;">
+    <h2 style="color: #e74c3c;">⚠️ Dangerous Operations</h2>
+    <div style="background: #fff5f5; padding: 1rem; border-radius: 4px; border: 1px solid #fecaca;">
+        <p><strong>⚠️ WARNING:</strong> The following operations are irreversible and will affect all data in the database.</p>
+        <p style="margin: 0.5rem 0; font-size: 0.9rem; color: #666;">
+            Only use these operations if you understand the consequences and have verified there is no important data to preserve.
+        </p>
+    </div>
+    
+    <div style="margin-top: 1.5rem;">
+        <button id="resetDatabaseBtn" class="btn" style="background: #e74c3c; color: white; font-weight: bold;">
+            🔄 Reset Database
+        </button>
+        <p style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">
+            This will drop all tables, recreate fresh schema, and reload Cambridge curriculum data.
+        </p>
+    </div>
+</div>
+
+<!-- Database Reset Confirmation Modal -->
+<div id="resetModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
+    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 2rem; border-radius: 8px; max-width: 500px; width: 90%;">
+        <h3 style="color: #e74c3c; margin-top: 0;">⚠️ Confirm Database Reset</h3>
+        <p style="margin: 1rem 0;">
+            <strong>This action will:</strong>
+        </p>
+        <ul style="margin: 1rem 0; padding-left: 1.5rem; color: #666;">
+            <li>Drop ALL existing database tables</li>
+            <li>Delete ALL student, session, and curriculum data</li>
+            <li>Create fresh database tables with updated schema</li>
+            <li>Reload Cambridge Primary 2025 curriculum data</li>
+        </ul>
+        <p style="color: #e74c3c; font-weight: bold;">
+            This operation cannot be undone!
+        </p>
+        
+        <div style="margin-top: 1.5rem;">
+            <label style="display: block; margin-bottom: 1rem;">
+                <input type="checkbox" id="confirmCheckbox" style="margin-right: 0.5rem;">
+                I understand this will delete all data and cannot be undone
+            </label>
+        </div>
+        
+        <div style="text-align: right; margin-top: 1.5rem;">
+            <button id="cancelResetBtn" class="btn" style="margin-right: 1rem;">
+                Cancel
+            </button>
+            <button id="confirmResetBtn" class="btn" style="background: #e74c3c; color: white;" disabled>
+                Reset Database
+            </button>
+        </div>
+        
+        <div id="resetProgress" style="display: none; margin-top: 1rem; text-align: center;">
+            <p>🔄 Resetting database...</p>
+            <div style="background: #f0f0f0; height: 4px; border-radius: 2px; overflow: hidden;">
+                <div style="background: #3498db; height: 100%; width: 0%; transition: width 0.3s; animation: progress 2s infinite;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const resetBtn = document.getElementById('resetDatabaseBtn');
+    const modal = document.getElementById('resetModal');
+    const cancelBtn = document.getElementById('cancelResetBtn');
+    const confirmBtn = document.getElementById('confirmResetBtn');
+    const checkbox = document.getElementById('confirmCheckbox');
+    const progress = document.getElementById('resetProgress');
+    
+    // Show modal when reset button is clicked
+    resetBtn.addEventListener('click', function() {
+        modal.style.display = 'block';
+        checkbox.checked = false;
+        confirmBtn.disabled = true;
+    });
+    
+    // Hide modal when cancel is clicked
+    cancelBtn.addEventListener('click', function() {
+        modal.style.display = 'none';
+    });
+    
+    // Hide modal when clicking outside
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+    
+    // Enable/disable confirm button based on checkbox
+    checkbox.addEventListener('change', function() {
+        confirmBtn.disabled = !checkbox.checked;
+    });
+    
+    // Handle database reset confirmation
+    confirmBtn.addEventListener('click', function() {
+        if (!checkbox.checked) return;
+        
+        // Show progress
+        progress.style.display = 'block';
+        confirmBtn.disabled = true;
+        cancelBtn.disabled = true;
+        
+        // Create form data
+        const formData = new FormData();
+        formData.append('confirm', 'true');
+        
+        // Send reset request
+        fetch('{{ url_for("admin_database_reset") }}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            progress.style.display = 'none';
+            modal.style.display = 'none';
+            
+            if (data.success) {
+                alert('✅ Database reset completed successfully!\n\n' +
+                      'Tables dropped: ' + (data.results.tables_dropped ? 'Yes' : 'No') + '\n' +
+                      'Tables created: ' + (data.results.tables_created ? 'Yes' : 'No') + '\n' +
+                      'Curriculum loaded: ' + (data.results.curriculum_loaded ? 'Yes' : 'No') + '\n' +
+                      (data.results.curriculum_details ? 'Curriculum details: ' + data.results.curriculum_details + '\n' : '') +
+                      (data.results.total_subjects ? 'Total subjects: ' + data.results.total_subjects : ''));
+                
+                // Reload the page to show updated data
+                window.location.reload();
+            } else {
+                alert('❌ Database reset failed:\n\n' + data.error);
+            }
+        })
+        .catch(error => {
+            progress.style.display = 'none';
+            modal.style.display = 'none';
+            alert('❌ Network error during database reset:\n\n' + error.message);
+        })
+        .finally(() => {
+            confirmBtn.disabled = false;
+            cancelBtn.disabled = false;
+        });
+    });
+});
+</script>
+
+<style>
+@keyframes progress {
+    0% { width: 0%; }
+    50% { width: 100%; }
+    100% { width: 0%; }
+}
+</style>
+
 {% endblock %}

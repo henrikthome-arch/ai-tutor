@@ -2547,6 +2547,105 @@ def admin_database_view(table, item_id):
         log_error('DATABASE', f'Error viewing database item {table}/{item_id}', e)
         return redirect(url_for('admin_database_table', table=table))
 
+@app.route('/admin/database/reset', methods=['POST'])
+def admin_database_reset():
+    """Reset the entire database - drop all tables, recreate with fresh schema, and reload Cambridge curriculum"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        # Get confirmation parameter
+        confirm = request.form.get('confirm', '').lower() == 'true'
+        
+        if not confirm:
+            return jsonify({'error': 'Database reset requires explicit confirmation'}), 400
+        
+        log_admin_action('database_reset', session.get('admin_username', 'unknown'),
+                        ip_address=request.remote_addr,
+                        level='WARNING')
+        
+        print("🔄 Starting database reset operation...")
+        
+        # Use app context for all database operations
+        with app.app_context():
+            reset_results = {
+                'tables_dropped': False,
+                'tables_created': False,
+                'curriculum_loaded': False,
+                'error': None
+            }
+            
+            try:
+                # Step 1: Drop all existing tables
+                print("🗑️ Dropping all existing tables...")
+                db.drop_all()
+                print("✅ All tables dropped successfully")
+                reset_results['tables_dropped'] = True
+                
+                # Step 2: Create fresh tables with updated schema
+                print("🗄️ Creating fresh database tables...")
+                db.create_all()
+                print("✅ Fresh database tables created successfully")
+                reset_results['tables_created'] = True
+                
+                # Step 3: Reload Cambridge Primary 2025 curriculum
+                print("📚 Loading Cambridge Primary 2025 curriculum...")
+                cambridge_curriculum = load_cambridge_curriculum_data()
+                
+                if cambridge_curriculum:
+                    print(f"✅ Cambridge Primary 2025 curriculum loaded successfully (ID: {cambridge_curriculum.id})")
+                    reset_results['curriculum_loaded'] = True
+                    
+                    # Verify curriculum details were created
+                    detail_count = CurriculumDetail.query.filter_by(curriculum_id=cambridge_curriculum.id).count()
+                    subject_count = Subject.query.count()
+                    
+                    print(f"📝 Curriculum details created: {detail_count}")
+                    print(f"📚 Total subjects in database: {subject_count}")
+                    
+                    reset_results['curriculum_details'] = detail_count
+                    reset_results['total_subjects'] = subject_count
+                else:
+                    print(f"❌ Cambridge Primary 2025 curriculum failed to load")
+                    reset_results['error'] = 'Failed to load Cambridge curriculum'
+                
+                # Step 4: Commit all changes
+                print("💾 Committing database reset changes...")
+                db.session.commit()
+                print("✅ Database reset completed successfully!")
+                
+                log_admin_action('database_reset_success', session.get('admin_username', 'unknown'),
+                                reset_results=reset_results,
+                                level='INFO')
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Database reset completed successfully',
+                    'results': reset_results
+                })
+                
+            except Exception as reset_error:
+                print(f"❌ Error during database reset: {reset_error}")
+                db.session.rollback()
+                reset_results['error'] = str(reset_error)
+                
+                log_error('DATABASE', 'Database reset failed', reset_error,
+                         admin_user=session.get('admin_username', 'unknown'))
+                
+                return jsonify({
+                    'success': False,
+                    'error': f'Database reset failed: {str(reset_error)}',
+                    'results': reset_results
+                }), 500
+        
+    except Exception as e:
+        log_error('DATABASE', 'Error in database reset route', e,
+                 admin_user=session.get('admin_username', 'unknown'))
+        return jsonify({
+            'success': False,
+            'error': f'Database reset error: {str(e)}'
+        }), 500
+
 def check_environmental_issues():
     """
     Check for common environmental issues that might affect the application.
