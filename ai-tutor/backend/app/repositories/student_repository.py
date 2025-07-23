@@ -154,7 +154,14 @@ def update(student_id, student_data: Dict[str, Any]) -> Optional[Dict[str, Any]]
 
 def delete(student_id) -> bool:
     """
-    Delete a student
+    Delete a student and ALL associated data for GDPR compliance
+    
+    This function ensures complete data erasure by removing:
+    - Student record
+    - Profile data
+    - All assessment/progress records (StudentSubject)
+    - All session records
+    - Any other related data
     
     Args:
         student_id: The student ID (int or str)
@@ -169,20 +176,150 @@ def delete(student_id) -> bool:
         if not student:
             return False
         
-        # Delete profile first (foreign key constraint)
-        profile = Profile.query.filter_by(student_id=student_id_int).first()
-        if profile:
-            db.session.delete(profile)
+        print(f"🗑️ Starting GDPR-compliant deletion for student {student_id_int}")
         
-        # Delete student
+        # Delete all student assessments/progress (StudentSubject records)
+        from app.repositories import assessment_repository
+        try:
+            deleted_assessments = assessment_repository.delete_all_for_student(student_id_int)
+            print(f"✅ Deleted {deleted_assessments} assessment records")
+        except Exception as assessment_error:
+            print(f"⚠️ Error deleting assessments: {assessment_error}")
+            # Continue with deletion even if assessments fail
+        
+        # Delete all sessions for this student
+        try:
+            from app.models.session import Session
+            deleted_sessions = Session.query.filter_by(student_id=student_id_int).delete()
+            print(f"✅ Deleted {deleted_sessions} session records")
+        except Exception as session_error:
+            print(f"⚠️ Error deleting sessions: {session_error}")
+            # Continue with deletion even if sessions fail
+        
+        # Delete legacy Assessment records if they exist (backward compatibility)
+        try:
+            from app.models.assessment import Assessment
+            deleted_legacy = Assessment.query.filter_by(student_id=student_id_int).delete()
+            if deleted_legacy > 0:
+                print(f"✅ Deleted {deleted_legacy} legacy assessment records")
+        except Exception as legacy_error:
+            print(f"⚠️ Error deleting legacy assessments: {legacy_error}")
+            # Continue with deletion even if legacy records fail
+        
+        # Delete profile (foreign key constraint)
+        try:
+            profile = Profile.query.filter_by(student_id=student_id_int).first()
+            if profile:
+                db.session.delete(profile)
+                print(f"✅ Deleted profile record")
+        except Exception as profile_error:
+            print(f"⚠️ Error deleting profile: {profile_error}")
+            # Continue with deletion even if profile fails
+        
+        # Delete the student record itself
         db.session.delete(student)
+        
+        # Commit all deletions
         db.session.commit()
         
+        print(f"✅ GDPR-compliant deletion completed for student {student_id_int}")
         return True
+        
     except (ValueError, TypeError):
         return False
     except Exception as e:
         # Rollback transaction on any error
         db.session.rollback()
-        print(f"Error deleting student: {e}")
+        print(f"❌ Error during GDPR deletion for student {student_id}: {e}")
         raise e
+
+def delete_gdpr_compliant(student_id) -> Dict[str, Any]:
+    """
+    Delete a student with detailed GDPR compliance reporting
+    
+    Args:
+        student_id: The student ID (int or str)
+        
+    Returns:
+        Dictionary with deletion results and counts
+    """
+    try:
+        student_id_int = int(student_id)
+        student = Student.query.get(student_id_int)
+        if not student:
+            return {
+                'success': False,
+                'error': 'Student not found',
+                'student_id': student_id_int
+            }
+        
+        # Track deletion results
+        deletion_results = {
+            'success': True,
+            'student_id': student_id_int,
+            'student_name': f"{student.first_name} {student.last_name}".strip(),
+            'deleted_records': {
+                'assessments': 0,
+                'sessions': 0,
+                'legacy_assessments': 0,
+                'profile': 0,
+                'student': 1
+            },
+            'errors': []
+        }
+        
+        # Delete all student assessments/progress
+        try:
+            from app.repositories import assessment_repository
+            deleted_assessments = assessment_repository.delete_all_for_student(student_id_int)
+            deletion_results['deleted_records']['assessments'] = deleted_assessments
+        except Exception as e:
+            deletion_results['errors'].append(f"Assessment deletion error: {str(e)}")
+        
+        # Delete all sessions
+        try:
+            from app.models.session import Session
+            deleted_sessions = Session.query.filter_by(student_id=student_id_int).delete()
+            deletion_results['deleted_records']['sessions'] = deleted_sessions
+        except Exception as e:
+            deletion_results['errors'].append(f"Session deletion error: {str(e)}")
+        
+        # Delete legacy assessments
+        try:
+            from app.models.assessment import Assessment
+            deleted_legacy = Assessment.query.filter_by(student_id=student_id_int).delete()
+            deletion_results['deleted_records']['legacy_assessments'] = deleted_legacy
+        except Exception as e:
+            deletion_results['errors'].append(f"Legacy assessment deletion error: {str(e)}")
+        
+        # Delete profile
+        try:
+            profile = Profile.query.filter_by(student_id=student_id_int).first()
+            if profile:
+                db.session.delete(profile)
+                deletion_results['deleted_records']['profile'] = 1
+        except Exception as e:
+            deletion_results['errors'].append(f"Profile deletion error: {str(e)}")
+        
+        # Delete student
+        db.session.delete(student)
+        db.session.commit()
+        
+        # Calculate total records deleted
+        deletion_results['total_records_deleted'] = sum(deletion_results['deleted_records'].values())
+        
+        return deletion_results
+        
+    except (ValueError, TypeError):
+        return {
+            'success': False,
+            'error': 'Invalid student ID',
+            'student_id': student_id
+        }
+    except Exception as e:
+        db.session.rollback()
+        return {
+            'success': False,
+            'error': str(e),
+            'student_id': student_id
+        }

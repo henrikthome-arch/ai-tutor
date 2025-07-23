@@ -15,7 +15,8 @@ class Student(db.Model):
     last_name = db.Column(db.String(50), nullable=False)
     date_of_birth = db.Column(db.Date, nullable=True)
     phone_number = db.Column(db.String(20), nullable=True, unique=True, index=True)
-    student_type = db.Column(db.String(20), default='International')  # 'International' or 'Local'
+    grade_level = db.Column(db.Integer, nullable=True)
+    student_type = db.Column(db.String(20), default='foreign')  # 'foreign' or 'local' for international schools
     school_id = db.Column(db.Integer, db.ForeignKey('schools.id'), nullable=True)
     created_at = db.Column(db.DateTime, server_default=func.now())
     updated_at = db.Column(db.DateTime, server_default=func.now(), onupdate=func.now())
@@ -25,6 +26,7 @@ class Student(db.Model):
     profile = db.relationship('Profile', back_populates='student', uselist=False, cascade='all, delete-orphan')
     sessions = db.relationship('Session', back_populates='student', lazy='dynamic', cascade='all, delete-orphan')
     assessments = db.relationship('Assessment', back_populates='student', lazy='dynamic', cascade='all, delete-orphan')
+    student_subjects = db.relationship('StudentSubject', back_populates='student', lazy='dynamic', cascade='all, delete-orphan')
     
     def __repr__(self):
         return f'<Student {self.first_name} {self.last_name}>'
@@ -50,7 +52,12 @@ class Student(db.Model):
         )
     
     def get_grade(self):
-        """Get grade from profile learning_preferences (stored as "grade:7th")"""
+        """Get grade from grade_level field or profile learning_preferences (stored as "grade:7th")"""
+        # First try the grade_level field
+        if self.grade_level:
+            return str(self.grade_level)
+            
+        # Fallback to profile learning_preferences for backward compatibility
         if self.profile and self.profile.learning_preferences:
             for pref in self.profile.learning_preferences:
                 if pref.startswith('grade:'):
@@ -75,6 +82,7 @@ class Student(db.Model):
             'date_of_birth': self.date_of_birth.isoformat() if self.date_of_birth else None,
             'age': self.age,
             'grade': self.get_grade(),
+            'grade_level': self.grade_level,
             'phone_number': self.phone_number,
             'student_type': self.student_type,
             'school_id': self.school_id,

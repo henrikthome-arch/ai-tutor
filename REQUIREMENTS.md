@@ -104,7 +104,19 @@ The system manages educational data through a comprehensive PostgreSQL database 
 
 ## 3. Prompt Management
 
-All prompts used in the system (for both VAPI and internal AI processing) will be stored as individual Markdown files in the `ai-tutor/backend/ai_poc/prompts/` directory. This approach provides a clear separation of concerns and makes it easy to manage and version control the prompts.
+All prompts used in the system (for both VAPI and internal AI processing) are stored as individual Markdown files in the `ai-tutor/backend/ai_poc/prompts/` directory. This approach provides a clear separation of concerns and makes it easy to manage and version control the prompts.
+
+### 3.0. VAPI Conversation Prompt
+
+The primary VAPI conversation prompt that guides the AI tutor's interactions with students during phone calls is stored as [`vapi_conversation.md`](ai-tutor/backend/ai_poc/prompts/vapi_conversation.md). This prompt includes:
+
+- **Student Recognition Logic**: Instructions for handling new vs. returning students
+- **Conversation Guidelines**: Age-appropriate communication patterns and session flow
+- **Session Management**: Critical timing controls to prevent call cutoffs
+- **Technical Integration**: Silent function call handling and context retrieval
+- **Child-Friendly Interaction**: Specific guidance for engaging with young learners
+
+This prompt serves as the core behavioral template for all voice-based tutoring sessions and is version-controlled alongside other system prompts for consistency and maintainability.
 
 ### 3.1. Conditional Prompt System Requirements
 
@@ -172,21 +184,7 @@ The admin dashboard will be the central control panel for the system.
 - **Progress Monitoring**: Detailed view of student assessments.
 - **Log Viewer**: A tool for viewing and filtering system logs.
 
-## 4. Detailed Implementation Plan
-
-**Phase 1: Project Restructuring**
-1.  Create the new, layered directory structure.
-2.  Note: `ai_poc` directory contains production AI system and should not be renamed.
-
-**Phase 2: Flask App and API Refactoring**
-1.  Implement the Flask app factory and `run.py`.
-2.  Refactor `admin-server.py` into separate Blueprints for the admin UI and API.
-
-**Phase 3: Database Integration**
-4.  Create a script for initial data seeding (e.g., default curriculums).
-1.  Set up a managed PostgreSQL database on Render.
-
-## 5. Admin UI Requirements
+## 4. Admin UI Requirements
 
 ### 5.1. Curriculum Management Interface
 
@@ -265,11 +263,3 @@ The admin dashboard will be the central control panel for the system.
 - **Full Data Export**: Export complete curriculum structure to CSV/Excel
 - **Selective Export**: Export filtered subsets (e.g., specific school's curriculum)
 - **Backup Functionality**: Regular automated exports for data backup purposes
-
-2.  Define the complete database schema using SQLAlchemy.
-3.  Implement the repository and service layers for all data entities.
-
-**Phase 4: Production-Grade Enhancements**
-1.  Integrate Celery and Redis for asynchronous task processing.
-2.  Implement AI-powered session summary and assessment generation.
-3.  Develop analytics and visualizations for the admin dashboard.

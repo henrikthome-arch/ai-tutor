@@ -48,7 +48,7 @@ The AI Tutor system is a cloud-native, PostgreSQL-backed platform that provides 
 - **Purpose**: Main application server providing web UI and APIs
 - **Framework**: Flask with SQLAlchemy ORM
 - **Responsibilities**:
-  - Admin dashboard web interface (direct repository access)
+  - Admin dashboard web interface (hybrid repository and direct ORM access)
   - RESTful API endpoints (for external access)
   - VAPI webhook processing
   - Student profile management
@@ -122,18 +122,9 @@ erDiagram
         string phone_number
         int school_id FK
         int grade_level
-        string student_type
+        string student_type "foreign|local for international schools"
         timestamp created_at
         timestamp updated_at
-    }
-
-    student_progress {
-        int id PK
-        int student_id FK "References students.id"
-        string subject
-        float proficiency_level
-        timestamp last_updated
-        timestamp created_at
     }
 
     %% Curriculum System
@@ -192,7 +183,7 @@ erDiagram
     sessions {
         int id PK
         int student_id FK
-        string session_type
+        string session_type "phone|web|mobile for different access methods"
         timestamp start_datetime
         int duration_seconds
         text transcript
@@ -244,7 +235,6 @@ erDiagram
     schools ||--o{ school_default_subjects : "defines templates"
     schools }o--|| curriculums : "uses default"
     
-    students ||--o{ student_progress : "has progress records"
     students ||--o{ student_subjects : "enrolled in"
     students ||--o{ sessions : "participates in"
     
@@ -304,11 +294,18 @@ The database schema supports four primary functional areas:
 
 ### 3.2. Repository Pattern
 
-All database operations are abstracted through repository classes:
-- `StudentRepository`: Student CRUD operations
-- `SessionRepository`: Session management
-- `TokenRepository`: Authentication token management
+The system uses a hybrid approach for database access:
+- **Admin Dashboard**: Direct repository access for CRUD operations, with SQLAlchemy ORM queries for statistics and complex filtering
+- **API Endpoints**: Repository pattern for consistent data access
+
+Repository classes include:
+- `StudentRepository`: Student CRUD operations and profile management
+- `SessionRepository`: Session management and transcript handling
+- `TokenRepository`: Authentication token management and validation
 - `SystemLogRepository`: Event logging and retrieval
+- `SchoolRepository`: School and curriculum management
+- `CurriculumRepository`: Curriculum definition and subject mapping
+- `AssessmentRepository`: Student assessment and progress tracking
 
 ## 4. Security Architecture
 
@@ -349,7 +346,7 @@ All database operations are abstracted through repository classes:
 
 ### 5.1. RESTful API Design
 - **Purpose**: External access for AI integration, debugging, and third-party tools
-- **Admin Interface**: Uses direct repository access (not RESTful API)
+- **Admin Interface**: Uses hybrid repository access and direct ORM queries (not RESTful API)
 - **Base URL**: `/api/v1/`
 - **Authentication**: Bearer token in Authorization header
 - **Content Type**: JSON request/response format
@@ -438,8 +435,7 @@ All prompts generate structured JSON responses with standardized fields:
   "student_profile": {
     "name": "string",
     "grade_level": "string",
-    "subjects_discussed": ["array"],
-    "learning_style": "string"
+    "subjects_discussed": ["array"]
   },
   "session_analysis": {
     "key_topics": ["array"],
@@ -495,9 +491,16 @@ All prompts generate structured JSON responses with standardized fields:
 ### 7.3. Deployment Features
 - **Auto-Deploy**: Git-based deployment triggers
 - **Health Checks**: Built-in endpoint monitoring
-- **Database Migrations**: Automatic schema updates
+- **Database Migrations**: SQLAlchemy-based schema updates with Flask-Migrate
+- **Data Seeding**: Automatic creation of default curriculum and system data
 - **Token Persistence**: Tokens survive all deployments
 - **Zero-Downtime**: Managed service ensures availability
+
+### 7.4. Database Migration Process
+- **Migration Scripts**: Flask-Migrate generates and applies schema changes
+- **Version Control**: Database schema versions tracked in Git
+- **Rollback Support**: Ability to revert database changes if needed
+- **Seed Data Management**: Automated creation of essential system data (default curriculum, system subjects)
 
 ## 8. Monitoring & Observability
 
@@ -539,3 +542,21 @@ All prompts generate structured JSON responses with standardized fields:
 - **Role-Based Access**: Enhanced permission system
 - **API Rate Limiting**: Request throttling and abuse prevention
 - **Compliance Automation**: GDPR and privacy compliance tools
+
+### 9.4. GDPR Compliance Requirements
+- **Data Minimization**: Collect only necessary student information
+- **Right to Erasure**: Complete student data deletion capabilities
+- **Data Portability**: Export student data in machine-readable formats
+- **Consent Management**: Parental consent tracking for minor students
+- **Data Processing Logs**: Audit trail of all personal data access
+- **Privacy by Design**: Default privacy-protective settings
+- **Cross-Border Data**: Compliance with international data transfer regulations
+
+### 9.5. Error Handling Strategies
+- **Graceful Degradation**: System continues operating with reduced functionality
+- **Circuit Breakers**: Automatic fallback when external services fail
+- **Retry Mechanisms**: Intelligent retry logic for transient failures
+- **Error Monitoring**: Real-time error detection and alerting
+- **User-Friendly Messages**: Clear error communication to end users
+- **Recovery Procedures**: Documented steps for system recovery
+- **Backup Strategies**: Regular data backups with tested restore procedures

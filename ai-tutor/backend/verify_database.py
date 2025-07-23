@@ -43,8 +43,12 @@ def verify_database(database_url=None):
             for table in tables:
                 print(f"  - {table}")
             
-            # Expected tables
-            expected_tables = ['system_logs', 'sessions', 'students', 'schools', 'curriculums', 'assessments']
+            # Expected tables based on new comprehensive schema
+            expected_tables = [
+                'system_logs', 'sessions', 'students', 'schools',
+                'curriculums', 'subjects', 'curriculum_details', 'school_default_subjects',
+                'student_subjects', 'tokens', 'profiles'
+            ]
             missing_tables = [table for table in expected_tables if table not in tables]
             
             if missing_tables:

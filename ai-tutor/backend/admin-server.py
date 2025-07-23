@@ -26,7 +26,7 @@ from app.models.curriculum import Curriculum
 from app.models.session import Session
 from app.models.assessment import Assessment
 from app.models.token import Token
-from app.repositories import student_repository, session_repository, token_repository
+from app.repositories import student_repository, session_repository, token_repository, assessment_repository
 
 # Load environment variables
 try:
@@ -257,19 +257,41 @@ try:
     
     # Create database tables if they don't exist
     with app.app_context():
-        # Simple database initialization - just create all tables
-        print("🗄️ Creating database tables...")
-        db.create_all()
-        print("✅ Database tables created successfully")
+        # Database reset logic for development environment
+        if FLASK_ENV == 'development':
+            print("🔄 Development mode detected - performing database reset...")
+            try:
+                # Drop all existing tables first
+                print("🗑️ Dropping all existing tables...")
+                db.drop_all()
+                print("✅ All tables dropped successfully")
+                
+                # Create fresh tables
+                print("🗄️ Creating fresh database tables...")
+                db.create_all()
+                print("✅ Fresh database tables created successfully")
+            except Exception as reset_error:
+                print(f"⚠️ Error during database reset: {reset_error}")
+                # Fallback to regular create_all if reset fails
+                print("🔄 Falling back to regular table creation...")
+                db.create_all()
+                print("✅ Fallback database tables created")
+        else:
+            # Production mode - only create tables if they don't exist
+            print("🗄️ Production mode - creating database tables if needed...")
+            db.create_all()
+            print("✅ Database tables created/verified successfully")
         
         # Verify tables exist
         print("🔍 Verifying database tables...")
         from sqlalchemy import inspect, text
         inspector = inspect(db.engine)
+        
+        # Updated expected tables based on new schema
         expected_tables = [
             'system_logs', 'sessions', 'students', 'schools',
-            'curriculums', 'assessments', 'tokens', 'profiles',
-            'session_metrics', 'daily_stats', 'student_progress'
+            'curriculums', 'subjects', 'curriculum_details', 'school_default_subjects',
+            'student_subjects', 'tokens', 'profiles'
         ]
         missing_tables = []
         
@@ -279,6 +301,8 @@ try:
         
         if missing_tables:
             print(f"⚠️ Missing tables: {', '.join(missing_tables)}")
+            if FLASK_ENV == 'development':
+                print("ℹ️ This is expected after database reset in development mode")
             # For PostgreSQL, try creating system_logs table with direct SQL
             if 'system_logs' in missing_tables and database_url.startswith('postgresql'):
                 print("🔧 Creating system_logs table with direct SQL for PostgreSQL")
@@ -513,10 +537,25 @@ def get_all_students():
                 
                 # Create template-compatible fields while keeping as dictionary
                 student['name'] = student['display_name']
-                student['grade'] = student.get('grade', 'Unknown')  # Add grade field
-                student['progress'] = 75  # Default progress percentage (could be calculated from sessions)
+                student['grade'] = student.get('grade_level', student.get('grade', 'Unknown'))  # Use grade_level from new model
                 
-                print(f"👤 Student processed: {student['name']} (grade: {student['grade']}, sessions: {student['session_count']})")
+                # Get real progress data from assessment repository
+                progress_percentage = 75  # Default fallback
+                try:
+                    # Get student's progress summary from new assessment repository
+                    progress_summary = assessment_repository.get_student_progress_summary(student_id)
+                    if progress_summary and 'error' not in progress_summary and progress_summary.get('average_performance', 0) > 0:
+                        progress_percentage = int(progress_summary.get('average_performance', 75))
+                        print(f"📈 Retrieved real progress for student {student_id}: {progress_percentage}%")
+                    else:
+                        print(f"📈 Using default progress for student {student_id}: {progress_percentage}%")
+                except Exception as progress_error:
+                    log_error('DATABASE', f'Error getting progress for student {student_id}', progress_error, student_id=student_id)
+                    print(f"⚠️ Error getting progress for student {student_id}: {progress_error}, using default")
+                
+                student['progress'] = progress_percentage
+                
+                print(f"👤 Student processed: {student['name']} (grade: {student['grade']}, sessions: {student['session_count']}, progress: {student['progress']}%)")
                 
                 # Keep as dictionary for better compatibility
                 result.append(student)
@@ -531,7 +570,8 @@ def get_all_students():
         
         # Sort by ID (most recent first) instead of name
         try:
-            sorted_result = sorted(result, key=lambda x: getattr(x, 'id', 0), reverse=True)
+            # Fix sorting to use dictionary access instead of getattr
+            sorted_result = sorted(result, key=lambda x: x.get('id', 0), reverse=True)
             print(f"🔄 Sorted {len(sorted_result)} students by ID")
             return sorted_result
         except Exception as sort_error:
@@ -602,29 +642,79 @@ def get_student_data(student_id):
             print(f"❌ Error getting sessions: {session_error}")
             sessions = []  # Continue with empty sessions list
         
-        # Get student assessments with error handling
+        # Get student assessments using new repository and models
         assessments_data = []
+        progress = {
+            'overall_progress': 0,
+            'subjects': {},
+            'goals': [],
+            'streak_days': 0,
+            'last_updated': datetime.now().isoformat()
+        }
+        
         try:
-            assessments = Assessment.query.filter_by(student_id=student_id).all()
-            assessments_data = [assessment.to_dict() for assessment in assessments]
-            print(f"📊 Retrieved {len(assessments_data)} assessments for student {student_id}")
+            # Import assessment repository functions
+            from app.repositories import assessment_repository
+            
+            # Get comprehensive progress summary using new repository
+            progress_summary = assessment_repository.get_student_progress_summary(student_id)
+            print(f"📊 Progress summary retrieved: {json.dumps(progress_summary, indent=2)}")
+            
+            if progress_summary and 'error' not in progress_summary:
+                # Update progress with real data from StudentSubject assessments
+                progress = {
+                    'overall_progress': int(progress_summary.get('average_performance', 0)),
+                    'subjects': {
+                        f"subject_{subj.get('subject_id', 'unknown')}": {
+                            'name': subj.get('subject_name', f"Subject {subj.get('subject_id', 'Unknown')}"),
+                            'progress': int(subj.get('performance_score', 0)),
+                            'mastery_level': subj.get('current_mastery_level', 'beginner'),
+                            'completed_topics': subj.get('completed_topics', []),
+                            'session_count': subj.get('session_count', 0),
+                            'total_time_hours': round(subj.get('total_time_minutes', 0) / 60.0, 2)
+                        }
+                        for subj in progress_summary.get('subjects', [])
+                    },
+                    'goals': [],  # Can be extracted from learning_goals in subjects
+                    'streak_days': 0,  # Can be calculated from session dates
+                    'last_updated': progress_summary.get('last_updated') or datetime.now().isoformat()
+                }
+                
+                # Extract learning goals from all subjects
+                all_goals = []
+                for subj in progress_summary.get('subjects', []):
+                    subject_goals = subj.get('learning_goals', [])
+                    if isinstance(subject_goals, list):
+                        all_goals.extend(subject_goals)
+                progress['goals'] = all_goals
+                
+                print(f"📈 Enhanced progress data: {len(progress['subjects'])} subjects, {len(progress['goals'])} goals")
+            
+            # Get individual subject assessments for backward compatibility
+            student_subjects = assessment_repository.get_by_student_id(student_id)
+            assessments_data = student_subjects  # StudentSubject assessments
+            print(f"📊 Retrieved {len(assessments_data)} subject assessments for student {student_id}")
+            
         except Exception as assessment_error:
             log_error('DATABASE', f'Error getting assessments for student: {str(assessment_error)}', assessment_error, student_id=student_id)
             print(f"❌ Error getting assessments: {assessment_error}")
-            assessments_data = []  # Continue with empty assessments list
+            
+            # Fallback to legacy Assessment model for backward compatibility
+            try:
+                legacy_assessments = Assessment.query.filter_by(student_id=student_id).all()
+                assessments_data = [assessment.to_dict() for assessment in legacy_assessments]
+                print(f"📊 Fallback: Retrieved {len(assessments_data)} legacy assessments for student {student_id}")
+            except Exception as legacy_error:
+                log_error('DATABASE', f'Error getting legacy assessments: {str(legacy_error)}', legacy_error, student_id=student_id)
+                print(f"❌ Error getting legacy assessments: {legacy_error}")
+                assessments_data = []  # Continue with empty assessments list
         
         # Create student data object with safe field access
         try:
             student_data = {
                 'id': student_id,
                 'profile': student,
-                'progress': {
-                    'overall_progress': 0,  # Default value
-                    'subjects': {},
-                    'goals': [],
-                    'streak_days': 0,
-                    'last_updated': datetime.now().isoformat()
-                },
+                'progress': progress,
                 'assessment': assessments_data[0] if assessments_data else None,
                 'sessions': sessions if sessions else []
             }
@@ -4446,8 +4536,11 @@ if __name__ == '__main__':
     try:
         # Create database tables if they don't exist
         with app.app_context():
-            db.create_all()
-            print("🗄️  Database tables created/verified")
+            if FLASK_ENV == 'development':
+                print("🔄 Development mode - database reset already performed during startup")
+            else:
+                db.create_all()
+                print("🗄️  Database tables created/verified")
             
             # Run initial cleanup in the same app context
             try:
