@@ -4130,9 +4130,16 @@ def verify_vapi_signature(payload_body, signature, headers_info):
 def vapi_webhook():
     """Handle VAPI webhook events - simplified API-first approach"""
     try:
+        # BASIC WEBHOOK TRACING - Add very visible logging
+        print(f"🚀 WEBHOOK ENTRY POINT: VAPI webhook received at {datetime.now().isoformat()}")
+        log_system("🚀 WEBHOOK ENTRY POINT: VAPI webhook received", level="INFO")
+        
         # Get raw payload for signature verification
         payload = request.get_data(as_text=True)
         signature = request.headers.get('X-Vapi-Signature', '')
+        
+        print(f"📞 WEBHOOK TRACE: Payload size: {len(payload)} bytes")
+        log_system(f"📞 WEBHOOK TRACE: Payload size: {len(payload)} bytes", level="INFO")
         
         # Get headers info for debugging
         vapi_headers = {k: v for k, v in request.headers.items() if k.lower().startswith('x-vapi')}
@@ -4187,11 +4194,17 @@ def vapi_webhook():
         
         # Only handle end-of-call-report - ignore all other events
         if message_type == 'end-of-call-report':
+            print(f"🎯 WEBHOOK TRACE: Processing end-of-call-report for call {call_id}")
+            log_system(f"🎯 WEBHOOK TRACE: Processing end-of-call-report for call {call_id}", level="INFO")
+            
             # Use app context for database operations
             with app.app_context():
                 log_webhook('processing-call', f"Processing end-of-call-report with app context",
                            call_id=call_id)
                 print(f"📞 Processing end-of-call-report with app context (Call ID: {call_id})")
+                
+                print(f"🔍 WEBHOOK TRACE: About to call handle_end_of_call_api_driven")
+                log_system(f"🔍 WEBHOOK TRACE: About to call handle_end_of_call_api_driven", level="INFO")
                 
                 # Check database connection before proceeding
                 try:
@@ -4203,6 +4216,9 @@ def vapi_webhook():
                     log_error('WEBHOOK', f"Database connection failed before processing webhook", db_error, call_id=call_id)
                 
                 handle_end_of_call_api_driven(message)
+                
+                print(f"✅ WEBHOOK TRACE: Completed handle_end_of_call_api_driven")
+                log_system(f"✅ WEBHOOK TRACE: Completed handle_end_of_call_api_driven", level="INFO")
                 # Explicitly commit any pending database transactions
                 try:
                     db.session.commit()
@@ -4453,6 +4469,9 @@ def normalize_phone_number(phone_number: str) -> str:
 
 def identify_or_create_student(phone_number: str, call_id: str) -> str:
     """Identify existing student or create new one with better logic"""
+    print(f"🔍 TRACE: identify_or_create_student called with phone {phone_number}, call {call_id}")
+    log_system(f"🔍 TRACE: identify_or_create_student called with phone {phone_number}, call {call_id}", level="INFO")
+    
     # Check if we're in an application context
     import flask
     has_app_context = flask.has_app_context()
@@ -4555,8 +4574,13 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
         print(f"👤 No student found for phone: {clean_phone}, creating new student")
         
         # Pass the normalized phone to create_student_from_call
-        print(f"🆕 Creating new student for phone: {clean_phone}")
+        print(f"🆕 TRACE: About to call create_student_from_call for phone: {clean_phone}")
+        log_system(f"🆕 TRACE: About to call create_student_from_call for phone: {clean_phone}", level="INFO")
+        
         new_student_id = create_student_from_call(clean_phone, call_id)
+        
+        print(f"📊 TRACE: create_student_from_call returned: {new_student_id}")
+        log_system(f"📊 TRACE: create_student_from_call returned: {new_student_id}", level="INFO")
         
         if new_student_id:
             log_webhook('student-created', f"Created new student {new_student_id}",
@@ -4601,6 +4625,9 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
 
 def create_student_from_call(phone: str, call_id: str) -> str:
     """Create a new student from phone call data using database"""
+    print(f"🆕 TRACE: create_student_from_call entry - phone: {phone}, call: {call_id}")
+    log_system(f"🆕 TRACE: create_student_from_call entry - phone: {phone}, call: {call_id}", level="INFO")
+    
     # Check if we're in an application context
     import flask
     has_app_context = flask.has_app_context()
@@ -4676,7 +4703,8 @@ def create_student_from_call(phone: str, call_id: str) -> str:
             
             # Verify curriculum assignment was successful with enhanced debugging
             student_id = str(new_student['id'])
-            print(f"🔍 Starting curriculum verification for student {student_id}")
+            print(f"🔍 TRACE: Starting curriculum verification for student {student_id}")
+            log_system(f"🔍 TRACE: Starting curriculum verification for student {student_id}", level="INFO")
             
             try:
                 # Check if we have an app context
@@ -4685,15 +4713,18 @@ def create_student_from_call(phone: str, call_id: str) -> str:
                     print(f"⚠️ No app context for curriculum verification, creating one")
                     with app.app_context():
                         print(f"🔄 Created app context for curriculum verification")
+                        log_system(f"🔄 TRACE: Created app context for curriculum verification", level="INFO")
                         verify_and_assign_curriculum(student_id, call_id)
                 else:
                     print(f"✅ App context exists for curriculum verification")
+                    log_system(f"✅ TRACE: App context exists for curriculum verification", level="INFO")
                     verify_and_assign_curriculum(student_id, call_id)
                     
             except Exception as verification_error:
                 log_error('WEBHOOK', f"Error in curriculum verification wrapper for new student", verification_error,
                          call_id=call_id, student_id=student_id)
                 print(f"❌ Error in curriculum verification wrapper: {verification_error}")
+                log_system(f"❌ TRACE: Error in curriculum verification wrapper: {verification_error}", level="ERROR")
                 # Print full stack trace for debugging
                 import traceback
                 print(f"🔍 Full stack trace: {traceback.format_exc()}")
