@@ -1996,7 +1996,7 @@ def delete_school_route(school_id):
    return redirect(url_for('admin_schools'))
 
 # Curriculum Management Routes
-# @app.route('/admin/curriculum')  # COMMENTED OUT - CONFLICTS WITH BLUEPRINT ROUTE
+@app.route('/admin/curriculum')
 def admin_curriculum():
     """View all curriculums with comprehensive management interface"""
     if not check_auth():
@@ -2038,7 +2038,7 @@ def admin_curriculum():
         flash(f'Error loading curriculum page: {str(e)}', 'error')
         return render_template('curriculum.html', curriculums=[], curriculum_stats={})
 
-# @app.route('/admin/curriculum/<curriculum_id>/details')  # COMMENTED OUT - CONFLICTS WITH BLUEPRINT ROUTE
+@app.route('/admin/curriculum/<curriculum_id>/details')
 def curriculum_details(curriculum_id):
     """View and manage curriculum details for a specific curriculum"""
     if not check_auth():
