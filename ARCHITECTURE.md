@@ -129,7 +129,7 @@ erDiagram
 
     student_progress {
         int id PK
-        int student_id FK
+        int student_id FK "References students.id"
         string subject
         float proficiency_level
         timestamp last_updated
@@ -158,13 +158,13 @@ erDiagram
         int subject_id FK
         int grade_level
         bool is_mandatory
+        text goals_description "Natural language description of learning goals for this grade/subject"
     }
 
     school_default_subjects {
         int id PK
         int school_id FK
-        int curriculum_detail_id FK "Default subject template for the school"
-        int grade_level "Grade level this applies to"
+        int curriculum_detail_id FK "Default subject template for the school (grade level inherent in curriculum_detail)"
     }
 
     student_subjects {
@@ -172,10 +172,18 @@ erDiagram
         int student_id FK
         int curriculum_detail_id FK "Links to a specific subject in a specific curriculum"
         bool is_active_for_tutoring "Can be toggled by teachers/parents"
+        bool is_in_use "Marks if subject is currently active in student's curriculum (false when replaced by school curriculum)"
         text teacher_notes "For guiding the AI on focus areas"
         text ai_tutor_notes "AI's own notes on student progress"
         float progress_percentage "Numeric progress from 0.0 to 1.0 (0% to 100%)"
-        text teacher_assessment "Descriptive assessment by teacher about student's current status"
+        text ai_assessment "AI-generated assessment in natural language for teachers and parents"
+        text weaknesses "Areas where student needs improvement"
+        string mastery_level "Current mastery level of the subject"
+        text comments_tutor "Comments from AI tutor"
+        text comments_teacher "Comments from human teacher"
+        float completion_percentage "Percentage of curriculum completed"
+        string grade_score "Letter or numeric grade"
+        text grade_motivation "Motivational feedback for the grade"
         timestamp created_at
         timestamp updated_at
     }
@@ -189,23 +197,6 @@ erDiagram
         int duration_seconds
         text transcript
         text summary
-        timestamp created_at
-    }
-
-    assessments {
-        int id PK
-        int student_id FK
-        string grade
-        string subject
-        text strengths
-        text weaknesses
-        string mastery_level
-        text comments_tutor
-        text comments_teacher
-        float completion_percentage
-        string grade_score
-        text grade_motivation
-        timestamp last_updated
         timestamp created_at
     }
 
@@ -256,7 +247,6 @@ erDiagram
     students ||--o{ student_progress : "has progress records"
     students ||--o{ student_subjects : "enrolled in"
     students ||--o{ sessions : "participates in"
-    students ||--o{ assessments : "has"
     
     curriculums ||--|{ curriculum_details : "contains"
     subjects ||--|{ curriculum_details : "part of curriculum"
@@ -294,9 +284,11 @@ The database schema supports four primary functional areas:
 
 **Student Enrollment Workflow:**
 1. New student creation with basic demographics
-2. Student automatically receives system default curriculum (no copying required)
-3. School curriculum assignment done manually via Admin interface
-4. Individual subject customization and AI tutoring activation
+2. Student automatically receives system default curriculum via student_subjects records creation (all subjects marked as is_in_use=true)
+3. School curriculum assignment replaces default curriculum:
+   - Original system default subjects marked as is_in_use=false
+   - New school curriculum subjects created as is_in_use=true
+4. Individual subject customization and AI tutoring activation per active subject
 
 **Tutoring Session Workflow:**
 1. Student call triggers profile and curriculum context loading

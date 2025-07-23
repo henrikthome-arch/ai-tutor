@@ -18,6 +18,7 @@ This document outlines the detailed requirements for the AI Tutor system, coveri
 -   **Call Type Detection**: Automatic determination of new vs returning students based on phone number presence in the database.
 -   **VAPI Integration**: Complete integration with VAPI for voice call handling, including webhook processing, call data retrieval, and transcript analysis.
 -   **Automatic Student Registration**: System must automatically create student profiles for new callers using phone number identification and conversation analysis.
+-   **Automatic Default Curriculum Assignment**: Upon student creation, system must automatically generate student_subjects records from the system default curriculum, enabling immediate progress tracking.
 -   **Phone Number Management**: Robust phone number normalization, mapping, and international format handling for student identification.
 -   **Admin Dashboard**: A secure, web-based admin dashboard for system management with database browser functionality.
 -   **API Layer**: A dedicated API layer (MCP Server) to serve data to all user interfaces.
@@ -85,12 +86,15 @@ The system manages educational data through a comprehensive PostgreSQL database 
 -   **School Templates**: Default subject combinations per grade level for each school
 -   **Student Curriculum**: Individual student enrollment in specific subjects with:
     -   AI tutoring activation controls per subject
+    -   Curriculum status flag (is_in_use) to manage active vs replaced subjects
     -   Teacher guidance notes for AI personalization
-    -   Dual progress tracking (numeric percentage + descriptive assessment)
+    -   Comprehensive assessment data (weaknesses, mastery level, completion percentage, grades, motivational feedback)
+    -   Dual progress tracking (numeric percentage + descriptive AI assessment)
+    -   Separate comments from AI tutor and human teacher
 
 ### 2.3. Session & Assessment Tracking
 -   **Tutoring Sessions**: Complete conversation records with AI-generated summaries
--   **Academic Assessments**: Subject-specific progress evaluations with strengths, weaknesses, and mastery levels
+-   **Academic Assessments**: Subject-specific progress evaluations integrated into student_subjects records, including strengths, weaknesses, mastery levels, completion percentages, grades, and motivational feedback
 -   **Progress Analytics**: Session metrics, daily statistics, and learning trend analysis
 
 ### 2.4. System Operations
@@ -100,7 +104,7 @@ The system manages educational data through a comprehensive PostgreSQL database 
 
 ## 3. Prompt Management
 
-All prompts used in the system (for both VAPI and internal AI processing) will be stored as individual Markdown files in a dedicated `prompts` directory. This approach provides a clear separation of concerns and makes it easy to manage and version control the prompts.
+All prompts used in the system (for both VAPI and internal AI processing) will be stored as individual Markdown files in the `ai-tutor/backend/ai_poc/prompts/` directory. This approach provides a clear separation of concerns and makes it easy to manage and version control the prompts.
 
 ### 3.1. Conditional Prompt System Requirements
 
@@ -172,7 +176,7 @@ The admin dashboard will be the central control panel for the system.
 
 **Phase 1: Project Restructuring**
 1.  Create the new, layered directory structure.
-2.  Move files and rename `ai_poc` to `ai`.
+2.  Note: `ai_poc` directory contains production AI system and should not be renamed.
 
 **Phase 2: Flask App and API Refactoring**
 1.  Implement the Flask app factory and `run.py`.
@@ -193,8 +197,10 @@ The admin dashboard will be the central control panel for the system.
     - Example: `"Cambridge Primary 2025","Cambridge Primary Curriculum for 2025",false`
   - **Subjects CSV Format**: `name,description`
     - Example: `"Mathematics","Mathematical concepts and problem solving"`
-  - **Curriculum Details CSV Format**: `curriculum_name,subject_name,grade_level,is_mandatory`
-    - Example: `"Cambridge Primary 2025","Mathematics",4,true`
+  - **Curriculum Details CSV Format**: `curriculum_name,subject_name,grade_level,is_mandatory,goals_description`
+    - Example: `"Cambridge Primary 2025","Mathematics",4,true,"Develop numerical fluency and problem-solving skills"`
+  - **Schools CSV Format**: `name,country,city,description,core_values`
+    - Example: `"International School Athens","Greece","Athens","Premier international education","Excellence, Integrity, Global Citizenship"`
 - **Upload Validation**: Real-time validation with clear error messages for format issues
 - **File Processing**: Batch processing with progress indicators and detailed success/failure reports
 
@@ -213,22 +219,34 @@ The admin dashboard will be the central control panel for the system.
 - **Template Validation**: Ensure mandatory subjects are included for each grade
 
 #### 5.2.2. Student Curriculum Assignment
+- **Automatic Default Assignment**: Upon student creation, system automatically creates student_subjects records from system default curriculum (all marked as is_in_use=true)
 - **Apply School Default**: One-click application of school's default curriculum for a student's grade
   - **Process**: Copy all entries from `school_default_subjects` for the student's grade to `student_subjects`
+  - **Replacement Mode**: Mark existing system default subjects as is_in_use=false, new school subjects as is_in_use=true
   - **Conflict Handling**: Options to merge with existing subjects or replace entirely
-- **Manual Subject Management**: 
+- **Manual Subject Management**:
   - **Add Subjects**: Filter by curriculum and grade to add individual subjects to a student
-  - **Remove Subjects**: Remove individual subjects from student's curriculum
-  - **Subject Status**: Toggle `is_active_for_tutoring` for individual subjects
-  - **Progress Tracking**: Update `progress_percentage` (0-100% slider) and `teacher_assessment` (rich text editor)
+  - **Remove Subjects**: Remove individual subjects from student's curriculum or toggle is_in_use flag
+  - **Subject Status**: Toggle `is_active_for_tutoring` and `is_in_use` for individual subjects
+  - **Progress Tracking**: Update `progress_percentage` (0-100% slider) and comprehensive assessment fields
+  - **Assessment Management**: Edit all assessment fields including weaknesses, mastery_level, comments_tutor, comments_teacher, completion_percentage, grade_score, grade_motivation
 
 ### 5.3. Student Progress Management Interface
 
 #### 5.3.1. Individual Student Views
-- **Subject Progress Dashboard**: Visual progress indicators (progress bars, charts) for each subject
-- **Teacher Assessment Editor**: Rich text editor for detailed teacher assessments
-- **AI Tutor Notes**: Display and edit AI-generated notes about student progress
-- **Progress History**: Timeline view of progress changes over time
+- **Subject Progress Dashboard**: Visual progress indicators (progress bars, charts) for each active subject (is_in_use=true)
+- **Comprehensive Assessment Editor**:
+  - Rich text editor for AI assessment (ai_assessment field)
+  - Separate fields for AI tutor comments (comments_tutor) and teacher comments (comments_teacher)
+  - Weaknesses identification field (weaknesses)
+  - Mastery level dropdown (mastery_level)
+  - Completion percentage slider (completion_percentage)
+  - Grade score field (grade_score)
+  - Grade motivation text area (grade_motivation)
+- **AI Tutor Notes**: Display and edit AI-generated notes about student progress (ai_tutor_notes)
+- **Subject Status Management**: Toggle is_in_use and is_active_for_tutoring flags
+- **Progress History**: Timeline view of progress changes over time for all assessment fields
+- **Curriculum Status Filter**: View active subjects (is_in_use=true) vs all subjects including replaced ones
 
 #### 5.3.2. Bulk Progress Management
 - **Grade-Level Views**: See progress across all students in a grade for specific subjects
