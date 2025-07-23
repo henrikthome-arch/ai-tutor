@@ -1064,3 +1064,286 @@ def check_task_status(task_id):
     task_status = analytics_service.get_aggregation_task_status(task_id)
     
     return jsonify(task_status)
+
+# Database Management Routes
+@main.route('/admin/database')
+def admin_database():
+    """Database management interface"""
+    if not check_auth():
+        return redirect(url_for('main.admin_login'))
+    
+    # Get database statistics
+    from app import db
+    from app.models.curriculum import Curriculum
+    from app.models.student import Student
+    from app.models.session import Session
+    
+    try:
+        # Count records in each table
+        curriculum_count = db.session.query(Curriculum).count()
+        student_count = db.session.query(Student).count()
+        session_count = db.session.query(Session).count()
+        
+        # Check for default curriculum
+        default_curriculum = db.session.query(Curriculum).filter_by(is_default=True).first()
+        
+        db_stats = {
+            'curriculum_count': curriculum_count,
+            'student_count': student_count,
+            'session_count': session_count,
+            'has_default_curriculum': default_curriculum is not None,
+            'default_curriculum_name': default_curriculum.name if default_curriculum else None
+        }
+        
+    except Exception as e:
+        db_stats = {
+            'curriculum_count': 0,
+            'student_count': 0,
+            'session_count': 0,
+            'has_default_curriculum': False,
+            'default_curriculum_name': None,
+            'error': str(e)
+        }
+    
+    return render_template('database.html', db_stats=db_stats)
+
+@main.route('/admin/database/reset', methods=['POST'])
+def reset_database():
+    """Reset database and reload curriculum data"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        from app import db
+        from app.models.curriculum import Curriculum, CurriculumDetail
+        from app.models.student import Student, StudentSubject
+        from app.models.session import Session
+        from app.models.assessment import Assessment, AssessmentResult
+        from app.models.analytics import AnalyticsData
+        from app.models.profile import UserProfile
+        from app.models.school import School
+        from app.models.system_log import SystemLog
+        from app.models.token import Token
+        
+        # Import requests for GitHub data fetching
+        import requests
+        import urllib.request
+        import urllib.error
+        
+        log_admin_action('database_reset_start', session.get('admin_username', 'unknown'))
+        
+        # Drop all tables with CASCADE to handle foreign key constraints
+        print("🗑️ Dropping all tables...")
+        db.drop_all()
+        print("✅ All tables dropped successfully")
+        
+        # Create all tables fresh
+        print("🏗️ Creating fresh database schema...")
+        db.create_all()
+        print("✅ Fresh schema created successfully")
+        
+        # Load Cambridge Primary 2025 curriculum data
+        print("📚 Loading Cambridge Primary 2025 curriculum data...")
+        
+        # GitHub raw URL for the curriculum data
+        github_url = "https://raw.githubusercontent.com/henrikthome-arch/ai-tutor/main/ai-tutor/data/curriculum/cambridge_primary_2025.txt"
+        
+        try:
+            # Try with requests first
+            print(f"🔍 Fetching curriculum data from GitHub: {github_url}")
+            response = requests.get(github_url, timeout=30)
+            response.raise_for_status()
+            curriculum_data = response.text
+            print(f"✅ Successfully downloaded curriculum data ({len(curriculum_data)} characters)")
+        except Exception as e:
+            print(f"⚠️ Requests failed: {e}, trying urllib...")
+            try:
+                with urllib.request.urlopen(github_url, timeout=30) as response:
+                    curriculum_data = response.read().decode('utf-8')
+                print(f"✅ Successfully downloaded curriculum data with urllib ({len(curriculum_data)} characters)")
+            except Exception as e2:
+                print(f"❌ Failed to download curriculum data: {e2}")
+                return jsonify({'error': f'Failed to download curriculum data: {str(e2)}'}), 500
+        
+        # Create the default Cambridge curriculum
+        cambridge_curriculum = Curriculum(
+            name='Cambridge Primary 2025',
+            description='Cambridge Primary Programme for Grades 1-6 with comprehensive subject coverage',
+            curriculum_type='Cambridge',
+            grade_levels=[1, 2, 3, 4, 5, 6],
+            is_template=True,
+            is_default=True,
+            created_by='system'
+        )
+        
+        db.session.add(cambridge_curriculum)
+        db.session.flush()  # Get the curriculum ID
+        print(f"📚 Curriculum created with ID: {cambridge_curriculum.id}")
+        
+        # Parse the downloaded TSV data
+        lines = curriculum_data.strip().split('\n')
+        print(f"📄 Processing {len(lines)} lines from downloaded curriculum data")
+        
+        curriculum_details = []
+        
+        for line_num, line in enumerate(lines, 1):
+            line = line.strip()
+            if not line:
+                continue
+                
+            try:
+                # Parse TSV format: Grade	Subject	Code	Description	Learning_Objectives
+                parts = line.split('\t')
+                if len(parts) < 5:
+                    print(f"⚠️ Line {line_num}: Not enough columns ({len(parts)}), skipping")
+                    continue
+                
+                grade = int(parts[0])
+                subject = parts[1].strip()
+                code = parts[2].strip()
+                description = parts[3].strip()
+                learning_objectives = parts[4].strip()
+                
+                # Create curriculum detail
+                detail = CurriculumDetail(
+                    curriculum_id=cambridge_curriculum.id,
+                    subject=subject,
+                    grade=grade,
+                    code=code,
+                    description=description,
+                    learning_objectives=learning_objectives,
+                    order_index=line_num
+                )
+                
+                curriculum_details.append(detail)
+                
+            except (ValueError, IndexError) as e:
+                print(f"⚠️ Line {line_num}: Parse error - {e}")
+                continue
+        
+        # Bulk insert curriculum details
+        if curriculum_details:
+            db.session.bulk_save_objects(curriculum_details)
+            print(f"📚 Added {len(curriculum_details)} curriculum details")
+        
+        # Commit all changes
+        db.session.commit()
+        
+        log_admin_action('database_reset_complete', session.get('admin_username', 'unknown'),
+                        curriculum_count=len(curriculum_details))
+        
+        return jsonify({
+            'success': True,
+            'message': f'Database reset successfully. Loaded {len(curriculum_details)} curriculum entries.',
+            'curriculum_id': cambridge_curriculum.id,
+            'curriculum_details': len(curriculum_details)
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        log_error('DATABASE', 'Database reset failed', e)
+        print(f"❌ Database reset failed: {str(e)}")
+        return jsonify({'error': f'Database reset failed: {str(e)}'}), 500
+
+# Curriculum Management Routes
+@main.route('/admin/curriculum')
+def admin_curriculum():
+    """Curriculum management interface"""
+    if not check_auth():
+        return redirect(url_for('main.admin_login'))
+    
+    from app import db
+    from app.models.curriculum import Curriculum, CurriculumDetail
+    
+    try:
+        # Get all curriculums with their details count
+        curriculums = db.session.query(Curriculum).all()
+        
+        curriculum_data = []
+        total_details = 0
+        default_curriculum = None
+        
+        for curriculum in curriculums:
+            details_count = db.session.query(CurriculumDetail).filter_by(curriculum_id=curriculum.id).count()
+            total_details += details_count
+            
+            curriculum_info = {
+                'id': curriculum.id,
+                'name': curriculum.name,
+                'description': curriculum.description,
+                'curriculum_type': curriculum.curriculum_type,
+                'grade_levels': curriculum.grade_levels,
+                'is_default': curriculum.is_default,
+                'is_template': curriculum.is_template,
+                'created_by': curriculum.created_by,
+                'created_at': curriculum.created_at,
+                'details_count': details_count
+            }
+            
+            curriculum_data.append(curriculum_info)
+            
+            if curriculum.is_default:
+                default_curriculum = curriculum_info
+        
+        stats = {
+            'total_curriculums': len(curriculums),
+            'total_curriculum_details': total_details,
+            'has_default': default_curriculum is not None,
+            'default_curriculum': default_curriculum
+        }
+        
+    except Exception as e:
+        curriculum_data = []
+        stats = {
+            'total_curriculums': 0,
+            'total_curriculum_details': 0,
+            'has_default': False,
+            'default_curriculum': None,
+            'error': str(e)
+        }
+    
+    return render_template('curriculum.html',
+                         curriculums=curriculum_data,
+                         stats=stats)
+
+@main.route('/admin/curriculum/<int:curriculum_id>')
+def curriculum_details(curriculum_id):
+    """View curriculum details"""
+    if not check_auth():
+        return redirect(url_for('main.admin_login'))
+    
+    from app import db
+    from app.models.curriculum import Curriculum, CurriculumDetail
+    
+    curriculum = db.session.query(Curriculum).get(curriculum_id)
+    if not curriculum:
+        flash('Curriculum not found', 'error')
+        return redirect(url_for('main.admin_curriculum'))
+    
+    # Get curriculum details ordered by grade and order_index
+    details = db.session.query(CurriculumDetail).filter_by(curriculum_id=curriculum_id)\
+                       .order_by(CurriculumDetail.grade, CurriculumDetail.order_index).all()
+    
+    # Group details by grade and subject
+    details_by_grade = {}
+    for detail in details:
+        grade = detail.grade
+        if grade not in details_by_grade:
+            details_by_grade[grade] = {}
+        
+        subject = detail.subject
+        if subject not in details_by_grade[grade]:
+            details_by_grade[grade][subject] = []
+        
+        details_by_grade[grade][subject].append({
+            'id': detail.id,
+            'code': detail.code,
+            'description': detail.description,
+            'learning_objectives': detail.learning_objectives,
+            'order_index': detail.order_index
+        })
+    
+    return render_template('curriculum_details.html',
+                         curriculum=curriculum,
+                         details_by_grade=details_by_grade,
+                         total_details=len(details))
