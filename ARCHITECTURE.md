@@ -125,6 +125,15 @@ erDiagram
         timestamp updated_at
     }
 
+    student_progress {
+        int id PK
+        int student_id FK
+        string subject
+        float proficiency_level
+        timestamp last_updated
+        timestamp created_at
+    }
+
     %% Curriculum System
     curriculums {
         int id PK
@@ -242,6 +251,7 @@ erDiagram
     schools ||--o{ school_default_subjects : "defines templates"
     schools }o--|| curriculums : "uses default"
     
+    students ||--o{ student_progress : "has progress records"
     students ||--o{ student_subjects : "enrolled in"
     students ||--o{ sessions : "participates in"
     students ||--o{ assessments : "has"
