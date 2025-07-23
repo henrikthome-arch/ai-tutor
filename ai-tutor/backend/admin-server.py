@@ -363,6 +363,58 @@ try:
             print("✅ All expected tables exist")
             log_system("All expected tables verified", level="INFO")
         
+        # Production schema migration for missing columns
+        if FLASK_ENV == 'production':
+            print("🔧 Checking production schema for missing columns...")
+            try:
+                # Check if grade_level column exists in students table
+                inspector = inspect(db.engine)
+                students_columns = [col['name'] for col in inspector.get_columns('students')]
+                
+                if 'grade_level' not in students_columns:
+                    print("🔧 Adding missing grade_level column to students table...")
+                    grade_level_sql = "ALTER TABLE students ADD COLUMN grade_level INTEGER;"
+                    db.session.execute(text(grade_level_sql))
+                    db.session.commit()
+                    print("✅ grade_level column added to students table")
+                    log_system("Added missing grade_level column to students table in production", level="INFO")
+                else:
+                    print("✅ grade_level column already exists in students table")
+                    
+                # Check for other potential missing columns in production
+                expected_student_columns = {
+                    'student_type': 'VARCHAR(20)',
+                    'school_id': 'INTEGER'
+                }
+                
+                for column_name, column_type in expected_student_columns.items():
+                    if column_name not in students_columns:
+                        print(f"🔧 Adding missing {column_name} column to students table...")
+                        try:
+                            if column_name == 'student_type':
+                                add_column_sql = f"ALTER TABLE students ADD COLUMN {column_name} {column_type} DEFAULT 'foreign';"
+                            else:
+                                add_column_sql = f"ALTER TABLE students ADD COLUMN {column_name} {column_type};"
+                            
+                            db.session.execute(text(add_column_sql))
+                            db.session.commit()
+                            print(f"✅ {column_name} column added to students table")
+                            log_system(f"Added missing {column_name} column to students table in production", level="INFO")
+                        except Exception as col_error:
+                            print(f"⚠️ Error adding {column_name} column: {col_error}")
+                            log_system(f"Failed to add {column_name} column", error=str(col_error), level="ERROR")
+                            db.session.rollback()
+                    else:
+                        print(f"✅ {column_name} column already exists in students table")
+                        
+            except Exception as migration_error:
+                print(f"⚠️ Error during production schema migration: {migration_error}")
+                log_system("Production schema migration failed", error=str(migration_error), level="ERROR")
+                try:
+                    db.session.rollback()
+                except:
+                    pass  # Rollback might fail if session is already closed
+        
         # Test database connection
         try:
             db.session.execute(text('SELECT 1')).fetchall()
