@@ -4673,6 +4673,33 @@ def create_student_from_call(phone: str, call_id: str) -> str:
                 print(f"❌ Failed to create student in database - repository returned None")
                 # Return None to indicate failure - don't use temp IDs as they cause FK constraint violations
                 return None
+            
+            # Verify curriculum assignment was successful
+            student_id = str(new_student['id'])
+            try:
+                from app.models.assessment import StudentSubject
+                subject_count = StudentSubject.query.filter_by(student_id=student_id).count()
+                print(f"📚 Curriculum verification: Student {student_id} has {subject_count} subjects assigned")
+                
+                if subject_count == 0:
+                    print(f"⚠️ No subjects found for new student {student_id}, attempting manual assignment")
+                    # Import the function from student_repository
+                    from app.repositories.student_repository import assign_default_curriculum_to_student
+                    
+                    # Manually assign default curriculum
+                    subjects_assigned = assign_default_curriculum_to_student(int(student_id))
+                    print(f"📚 Manual assignment result: {subjects_assigned} subjects assigned to student {student_id}")
+                    
+                    if subjects_assigned > 0:
+                        log_webhook('manual-curriculum-assignment', f"Manually assigned {subjects_assigned} subjects to new student",
+                                   call_id=call_id, student_id=student_id, subjects_assigned=subjects_assigned)
+                else:
+                    log_webhook('curriculum-assignment-verified', f"Curriculum assignment verified for new student",
+                               call_id=call_id, student_id=student_id, subject_count=subject_count)
+            except Exception as verification_error:
+                log_error('WEBHOOK', f"Error verifying curriculum assignment for new student", verification_error,
+                         call_id=call_id, student_id=student_id)
+                print(f"⚠️ Error verifying curriculum assignment: {verification_error}")
         except Exception as db_error:
             # The repository should handle rollback, but ensure we're in a clean state
             try:
