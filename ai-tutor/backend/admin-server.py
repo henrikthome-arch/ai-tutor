@@ -2127,7 +2127,7 @@ def edit_curriculum_basic(curriculum_id):
         flash(f'Error loading curriculum: {str(e)}', 'error')
         return redirect(url_for('admin_curriculum'))
 
-# @app.route('/admin/curriculum/<curriculum_id>/details/add', methods=['GET', 'POST'])  # COMMENTED OUT - CONFLICTS WITH BLUEPRINT ROUTE
+@app.route('/admin/curriculum/<curriculum_id>/details/add', methods=['GET', 'POST'])
 def add_curriculum_detail(curriculum_id):
     """Add a new curriculum detail entry"""
     if not check_auth():
@@ -2206,7 +2206,7 @@ def add_curriculum_detail(curriculum_id):
         flash(f'Error loading form: {str(e)}', 'error')
         return redirect(url_for('curriculum_details', curriculum_id=curriculum_id))
 
-# @app.route('/admin/curriculum/details/<detail_id>/edit', methods=['GET', 'POST'])  # COMMENTED OUT - CONFLICTS WITH BLUEPRINT ROUTE
+@app.route('/admin/curriculum/details/<detail_id>/edit', methods=['GET', 'POST'])
 def edit_curriculum_detail(detail_id):
     """Edit a curriculum detail entry"""
     if not check_auth():
@@ -2260,7 +2260,7 @@ def edit_curriculum_detail(detail_id):
         flash(f'Error loading curriculum detail: {str(e)}', 'error')
         return redirect(url_for('admin_curriculum'))
 
-# @app.route('/admin/curriculum/details/<detail_id>/delete', methods=['POST'])  # COMMENTED OUT - CONFLICTS WITH BLUEPRINT ROUTE
+@app.route('/admin/curriculum/details/<detail_id>/delete', methods=['POST'])
 def delete_curriculum_detail(detail_id):
     """Delete a curriculum detail entry"""
     if not check_auth():
