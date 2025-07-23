@@ -1304,7 +1304,7 @@ def admin_curriculum():
     
     return render_template('curriculum.html',
                          curriculums=curriculum_data,
-                         stats=stats)
+                         curriculum_stats=stats)
 
 @main.route('/admin/curriculum/<int:curriculum_id>')
 def curriculum_details(curriculum_id):
