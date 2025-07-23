@@ -4674,32 +4674,29 @@ def create_student_from_call(phone: str, call_id: str) -> str:
                 # Return None to indicate failure - don't use temp IDs as they cause FK constraint violations
                 return None
             
-            # Verify curriculum assignment was successful
+            # Verify curriculum assignment was successful with enhanced debugging
             student_id = str(new_student['id'])
+            print(f"🔍 Starting curriculum verification for student {student_id}")
+            
             try:
-                from app.models.assessment import StudentSubject
-                subject_count = StudentSubject.query.filter_by(student_id=student_id).count()
-                print(f"📚 Curriculum verification: Student {student_id} has {subject_count} subjects assigned")
-                
-                if subject_count == 0:
-                    print(f"⚠️ No subjects found for new student {student_id}, attempting manual assignment")
-                    # Import the function from student_repository
-                    from app.repositories.student_repository import assign_default_curriculum_to_student
-                    
-                    # Manually assign default curriculum
-                    subjects_assigned = assign_default_curriculum_to_student(int(student_id))
-                    print(f"📚 Manual assignment result: {subjects_assigned} subjects assigned to student {student_id}")
-                    
-                    if subjects_assigned > 0:
-                        log_webhook('manual-curriculum-assignment', f"Manually assigned {subjects_assigned} subjects to new student",
-                                   call_id=call_id, student_id=student_id, subjects_assigned=subjects_assigned)
+                # Check if we have an app context
+                import flask
+                if not flask.has_app_context():
+                    print(f"⚠️ No app context for curriculum verification, creating one")
+                    with app.app_context():
+                        print(f"🔄 Created app context for curriculum verification")
+                        verify_and_assign_curriculum(student_id, call_id)
                 else:
-                    log_webhook('curriculum-assignment-verified', f"Curriculum assignment verified for new student",
-                               call_id=call_id, student_id=student_id, subject_count=subject_count)
+                    print(f"✅ App context exists for curriculum verification")
+                    verify_and_assign_curriculum(student_id, call_id)
+                    
             except Exception as verification_error:
-                log_error('WEBHOOK', f"Error verifying curriculum assignment for new student", verification_error,
+                log_error('WEBHOOK', f"Error in curriculum verification wrapper for new student", verification_error,
                          call_id=call_id, student_id=student_id)
-                print(f"⚠️ Error verifying curriculum assignment: {verification_error}")
+                print(f"❌ Error in curriculum verification wrapper: {verification_error}")
+                # Print full stack trace for debugging
+                import traceback
+                print(f"🔍 Full stack trace: {traceback.format_exc()}")
         except Exception as db_error:
             # The repository should handle rollback, but ensure we're in a clean state
             try:
@@ -4761,6 +4758,113 @@ def create_student_from_call(phone: str, call_id: str) -> str:
             log_webhook('app-context-removed', f"Removed app context for create_student_from_call",
                        call_id=call_id)
             print(f"🔄 Removed app context for create_student_from_call (Call ID: {call_id})")
+def verify_and_assign_curriculum(student_id: str, call_id: str):
+    """Helper function to verify and assign curriculum with proper error handling"""
+    try:
+        print(f"📚 Starting curriculum verification for student {student_id}")
+        
+        # Check database connection first
+        try:
+            from sqlalchemy import text
+            db.session.execute(text('SELECT 1')).fetchall()
+            print(f"✅ Database connection verified for curriculum verification")
+        except Exception as db_error:
+            print(f"❌ Database connection failed for curriculum verification: {db_error}")
+            log_error('WEBHOOK', f"Database connection failed for curriculum verification", db_error,
+                     call_id=call_id, student_id=student_id)
+            return
+        
+        # Import required models
+        try:
+            from app.models.assessment import StudentSubject
+            from app.models.curriculum import Curriculum
+            print(f"✅ Successfully imported curriculum models")
+        except Exception as import_error:
+            print(f"❌ Error importing curriculum models: {import_error}")
+            log_error('WEBHOOK', f"Error importing curriculum models", import_error,
+                     call_id=call_id, student_id=student_id)
+            return
+        
+        # Check if student exists
+        try:
+            from app.models.student import Student
+            student_obj = Student.query.get(int(student_id))
+            if not student_obj:
+                print(f"❌ Student {student_id} not found in database")
+                log_error('WEBHOOK', f"Student not found for curriculum verification", ValueError(f"Student {student_id} not found"),
+                         call_id=call_id, student_id=student_id)
+                return
+            print(f"✅ Student {student_id} found in database")
+        except Exception as student_error:
+            print(f"❌ Error checking student existence: {student_error}")
+            log_error('WEBHOOK', f"Error checking student existence", student_error,
+                     call_id=call_id, student_id=student_id)
+            return
+        
+        # Check if default curriculum exists
+        try:
+            default_curriculum = Curriculum.query.filter_by(is_default=True).first()
+            if not default_curriculum:
+                print(f"❌ No default curriculum found in database")
+                log_error('WEBHOOK', f"No default curriculum found", ValueError("No default curriculum"),
+                         call_id=call_id, student_id=student_id)
+                return
+            print(f"✅ Default curriculum found: {default_curriculum.name} (ID: {default_curriculum.id})")
+        except Exception as curriculum_error:
+            print(f"❌ Error checking default curriculum: {curriculum_error}")
+            log_error('WEBHOOK', f"Error checking default curriculum", curriculum_error,
+                     call_id=call_id, student_id=student_id)
+            return
+        
+        # Check current StudentSubject count
+        try:
+            subject_count = StudentSubject.query.filter_by(student_id=int(student_id)).count()
+            print(f"📚 Curriculum verification: Student {student_id} has {subject_count} subjects assigned")
+        except Exception as count_error:
+            print(f"❌ Error counting student subjects: {count_error}")
+            log_error('WEBHOOK', f"Error counting student subjects", count_error,
+                     call_id=call_id, student_id=student_id)
+            return
+        
+        # If no subjects found, manually assign curriculum
+        if subject_count == 0:
+            print(f"⚠️ No subjects found for new student {student_id}, attempting manual assignment")
+            try:
+                # Import the function from student_repository
+                from app.repositories.student_repository import assign_default_curriculum_to_student
+                
+                # Manually assign default curriculum
+                subjects_assigned = assign_default_curriculum_to_student(int(student_id))
+                print(f"📚 Manual assignment result: {subjects_assigned} subjects assigned to student {student_id}")
+                
+                if subjects_assigned > 0:
+                    log_webhook('manual-curriculum-assignment', f"Manually assigned {subjects_assigned} subjects to new student",
+                               call_id=call_id, student_id=student_id, subjects_assigned=subjects_assigned)
+                    print(f"✅ Successfully manually assigned {subjects_assigned} subjects to student {student_id}")
+                else:
+                    print(f"⚠️ Manual assignment returned 0 subjects for student {student_id}")
+                    log_webhook('manual-curriculum-assignment-failed', f"Manual assignment returned 0 subjects",
+                               call_id=call_id, student_id=student_id)
+            except Exception as assignment_error:
+                print(f"❌ Error during manual curriculum assignment: {assignment_error}")
+                log_error('WEBHOOK', f"Error during manual curriculum assignment", assignment_error,
+                         call_id=call_id, student_id=student_id)
+                # Print full stack trace for debugging
+                import traceback
+                print(f"🔍 Assignment error stack trace: {traceback.format_exc()}")
+        else:
+            log_webhook('curriculum-assignment-verified', f"Curriculum assignment verified for new student",
+                       call_id=call_id, student_id=student_id, subject_count=subject_count)
+            print(f"✅ Student {student_id} already has {subject_count} subjects assigned")
+            
+    except Exception as verification_error:
+        log_error('WEBHOOK', f"Error in curriculum verification function", verification_error,
+                 call_id=call_id, student_id=student_id)
+        print(f"❌ Error in curriculum verification function: {verification_error}")
+        # Print full stack trace for debugging
+        import traceback
+        print(f"🔍 Verification error stack trace: {traceback.format_exc()}")
+
 
 def save_api_driven_session(call_id: str, student_id: str, phone: str,
                                duration: int, transcript: str, call_data: Dict[Any, Any]):
