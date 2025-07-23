@@ -48,8 +48,8 @@ The AI Tutor system is a cloud-native, PostgreSQL-backed platform that provides 
 - **Purpose**: Main application server providing web UI and APIs
 - **Framework**: Flask with SQLAlchemy ORM
 - **Responsibilities**:
-  - Admin dashboard web interface
-  - RESTful API endpoints
+  - Admin dashboard web interface (direct repository access)
+  - RESTful API endpoints (for external access)
   - VAPI webhook processing
   - Student profile management
   - Session data processing
@@ -76,8 +76,9 @@ The AI Tutor system is a cloud-native, PostgreSQL-backed platform that provides 
   - Curriculum and school data
 
 #### 2.1.4. AI Analysis System (`ai-tutor/backend/ai_poc/`)
-- **Purpose**: AI-powered analysis of tutoring session transcripts with conditional prompt selection
+- **Purpose**: Production AI-powered analysis of tutoring session transcripts with conditional prompt selection
 - **Framework**: Python with OpenAI/Anthropic API integration
+- **Status**: Production system (despite "poc" directory name - historical naming)
 - **Responsibilities**:
   - File-based prompt management (Markdown templates)
   - Conditional prompt selection based on call type (introductory vs tutoring)
@@ -109,6 +110,7 @@ erDiagram
         string country
         string city
         text description
+        text core_values
         int default_curriculum_id FK "Optional: School's preferred curriculum"
     }
 
@@ -269,7 +271,7 @@ erDiagram
 The database schema supports four primary functional areas:
 
 #### 3.2.1. Educational Structure Management
--   **Schools & Students**: Core institutional relationships with comprehensive student profiles including learning psychology, preferences, and family context
+-   **Schools & Students**: Core institutional relationships with basic student demographic data
 -   **Curriculum System**: Flexible, multi-layered curriculum management supporting system defaults, school-specific templates, and individual student customization
 -   **Subject Enrollment**: Granular subject-level management with AI tutoring controls and progress tracking per subject
 
@@ -285,18 +287,16 @@ The database schema supports four primary functional areas:
 -   **Analytics Infrastructure**: Daily statistics, usage patterns, and system performance tracking
 
 #### 3.2.4. AI Integration Architecture
--   **Student Profile Integration**: Rich student profiles with learning psychology data feed directly into AI tutoring sessions
--   **Session Context Loading**: Complete student context (curriculum, progress, preferences) available to AI tutor
--   **Post-Session Processing**: AI analysis updates student profiles, assessments, and learning recommendations
--   **Adaptive Learning**: AI recommendations inform curriculum adjustments and teaching strategies
+-   **Session Context Loading**: Student context (curriculum, progress) provided to AI tutor
+-   **Post-Session Processing**: AI analysis updates assessments and progress tracking
 
 #### 3.2.5. Key Workflows
 
 **Student Enrollment Workflow:**
 1. New student creation with basic demographics
-2. School's default curriculum template automatically copied to student subjects
-3. Individual subject customization and AI tutoring activation
-4. Continuous profile enhancement through AI session analysis
+2. Student automatically receives system default curriculum (no copying required)
+3. School curriculum assignment done manually via Admin interface
+4. Individual subject customization and AI tutoring activation
 
 **Tutoring Session Workflow:**
 1. Student call triggers profile and curriculum context loading
@@ -330,9 +330,10 @@ All database operations are abstracted through repository classes:
 #### 4.1.2. API Token Authentication
 - **Purpose**: Secure access for debugging, testing, and AI integration
 - **Storage**: PostgreSQL with SHA-256 hashed tokens
+- **Documentation**: See [`DEBUGGING_WITH_TOKENS.md`](DEBUGGING_WITH_TOKENS.md) for detailed token usage guide
 - **Scopes**: Granular permission system
   - `api:read` - Read access to API endpoints
-  - `api:write` - Write access to API endpoints  
+  - `api:write` - Write access to API endpoints
   - `logs:read` - Access to system logs
   - `mcp:access` - MCP server functionality
   - `admin:read` - Admin dashboard data
@@ -355,6 +356,8 @@ All database operations are abstracted through repository classes:
 ## 5. API Architecture
 
 ### 5.1. RESTful API Design
+- **Purpose**: External access for AI integration, debugging, and third-party tools
+- **Admin Interface**: Uses direct repository access (not RESTful API)
 - **Base URL**: `/api/v1/`
 - **Authentication**: Bearer token in Authorization header
 - **Content Type**: JSON request/response format
@@ -375,7 +378,7 @@ GET  /api/v1/logs              # System logs (with filtering)
 ```
 
 ### 5.3. MCP Server API
-- **Protocol**: Model Context Protocol over stdio/HTTP
+- **Protocol**: Model Context Protocol over stdio/HTTP (separate from RESTful API)
 - **Authentication**: Token-based with scope validation
 - **Resources**: Student data, session transcripts, system logs
 - **Tools**: Data query and analysis capabilities
@@ -385,15 +388,17 @@ GET  /api/v1/logs              # System logs (with filtering)
 ### 6.1. Voice Call Processing Flow
 ```
 1. Student calls → VAPI
-2. VAPI processes call → Generates transcript
-3. VAPI webhook → Flask backend
-4. Backend processes transcript:
+2. VAPI → MCP server call (initial context loading)
+3. MCP server → Student context retrieval from PostgreSQL
+4. VAPI processes call with student context → Generates transcript
+5. VAPI webhook → Flask backend
+6. Backend processes transcript:
    - Identifies/creates student profile
    - Creates session record
    - Triggers AI post-processing
-5. AI analysis → Updates student assessment
-6. Session summary generated
-7. Data stored in PostgreSQL
+7. AI analysis → Updates student assessment
+8. Session summary generated
+9. Data stored in PostgreSQL
 ```
 
 ### 6.3. AI Prompt Management Flow
@@ -474,7 +479,7 @@ All prompts generate structured JSON responses with standardized fields:
 
 ### 6.3. Token Authentication Flow
 ```
-1. Admin generates token → Token stored in PostgreSQL (hashed)
+1. Admin generates token via Flask admin interface → Token stored in PostgreSQL (hashed)
 2. Client/AI assistant → API request with token
 3. Token validation → Database lookup and scope check
 4. Authorized request → Repository layer → Response
@@ -490,7 +495,7 @@ All prompts generate structured JSON responses with standardized fields:
 - **Environment**: Production-ready with health checks
 
 ### 7.2. Environment Configuration
-- **Development**: Local SQLite for rapid development
+- **Development**: Local PostgreSQL for development consistency
 - **Production**: Managed PostgreSQL with connection pooling
 - **Configuration**: Environment variables for all secrets
 - **Logging**: Centralized logging to PostgreSQL
