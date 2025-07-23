@@ -631,33 +631,40 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             # Track changes
             updated_fields = []
             
-            # Initialize learning_preferences if None
-            if profile.learning_preferences is None:
-                profile.learning_preferences = []
-            
-            # Get current learning preferences and remove old age/grade entries
-            learning_prefs = list(profile.learning_preferences) if profile.learning_preferences else []
-            original_prefs = [pref for pref in learning_prefs if not (pref.startswith('age:') or pref.startswith('grade:'))]
-            
-            # Update age in profile if provided (store in learning_preferences as "age:12")
+            # Update age by calculating date_of_birth if provided
             if 'age' in extracted_info and extracted_info['age'] is not None:
                 try:
                     age_val = int(extracted_info['age'])
-                    original_prefs.append(f"age:{age_val}")
-                    updated_fields.append('age')
-                    logger.info(f"Updating age to {age_val}")
+                    # Calculate approximate date of birth (use current year - age, January 1st)
+                    from datetime import date
+                    current_year = date.today().year
+                    birth_year = current_year - age_val
+                    calculated_dob = date(birth_year, 1, 1)
+                    
+                    # Update student's date_of_birth
+                    student.date_of_birth = calculated_dob
+                    updated_fields.append('date_of_birth')
+                    logger.info(f"Updating date_of_birth to {calculated_dob} (age {age_val})")
                 except (ValueError, TypeError):
                     logger.warning(f"Invalid age value: {extracted_info['age']}")
             
-            # Update grade in profile if provided (store in learning_preferences as "grade:7th")
+            # Update grade_level in Student model if provided
             if 'grade' in extracted_info and extracted_info['grade'] is not None:
-                grade_val = str(extracted_info['grade'])
-                original_prefs.append(f"grade:{grade_val}")
-                updated_fields.append('grade')
-                logger.info(f"Updating grade to {grade_val}")
+                try:
+                    grade_val = int(extracted_info['grade'])
+                    # Validate grade range
+                    if 1 <= grade_val <= 12:
+                        student.grade_level = grade_val
+                        updated_fields.append('grade_level')
+                        logger.info(f"Updating grade_level to {grade_val}")
+                    else:
+                        logger.warning(f"Grade value out of range: {grade_val}")
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid grade value: {extracted_info['grade']}")
             
-            # Update the learning_preferences with age/grade data
-            profile.learning_preferences = original_prefs
+            # Initialize learning_preferences if None for interests
+            if profile.learning_preferences is None:
+                profile.learning_preferences = []
             
             # Handle interests
             if 'interests' in extracted_info and extracted_info['interests']:
