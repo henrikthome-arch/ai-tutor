@@ -21,7 +21,6 @@ class School(db.Model):
     
     # Relationships
     students = db.relationship('Student', back_populates='school', lazy='dynamic')
-    curriculums = db.relationship('Curriculum', back_populates='school', lazy='dynamic')
     default_curriculum = db.relationship('Curriculum', foreign_keys=[default_curriculum_id])
     school_default_subjects = db.relationship('SchoolDefaultSubject', back_populates='school', lazy='dynamic', cascade='all, delete-orphan')
     

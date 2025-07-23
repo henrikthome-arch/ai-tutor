@@ -17,7 +17,6 @@ class Curriculum(db.Model):
     
     # Relationships
     curriculum_details = db.relationship('CurriculumDetail', back_populates='curriculum', lazy='dynamic', cascade='all, delete-orphan')
-    schools = db.relationship('School', back_populates='curriculums', lazy='dynamic')
     
     def __repr__(self):
         return f'<Curriculum {self.name}>'
