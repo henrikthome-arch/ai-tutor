@@ -1996,7 +1996,7 @@ def delete_school_route(school_id):
    return redirect(url_for('admin_schools'))
 
 # Curriculum Management Routes
-@app.route('/admin/curriculum')
+# @app.route('/admin/curriculum')  # COMMENTED OUT - CONFLICTS WITH BLUEPRINT ROUTE
 def admin_curriculum():
     """View all curriculums with comprehensive management interface"""
     if not check_auth():
@@ -2038,7 +2038,7 @@ def admin_curriculum():
         flash(f'Error loading curriculum page: {str(e)}', 'error')
         return render_template('curriculum.html', curriculums=[], curriculum_stats={})
 
-@app.route('/admin/curriculum/<curriculum_id>/details')
+# @app.route('/admin/curriculum/<curriculum_id>/details')  # COMMENTED OUT - CONFLICTS WITH BLUEPRINT ROUTE
 def curriculum_details(curriculum_id):
     """View and manage curriculum details for a specific curriculum"""
     if not check_auth():
@@ -2127,7 +2127,7 @@ def edit_curriculum_basic(curriculum_id):
         flash(f'Error loading curriculum: {str(e)}', 'error')
         return redirect(url_for('admin_curriculum'))
 
-@app.route('/admin/curriculum/<curriculum_id>/details/add', methods=['GET', 'POST'])
+# @app.route('/admin/curriculum/<curriculum_id>/details/add', methods=['GET', 'POST'])  # COMMENTED OUT - CONFLICTS WITH BLUEPRINT ROUTE
 def add_curriculum_detail(curriculum_id):
     """Add a new curriculum detail entry"""
     if not check_auth():
@@ -2206,7 +2206,7 @@ def add_curriculum_detail(curriculum_id):
         flash(f'Error loading form: {str(e)}', 'error')
         return redirect(url_for('curriculum_details', curriculum_id=curriculum_id))
 
-@app.route('/admin/curriculum/details/<detail_id>/edit', methods=['GET', 'POST'])
+# @app.route('/admin/curriculum/details/<detail_id>/edit', methods=['GET', 'POST'])  # COMMENTED OUT - CONFLICTS WITH BLUEPRINT ROUTE
 def edit_curriculum_detail(detail_id):
     """Edit a curriculum detail entry"""
     if not check_auth():
@@ -2260,7 +2260,7 @@ def edit_curriculum_detail(detail_id):
         flash(f'Error loading curriculum detail: {str(e)}', 'error')
         return redirect(url_for('admin_curriculum'))
 
-@app.route('/admin/curriculum/details/<detail_id>/delete', methods=['POST'])
+# @app.route('/admin/curriculum/details/<detail_id>/delete', methods=['POST'])  # COMMENTED OUT - CONFLICTS WITH BLUEPRINT ROUTE
 def delete_curriculum_detail(detail_id):
     """Delete a curriculum detail entry"""
     if not check_auth():
@@ -2288,7 +2288,7 @@ def delete_curriculum_detail(detail_id):
         flash(f'Error deleting curriculum detail: {str(e)}', 'error')
         return redirect(url_for('admin_curriculum'))
 
-@app.route('/admin/curriculum/add', methods=['GET', 'POST'])
+# @app.route('/admin/curriculum/add', methods=['GET', 'POST'])  # COMMENTED OUT - CONFLICTS WITH BLUEPRINT ROUTE
 def add_curriculum():
     """Add a new curriculum"""
     if not check_auth():
@@ -2332,7 +2332,7 @@ def add_curriculum():
     
     return render_template('add_curriculum.html', schools=schools)
 
-@app.route('/admin/curriculum/edit/<curriculum_id>', methods=['GET', 'POST'])
+# @app.route('/admin/curriculum/edit/<curriculum_id>', methods=['GET', 'POST'])  # COMMENTED OUT - CONFLICTS WITH BLUEPRINT ROUTE
 def edit_curriculum(curriculum_id):
     """Edit an existing curriculum"""
     if not check_auth():
@@ -2375,7 +2375,7 @@ def edit_curriculum(curriculum_id):
                           curriculum=curriculum,
                           schools=schools)
 
-@app.route('/admin/curriculum/delete/<curriculum_id>', methods=['POST'])
+# @app.route('/admin/curriculum/delete/<curriculum_id>', methods=['POST'])  # COMMENTED OUT - CONFLICTS WITH BLUEPRINT ROUTE
 def delete_curriculum_route(curriculum_id):
     """Delete a curriculum"""
     if not check_auth():
@@ -2393,7 +2393,7 @@ def delete_curriculum_route(curriculum_id):
     
     return redirect(url_for('admin_curriculum'))
 
-@app.route('/admin/schools/<school_id>/curriculum')
+# @app.route('/admin/schools/<school_id>/curriculum')  # COMMENTED OUT - CONFLICTS WITH BLUEPRINT ROUTE
 def school_curriculum(school_id):
     """View curriculums for a specific school"""
     if not check_auth():
