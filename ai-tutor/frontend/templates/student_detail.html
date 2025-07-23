@@ -540,6 +540,15 @@
         <p style="color: #7f8c8d; font-size: 0.9rem;">
             Subjects are automatically assigned when students are created if a default curriculum is available.
         </p>
+        <div style="margin-top: 1.5rem;">
+            <button
+                class="btn"
+                style="background: #27ae60; color: white; text-decoration: none;"
+                onclick="assignDefaultCurriculum('{{ student.id }}', '{{ student.name }}')"
+            >
+                📚 Assign Default Curriculum
+            </button>
+        </div>
     </div>
     {% endif %}
 </div>
@@ -641,6 +650,45 @@ function deleteStudent(studentId, studentName) {
         // Restore button state
         deleteBtn.textContent = originalText;
         deleteBtn.disabled = false;
+    });
+}
+
+function assignDefaultCurriculum(studentId, studentName) {
+    if (!confirm(`Assign default curriculum to "${studentName}"?\n\nThis will add all subjects from the default Cambridge Primary 2025 curriculum to this student.`)) {
+        return;
+    }
+    
+    // Show loading state
+    const assignBtn = event.target;
+    const originalText = assignBtn.textContent;
+    assignBtn.textContent = '🔄 Assigning...';
+    assignBtn.disabled = true;
+    
+    fetch(`/admin/students/${studentId}/assign-curriculum`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`✅ ${data.message}`);
+            // Reload the page to show the assigned subjects
+            window.location.reload();
+        } else {
+            alert(`❌ Error: ${data.error}`);
+            // Restore button state
+            assignBtn.textContent = originalText;
+            assignBtn.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Assign curriculum request failed:', error);
+        alert(`❌ Failed to assign curriculum: ${error.message}`);
+        // Restore button state
+        assignBtn.textContent = originalText;
+        assignBtn.disabled = false;
     });
 }
 </script>

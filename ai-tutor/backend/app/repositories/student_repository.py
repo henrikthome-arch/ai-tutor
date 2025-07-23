@@ -153,17 +153,17 @@ def create(student_data: Dict[str, Any]) -> Dict[str, Any]:
         # Commit student and profile first
         db.session.commit()
         
-        # Automatically assign default curriculum if student has no school assignment
-        # Students without schools get the default curriculum
-        if not student_data.get('school_id'):
-            try:
-                subjects_assigned = assign_default_curriculum_to_student(student.id)
+        # Automatically assign default curriculum to ALL new students
+        # This ensures every student has curriculum assignments regardless of school
+        try:
+            subjects_assigned = assign_default_curriculum_to_student(student.id)
+            if subjects_assigned > 0:
                 print(f"📚 Auto-assigned {subjects_assigned} subjects from default curriculum to new student {student.id}")
-            except Exception as curriculum_error:
-                print(f"⚠️ Error auto-assigning default curriculum to student {student.id}: {curriculum_error}")
-                # Don't fail student creation if curriculum assignment fails
-        else:
-            print(f"🏫 Student {student.id} assigned to school {student_data.get('school_id')}, skipping default curriculum assignment")
+            else:
+                print(f"ℹ️ No new subjects assigned to student {student.id} (may already exist or no default curriculum)")
+        except Exception as curriculum_error:
+            print(f"⚠️ Error auto-assigning default curriculum to student {student.id}: {curriculum_error}")
+            # Don't fail student creation if curriculum assignment fails
         
         # Return combined data
         result = student.to_dict()

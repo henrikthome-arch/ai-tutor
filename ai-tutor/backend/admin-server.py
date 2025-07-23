@@ -3278,6 +3278,57 @@ def delete_student(student_id):
                  student_id=student_id,
                  admin_user=session.get('admin_username', 'unknown'))
         return jsonify({'error': f'Failed to delete student: {str(e)}'}), 500
+@app.route('/admin/students/<student_id>/assign-curriculum', methods=['POST'])
+def assign_default_curriculum_to_student_route(student_id):
+    """Manually assign default curriculum to an existing student"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        # Verify student exists
+        student = student_repository.get_by_id(student_id)
+        if not student:
+            return jsonify({'error': 'Student not found'}), 404
+        
+        # Import the function from student_repository
+        from app.repositories.student_repository import assign_default_curriculum_to_student
+        
+        # Assign default curriculum
+        with app.app_context():
+            subjects_assigned = assign_default_curriculum_to_student(int(student_id))
+            
+            student_name = f"{student.get('first_name', '')} {student.get('last_name', '')}".strip()
+            
+            log_admin_action('assign_default_curriculum', session.get('admin_username', 'unknown'),
+                            student_id=student_id,
+                            student_name=student_name,
+                            subjects_assigned=subjects_assigned,
+                            ip_address=request.remote_addr)
+            
+            if subjects_assigned > 0:
+                message = f'Successfully assigned {subjects_assigned} subjects from default curriculum to {student_name}'
+                flash(message, 'success')
+                return jsonify({
+                    'success': True,
+                    'message': message,
+                    'subjects_assigned': subjects_assigned
+                })
+            else:
+                message = f'No new subjects assigned to {student_name} - may already have curriculum or no default curriculum available'
+                flash(message, 'info')
+                return jsonify({
+                    'success': True,
+                    'message': message,
+                    'subjects_assigned': 0
+                })
+        
+    except Exception as e:
+        log_error('ADMIN', f'Error assigning default curriculum to student {student_id}', e,
+                 student_id=student_id,
+                 admin_user=session.get('admin_username', 'unknown'))
+        flash(f'Error assigning curriculum: {str(e)}', 'error')
+        return jsonify({'error': f'Failed to assign curriculum: {str(e)}'}), 500
+
 
 # All Sessions Overview Route
 @app.route('/admin/sessions')
