@@ -27,6 +27,7 @@ from app.models.session import Session
 from app.models.assessment import Assessment
 from app.models.token import Token
 from app.repositories import student_repository, session_repository, token_repository, assessment_repository
+from sqlalchemy import inspect
 
 # Load environment variables
 try:
@@ -2576,10 +2577,36 @@ def admin_database_reset():
             }
             
             try:
-                # Step 1: Drop all existing tables
+                # Step 1: Drop all existing tables with CASCADE to handle foreign key constraints
                 print("🗑️ Dropping all existing tables...")
-                db.drop_all()
-                print("✅ All tables dropped successfully")
+                try:
+                    # Use raw SQL to drop tables with CASCADE for PostgreSQL
+                    from sqlalchemy import text
+                    
+                    # Get all table names first
+                    inspector = inspect(db.engine)
+                    table_names = inspector.get_table_names()
+                    print(f"📋 Found {len(table_names)} tables to drop: {table_names}")
+                    
+                    # Drop each table with CASCADE to handle foreign key dependencies
+                    for table_name in table_names:
+                        try:
+                            drop_sql = f"DROP TABLE IF EXISTS {table_name} CASCADE"
+                            db.session.execute(text(drop_sql))
+                            print(f"✅ Dropped table: {table_name}")
+                        except Exception as table_error:
+                            print(f"⚠️ Error dropping table {table_name}: {table_error}")
+                    
+                    # Commit the drops
+                    db.session.commit()
+                    print("✅ All tables dropped successfully with CASCADE")
+                    
+                except Exception as drop_error:
+                    print(f"⚠️ Error with CASCADE drops, falling back to drop_all(): {drop_error}")
+                    # Fallback to standard drop_all
+                    db.drop_all()
+                    print("✅ All tables dropped successfully with fallback method")
+                
                 reset_results['tables_dropped'] = True
                 
                 # Step 2: Create fresh tables with updated schema
