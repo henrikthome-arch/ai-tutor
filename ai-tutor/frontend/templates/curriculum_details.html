@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}{{ curriculum.name }} - Curriculum Details{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / 
+    <a href="{{ url_for('admin_curriculum') }}">📚 Curriculum</a> / 
+    <span>{{ curriculum.name }}</span>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <div>
+        <h1 style="color: #2c3e50; margin-bottom: 0.5rem;">{{ curriculum.name }}</h1>
+        <p style="color: #7f8c8d; margin: 0;">{{ curriculum.description }}</p>
+        <div style="margin-top: 0.5rem;">
+            {% if curriculum.is_default %}
+            <span class="badge" style="background: #27ae60; color: white;">DEFAULT</span>
+            {% endif %}
+            {% if curriculum.is_template %}
+            <span class="badge" style="background: #3498db; color: white;">TEMPLATE</span>
+            {% endif %}
+            <span class="badge" style="background: #7f8c8d; color: white;">{{ curriculum.curriculum_type or 'General' }}</span>
+        </div>
+    </div>
+    <div>
+        <a href="{{ url_for('edit_curriculum_basic', curriculum_id=curriculum.id) }}" class="btn" style="background: #3498db;">
+            ✏️ Edit Curriculum
+        </a>
+        <a href="{{ url_for('add_curriculum_detail', curriculum_id=curriculum.id) }}" class="btn btn-success">
+            ➕ Add Subject Detail
+        </a>
+        <a href="{{ url_for('admin_curriculum') }}" class="btn" style="background: #7f8c8d;">
+            ← Back to Curriculums
+        </a>
+    </div>
+</div>
+
+<!-- Curriculum Overview -->
+<div class="card" style="margin-bottom: 2rem;">
+    <h2 style="color: #2c3e50; margin-top: 0;">📋 Curriculum Overview</h2>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div class="stat-card">
+            <div class="stat-number">{{ details_by_subject|length }}</div>
+            <div class="stat-label">Subjects</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">
+                {% set total_details = 0 %}
+                {% for subject_name, subject_info in details_by_subject.items() %}
+                    {% set total_details = total_details + subject_info.grades|length %}
+                {% endfor %}
+                {{ total_details }}
+            </div>
+            <div class="stat-label">Grade Details</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">
+                {% if curriculum.grade_levels %}
+                    {{ curriculum.grade_levels|length }}
+                {% else %}
+                    6
+                {% endif %}
+            </div>
+            <div class="stat-label">Grade Levels</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">
+                {% if curriculum.grade_levels %}
+                    Grades {{ curriculum.grade_levels | join(', ') }}
+                {% else %}
+                    All Grades
+                {% endif %}
+            </div>
+            <div class="stat-label">Coverage</div>
+        </div>
+    </div>
+</div>
+
+<!-- Curriculum Details by Subject -->
+<div class="card">
+    <h2 style="color: #2c3e50; margin-top: 0;">📚 Curriculum Details by Subject</h2>
+    
+    {% if details_by_subject %}
+        {% for subject_name, subject_info in details_by_subject.items() %}
+        <div class="subject-section" style="margin-bottom: 2rem; border: 1px solid #e9ecef; border-radius: 8px; padding: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h3 style="color: #2c3e50; margin: 0;">
+                    📖 {{ subject_name }}
+                    {% if subject_info.subject and subject_info.subject.is_core %}
+                    <span class="badge" style="background: #e74c3c; color: white; margin-left: 0.5rem;">CORE</span>
+                    {% endif %}
+                </h3>
+                <div>
+                    <span style="color: #7f8c8d; font-size: 0.9rem;">
+                        {{ subject_info.grades|length }} grade level(s)
+                    </span>
+                </div>
+            </div>
+            
+            {% if subject_info.subject %}
+            <p style="color: #7f8c8d; margin-bottom: 1rem; font-style: italic;">
+                {{ subject_info.subject.description }}
+            </p>
+            {% endif %}
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+                {% for grade_level, detail in subject_info.grades.items() %}
+                <div class="grade-detail-card" style="border: 1px solid #e9ecef; border-radius: 6px; padding: 1rem; background: #f8f9fa;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <h4 style="color: #2c3e50; margin: 0;">Grade {{ grade_level }}</h4>
+                        <div>
+                            {% if detail.is_mandatory %}
+                            <span class="badge" style="background: #e74c3c; color: white; font-size: 0.7rem;">MANDATORY</span>
+                            {% else %}
+                            <span class="badge" style="background: #7f8c8d; color: white; font-size: 0.7rem;">OPTIONAL</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <strong style="color: #34495e;">Learning Objectives:</strong>
+                        <ul style="margin: 0.5rem 0; padding-left: 1.5rem; font-size: 0.9rem; color: #555;">
+                            {% if detail.learning_objectives %}
+                                {% for objective in detail.learning_objectives[:3] %}
+                                <li>{{ objective }}</li>
+                                {% endfor %}
+                                {% if detail.learning_objectives|length > 3 %}
+                                <li style="color: #7f8c8d; font-style: italic;">
+                                    ... and {{ detail.learning_objectives|length - 3 }} more
+                                </li>
+                                {% endif %}
+                            {% else %}
+                                <li style="color: #7f8c8d; font-style: italic;">No objectives defined</li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                    
+                    <div style="margin-bottom: 1rem; font-size: 0.9rem;">
+                        <strong style="color: #34495e;">Hours/Week:</strong> 
+                        <span style="color: #555;">{{ detail.recommended_hours_per_week or 4 }}</span>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <a href="{{ url_for('edit_curriculum_detail', detail_id=detail.id) }}" class="btn-small" style="background: #3498db;">
+                            ✏️ Edit
+                        </a>
+                        <form method="POST" action="{{ url_for('delete_curriculum_detail', detail_id=detail.id) }}" 
+                              onsubmit="return confirm('Are you sure you want to delete this curriculum detail for {{ subject_name }} Grade {{ grade_level }}?');" 
+                              style="display: inline;">
+                            <button type="submit" class="btn-small btn-danger">
+                                🗑️ Delete
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="empty-state">
+        <p>No curriculum details found for this curriculum.</p>
+        <p style="color: #7f8c8d; font-size: 0.9rem;">
+            Add subject details to define learning objectives, assessment criteria, and grade-level requirements.
+        </p>
+        <a href="{{ url_for('add_curriculum_detail', curriculum_id=curriculum.id) }}" class="btn btn-success">
+            ➕ Add First Subject Detail
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: bold;
+    border-radius: 4px;
+}
+
+.stat-card {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid #e9ecef;
+}
+
+.stat-number {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #2c3e50;
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    color: #7f8c8d;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+.btn-small {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    border-radius: 4px;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    color: white;
+}
+
+.btn-danger {
+    background-color: #e74c3c;
+}
+
+.btn-danger:hover {
+    background-color: #c0392b;
+}
+
+.subject-section {
+    transition: box-shadow 0.2s ease;
+}
+
+.subject-section:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.grade-detail-card {
+    transition: transform 0.2s ease;
+}
+
+.grade-detail-card:hover {
+    transform: translateY(-2px);
+}
+</style>
+{% endblock %}

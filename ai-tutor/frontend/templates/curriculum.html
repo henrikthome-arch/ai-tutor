@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="breadcrumb">
-    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / 
+    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> /
     <span>📚 Curriculum</span>
 </div>
 
@@ -20,10 +20,62 @@
     </div>
 </div>
 
+<!-- Curriculum Statistics -->
+<div class="card" style="margin-bottom: 2rem;">
+    <h2 style="color: #2c3e50; margin-top: 0;">📊 Curriculum Overview</h2>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+        <div class="stat-card">
+            <div class="stat-number">{{ curriculum_stats.total_curriculums or 0 }}</div>
+            <div class="stat-label">Total Curriculums</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ curriculum_stats.template_curriculums or 0 }}</div>
+            <div class="stat-label">Template Curriculums</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ curriculum_stats.total_subjects or 0 }}</div>
+            <div class="stat-label">Total Subjects</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ curriculum_stats.total_details or 0 }}</div>
+            <div class="stat-label">Curriculum Details</div>
+        </div>
+    </div>
+    
+    {% if curriculum_stats.default_curriculum %}
+    <div style="background: #e8f5e8; padding: 1rem; border-radius: 8px; border-left: 4px solid #27ae60;">
+        <h3 style="margin: 0 0 0.5rem 0; color: #27ae60;">📚 Default Curriculum</h3>
+        <p style="margin: 0; color: #2c3e50;">
+            <strong>{{ curriculum_stats.default_curriculum.name }}</strong> - {{ curriculum_stats.default_curriculum.description }}
+        </p>
+        <div style="margin-top: 0.5rem;">
+            <a href="{{ url_for('curriculum_details', curriculum_id=curriculum_stats.default_curriculum.id) }}" class="btn btn-small" style="background: #27ae60;">
+                📖 View Details
+            </a>
+            <a href="{{ url_for('edit_curriculum_basic', curriculum_id=curriculum_stats.default_curriculum.id) }}" class="btn btn-small" style="background: #3498db;">
+                ✏️ Edit
+            </a>
+        </div>
+    </div>
+    {% else %}
+    <div style="background: #fff3cd; padding: 1rem; border-radius: 8px; border-left: 4px solid #ffc107;">
+        <h3 style="margin: 0 0 0.5rem 0; color: #856404;">⚠️ No Default Curriculum</h3>
+        <p style="margin: 0; color: #856404;">
+            No default curriculum is set. Students without school assignment will not have a curriculum.
+        </p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Curriculum List -->
 <div class="card">
+    <h2 style="color: #2c3e50; margin-top: 0;">📚 All Curriculums</h2>
+    
     <div style="margin-bottom: 1.5rem;">
         <p>
-            Manage curriculum content for different schools and grade levels. Each curriculum is associated with a specific school.
+            Manage comprehensive curriculum content including subjects, learning objectives, and grade-level details.
+            Click on a curriculum to view and manage its detailed content.
         </p>
     </div>
 
@@ -31,34 +83,61 @@
     <table class="data-table">
         <thead>
             <tr>
-                <th>ID</th>
-                <th>School</th>
-                <th>Grade</th>
-                <th>Subject</th>
-                <th>Student Type</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Grade Levels</th>
+                <th>Status</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for curriculum in curriculums %}
             <tr>
-                <td>{{ curriculum.id }}</td>
-                <td>{{ schools_dict[curriculum.school_id].name if curriculum.school_id in schools_dict else 'Unknown School' }}</td>
-                <td>Grade {{ curriculum.grade }}</td>
-                <td>{{ curriculum.subject }}</td>
-                <td>{{ curriculum.student_type }}</td>
+                <td>
+                    <strong>{{ curriculum.name }}</strong>
+                    {% if curriculum.is_default %}
+                    <span class="badge" style="background: #27ae60; color: white; margin-left: 0.5rem;">DEFAULT</span>
+                    {% endif %}
+                    {% if curriculum.is_template %}
+                    <span class="badge" style="background: #3498db; color: white; margin-left: 0.5rem;">TEMPLATE</span>
+                    {% endif %}
+                    <br>
+                    <small style="color: #7f8c8d;">{{ curriculum.description }}</small>
+                </td>
+                <td>{{ curriculum.curriculum_type or 'General' }}</td>
+                <td>
+                    {% if curriculum.grade_levels %}
+                        Grades {{ curriculum.grade_levels | join(', ') }}
+                    {% else %}
+                        All Grades
+                    {% endif %}
+                </td>
+                <td>
+                    {% if curriculum.is_default %}
+                        <span style="color: #27ae60;">🟢 Default</span>
+                    {% elif curriculum.is_template %}
+                        <span style="color: #3498db;">🔵 Template</span>
+                    {% else %}
+                        <span style="color: #7f8c8d;">⚪ Standard</span>
+                    {% endif %}
+                </td>
                 <td>
                     <div class="action-buttons">
-                        <a href="{{ url_for('edit_curriculum', curriculum_id=curriculum.id) }}" class="btn-small" title="Edit">
+                        <a href="{{ url_for('curriculum_details', curriculum_id=curriculum.id) }}" class="btn-small" title="View Details" style="background: #27ae60;">
+                            📖
+                        </a>
+                        <a href="{{ url_for('edit_curriculum_basic', curriculum_id=curriculum.id) }}" class="btn-small" title="Edit Basic Info" style="background: #3498db;">
                             ✏️
                         </a>
-                        <form method="POST" action="{{ url_for('delete_curriculum', curriculum_id=curriculum.id) }}" 
-                              onsubmit="return confirm('Are you sure you want to delete this curriculum?');" 
+                        {% if not curriculum.is_default %}
+                        <form method="POST" action="{{ url_for('delete_curriculum_route', curriculum_id=curriculum.id) }}"
+                              onsubmit="return confirm('Are you sure you want to delete this curriculum? This will also delete all associated curriculum details.');"
                               style="display: inline;">
                             <button type="submit" class="btn-small btn-danger" title="Delete">
                                 🗑️
                             </button>
                         </form>
+                        {% endif %}
                     </div>
                 </td>
             </tr>
@@ -68,6 +147,9 @@
     {% else %}
     <div class="empty-state">
         <p>No curriculum entries found.</p>
+        <p style="color: #7f8c8d; font-size: 0.9rem;">
+            Start by running the database seeding to create default curriculums, or add a new curriculum manually.
+        </p>
         <a href="{{ url_for('add_curriculum') }}" class="btn btn-success">
             ➕ Add First Curriculum
         </a>
@@ -75,30 +157,58 @@
     {% endif %}
 </div>
 
-<div class="card" style="margin-top: 2rem;">
-    <h2 style="color: #2c3e50; margin-top: 0;">Curriculum by School</h2>
-    
-    {% if schools %}
-    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
-        {% for school in schools %}
-        <div class="card" style="margin: 0; padding: 1rem;">
-            <h3 style="margin-top: 0; color: #2c3e50;">{{ school.name }}</h3>
-            <p style="color: #7f8c8d; font-size: 0.9rem;">{{ school.location }}</p>
-            <p style="color: #7f8c8d; font-size: 0.9rem;">{{ school.curriculum_type }}</p>
-            
-            <a href="{{ url_for('school_curriculum', school_id=school.school_id) }}" class="btn" style="background: #3498db; margin-top: 0.5rem;">
-                View Curriculum
-            </a>
-        </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="empty-state">
-        <p>No schools found. Add a school first.</p>
-        <a href="{{ url_for('add_school') }}" class="btn btn-success">
-            ➕ Add School
-        </a>
-    </div>
-    {% endif %}
-</div>
+<style>
+.stat-card {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid #e9ecef;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #2c3e50;
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    color: #7f8c8d;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: bold;
+    border-radius: 4px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+.btn-small {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    border-radius: 4px;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    color: white;
+}
+
+.btn-danger {
+    background-color: #e74c3c;
+}
+
+.btn-danger:hover {
+    background-color: #c0392b;
+}
+</style>
 {% endblock %}

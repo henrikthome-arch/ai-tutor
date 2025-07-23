@@ -49,9 +49,84 @@ def get_by_phone(phone: str) -> Optional[Dict[str, Any]]:
     student = Student.query.filter_by(phone_number=phone).first()
     return student.to_dict() if student else None
 
+def assign_default_curriculum_to_student(student_id: int) -> int:
+    """
+    Assign the default curriculum to a student by creating StudentSubject records.
+    
+    Args:
+        student_id: The student ID
+        
+    Returns:
+        Number of StudentSubject records created
+    """
+    try:
+        from app.models.curriculum import Curriculum, CurriculumDetail
+        from app.models.assessment import StudentSubject
+        
+        # Find the default curriculum
+        default_curriculum = Curriculum.query.filter_by(is_default=True).first()
+        if not default_curriculum:
+            print(f"⚠️ No default curriculum found for student {student_id}")
+            return 0
+        
+        print(f"📚 Assigning default curriculum '{default_curriculum.name}' to student {student_id}")
+        
+        # Get all curriculum details for the default curriculum
+        curriculum_details = CurriculumDetail.query.filter_by(
+            curriculum_id=default_curriculum.id
+        ).all()
+        
+        if not curriculum_details:
+            print(f"⚠️ No curriculum details found for default curriculum {default_curriculum.id}")
+            return 0
+        
+        # Create StudentSubject records for each curriculum detail
+        created_count = 0
+        for detail in curriculum_details:
+            # Check if StudentSubject already exists for this combination
+            existing = StudentSubject.query.filter_by(
+                student_id=student_id,
+                curriculum_detail_id=detail.id
+            ).first()
+            
+            if existing:
+                print(f"📝 StudentSubject already exists for student {student_id}, detail {detail.id}")
+                continue
+            
+            # Create new StudentSubject with sensible defaults
+            student_subject = StudentSubject(
+                student_id=student_id,
+                curriculum_detail_id=detail.id,
+                is_active_for_tutoring=True,
+                is_in_use=True,
+                progress_percentage=0.0,
+                completion_percentage=0.0,
+                mastery_level='beginner'
+            )
+            
+            db.session.add(student_subject)
+            created_count += 1
+            
+            subject_name = detail.subject.name if detail.subject else 'Unknown'
+            print(f"✅ Created StudentSubject: {subject_name} Grade {detail.grade_level}")
+        
+        # Commit all StudentSubject records
+        if created_count > 0:
+            db.session.commit()
+            print(f"📚 Successfully assigned {created_count} subjects from default curriculum to student {student_id}")
+        else:
+            print(f"ℹ️ No new subjects assigned to student {student_id} (all already exist)")
+        
+        return created_count
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error assigning default curriculum to student {student_id}: {e}")
+        raise e
+
 def create(student_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Create a new student
+    Create a new student and automatically assign default curriculum
     
     Args:
         student_data: The student data
@@ -75,8 +150,20 @@ def create(student_data: Dict[str, Any]) -> Dict[str, Any]:
         profile = Profile(student_id=student.id, **profile_data)
         db.session.add(profile)
         
-        # Commit both
+        # Commit student and profile first
         db.session.commit()
+        
+        # Automatically assign default curriculum if student has no school assignment
+        # Students without schools get the default curriculum
+        if not student_data.get('school_id'):
+            try:
+                subjects_assigned = assign_default_curriculum_to_student(student.id)
+                print(f"📚 Auto-assigned {subjects_assigned} subjects from default curriculum to new student {student.id}")
+            except Exception as curriculum_error:
+                print(f"⚠️ Error auto-assigning default curriculum to student {student.id}: {curriculum_error}")
+                # Don't fail student creation if curriculum assignment fails
+        else:
+            print(f"🏫 Student {student.id} assigned to school {student_data.get('school_id')}, skipping default curriculum assignment")
         
         # Return combined data
         result = student.to_dict()

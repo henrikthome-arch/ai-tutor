@@ -263,3 +263,82 @@ The admin dashboard will be the central control panel for the system.
 - **Full Data Export**: Export complete curriculum structure to CSV/Excel
 - **Selective Export**: Export filtered subsets (e.g., specific school's curriculum)
 - **Backup Functionality**: Regular automated exports for data backup purposes
+
+## 6. Default Curriculum Requirements
+
+### 6.1. Cambridge Primary 2025 Default Curriculum
+
+The system must provide a comprehensive default curriculum that is automatically assigned to all new students.
+
+#### 6.1.1. Default Curriculum Data Source
+- **Data File**: Cambridge Primary 2025 curriculum stored as tab-separated values (TSV) at [`ai-tutor/data/curriculum/cambridge_primary_2025.txt`](ai-tutor/data/curriculum/cambridge_primary_2025.txt)
+- **Format Requirements**: TSV format with headers: Grade, Subject, Mandatory, Details
+- **Content Coverage**: Complete curriculum for Grades 1-6 including core subjects (English, Mathematics, Science) and optional subjects (Global Perspectives, Computing/ICT, Art & Design, Music, Physical Education)
+- **Data Integrity**: Each curriculum entry must include grade level, subject name, mandatory status, and detailed learning objectives
+
+#### 6.1.2. Automatic Default Assignment
+- **Student Creation Trigger**: Upon creation of any new student, the system must automatically generate `student_subjects` records for all grade-appropriate subjects from the default curriculum
+- **Subject Status**: All default subjects initially marked as `is_in_use=true` and `is_active_for_tutoring=false`
+- **Grade-Level Filtering**: Only subjects appropriate for the student's grade level should be assigned
+- **Comprehensive Coverage**: Both mandatory and optional subjects must be assigned to provide complete curriculum coverage
+
+#### 6.1.3. Curriculum Import Process
+- **Startup Import**: System must automatically import Cambridge curriculum data on application startup if default curriculum doesn't exist
+- **Idempotent Operation**: Import process must be safe to run multiple times without creating duplicates
+- **Error Handling**: Import failures must be logged with detailed error messages and system must continue to operate
+- **Data Validation**: TSV data must be validated for format compliance and data integrity before import
+
+### 6.2. Curriculum Management Interface Requirements
+
+#### 6.2.1. Curriculum Overview Display
+- **Curriculum List**: Admin interface must display all available curricula with name, description, and default status
+- **Default Curriculum Indicator**: Clear visual indication of which curriculum is marked as system default
+- **Curriculum Statistics**: Display count of subjects and grade levels covered by each curriculum
+- **Edit Capabilities**: Allow editing of curriculum name, description, and default status
+
+#### 6.2.2. Curriculum Detail Management
+- **Subject List View**: Display all subjects for a curriculum organized by grade level
+- **Detail Management**: Add, edit, and delete curriculum detail entries (subject-grade combinations)
+- **Mandatory Status**: Toggle mandatory/optional status for curriculum subjects
+- **Learning Objectives**: Edit detailed learning objectives and goals for each subject-grade combination
+- **Bulk Operations**: Support for bulk editing or importing curriculum details
+
+#### 6.2.3. Default Curriculum Management
+- **Single Default**: System must enforce exactly one curriculum marked as default
+- **Default Switch**: When changing default curriculum, automatically reassign all students without school-specific curricula
+- **Impact Warning**: Display warning when changing default curriculum about potential student impact
+- **Rollback Capability**: Ability to revert default curriculum changes if needed
+
+### 6.3. Student Curriculum Assignment Requirements
+
+#### 6.3.1. Automatic Assignment Logic
+- **New Student**: Automatically assign complete default curriculum upon student creation
+- **Grade-Appropriate**: Only assign subjects appropriate for student's grade level
+- **School Override**: When student is assigned to school with custom curriculum, mark default subjects as `is_in_use=false` and add school subjects as `is_in_use=true`
+- **AI Tutoring Control**: Teachers must be able to toggle `is_active_for_tutoring` for individual subjects
+
+#### 6.3.2. Curriculum Transition Management
+- **School Assignment**: When student joins school, replace default curriculum with school-specific curriculum
+- **School Departure**: When student leaves school, revert to default curriculum
+- **Grade Progression**: Automatically update student subjects when grade level changes
+- **Progress Preservation**: Maintain assessment data and progress when transitioning between curricula
+
+### 6.4. File Management Requirements
+
+#### 6.4.1. Data File Standards
+- **File Location**: All curriculum data files stored in [`ai-tutor/data/curriculum/`](ai-tutor/data/curriculum/) directory
+- **Naming Convention**: Descriptive file names indicating curriculum type and version (e.g., `cambridge_primary_2025.txt`)
+- **Format Consistency**: All curriculum files must follow same TSV format with standard headers
+- **Version Control**: Curriculum files tracked in Git for change management and rollback capability
+
+#### 6.4.2. Import Validation Requirements
+- **Header Validation**: Verify required columns (Grade, Subject, Mandatory, Details) are present
+- **Data Type Validation**: Ensure grade is numeric, mandatory is boolean, details are non-empty
+- **Duplicate Detection**: Prevent duplicate curriculum-subject-grade combinations
+- **Error Reporting**: Provide detailed error messages for validation failures with line numbers
+
+#### 6.4.3. Backup and Export Requirements
+- **Curriculum Export**: Export curriculum data to TSV format for backup
+- **Complete Export**: Export all curricula or individual curriculum selection
+- **Import History**: Track all curriculum imports with timestamps and success/failure status
+- **Data Integrity**: Exported data must be importable without modification

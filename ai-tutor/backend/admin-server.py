@@ -22,7 +22,7 @@ from app import db
 from app.models.student import Student
 from app.models.profile import Profile
 from app.models.school import School
-from app.models.curriculum import Curriculum
+from app.models.curriculum import Curriculum, Subject, CurriculumDetail
 from app.models.session import Session
 from app.models.assessment import Assessment
 from app.models.token import Token
@@ -267,6 +267,190 @@ class DatabasePhoneManager:
 db_phone_manager = DatabasePhoneManager()
 
 print("🗄️ Database-first phone mapping system initialized")
+
+# Cambridge Curriculum Data Import Functions
+def load_cambridge_curriculum_data():
+    """Load Cambridge Primary 2025 curriculum data from TSV file"""
+    try:
+        # Path to the Cambridge curriculum data file
+        data_file_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'curriculum', 'cambridge_primary_2025.txt')
+        
+        if not os.path.exists(data_file_path):
+            print(f"⚠️ Cambridge curriculum data file not found: {data_file_path}")
+            return
+
+        print(f"📚 Loading Cambridge Primary 2025 curriculum data from {data_file_path}")
+        
+        # Check if default curriculum already exists
+        existing_curriculum = Curriculum.query.filter_by(name='Cambridge Primary 2025', is_default=True).first()
+        if existing_curriculum:
+            print(f"ℹ️ Cambridge Primary 2025 curriculum already exists, skipping import")
+            return existing_curriculum
+
+        # Create the default Cambridge curriculum
+        cambridge_curriculum = Curriculum(
+            name='Cambridge Primary 2025',
+            description='Cambridge Primary Programme for Grades 1-6 with comprehensive subject coverage',
+            curriculum_type='Cambridge',
+            grade_levels=[1, 2, 3, 4, 5, 6],
+            is_template=True,
+            is_default=True,
+            created_by='system'
+        )
+        
+        db.session.add(cambridge_curriculum)
+        db.session.flush()  # Get the curriculum ID
+        
+        # Read and parse the TSV file
+        with open(data_file_path, 'r', encoding='utf-8') as file:
+            lines = file.readlines()
+        
+        # Skip header line and process data
+        subject_details = {}
+        for line_num, line in enumerate(lines[1:], 2):  # Start from line 2 (skip header)
+            try:
+                parts = line.strip().split('\t')
+                if len(parts) < 4:
+                    print(f"⚠️ Skipping malformed line {line_num}: {line.strip()}")
+                    continue
+                
+                grade, subject, mandatory, details = parts[0], parts[1], parts[2], parts[3]
+                
+                # Clean the details field (remove quotes)
+                details = details.strip('"')
+                
+                grade_level = int(grade)
+                is_mandatory = mandatory.lower() == 'yes'
+                
+                # Group by subject for efficient database operations
+                if subject not in subject_details:
+                    subject_details[subject] = []
+                
+                subject_details[subject].append({
+                    'grade_level': grade_level,
+                    'is_mandatory': is_mandatory,
+                    'details': details
+                })
+                
+            except (ValueError, IndexError) as e:
+                print(f"⚠️ Error parsing line {line_num}: {e}")
+                continue
+        
+        # Create subjects and curriculum details
+        subjects_created = 0
+        details_created = 0
+        
+        for subject_name, grade_data in subject_details.items():
+            # Create or get subject
+            subject = Subject.query.filter_by(name=subject_name).first()
+            if not subject:
+                # Determine subject category and if it's core
+                category = determine_subject_category(subject_name)
+                is_core = determine_if_core_subject(subject_name)
+                
+                subject = Subject(
+                    name=subject_name,
+                    description=f'{subject_name} curriculum for Cambridge Primary Programme',
+                    category=category,
+                    is_core=is_core
+                )
+                db.session.add(subject)
+                db.session.flush()  # Get the subject ID
+                subjects_created += 1
+            
+            # Create curriculum details for each grade
+            for grade_info in grade_data:
+                # Parse learning objectives from details
+                learning_objectives = parse_learning_objectives(grade_info['details'])
+                
+                curriculum_detail = CurriculumDetail(
+                    curriculum_id=cambridge_curriculum.id,
+                    subject_id=subject.id,
+                    grade_level=grade_info['grade_level'],
+                    learning_objectives=learning_objectives,
+                    assessment_criteria=['Understanding', 'Application', 'Analysis'],
+                    recommended_hours_per_week=4 if grade_info['is_mandatory'] else 2,
+                    prerequisites=[] if grade_info['grade_level'] == 1 else [f"Grade {grade_info['grade_level']-1} {subject_name}"],
+                    resources=['Cambridge Primary Textbook', 'Online Resources', 'Interactive Activities'],
+                    is_mandatory=grade_info['is_mandatory']
+                )
+                
+                db.session.add(curriculum_detail)
+                details_created += 1
+        
+        # Commit all changes
+        db.session.commit()
+        
+        print(f"✅ Cambridge Primary 2025 curriculum imported successfully!")
+        print(f"   📚 Curriculum: {cambridge_curriculum.name}")
+        print(f"   📖 Subjects created: {subjects_created}")
+        print(f"   📝 Curriculum details created: {details_created}")
+        
+        return cambridge_curriculum
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error loading Cambridge curriculum data: {e}")
+        import traceback
+        print(f"🔍 Stack trace: {traceback.format_exc()}")
+        return None
+
+def determine_subject_category(subject_name):
+    """Determine the category for a subject based on its name"""
+    subject_lower = subject_name.lower()
+    
+    if any(keyword in subject_lower for keyword in ['mathematics', 'math', 'computing', 'science']):
+        return 'STEM'
+    elif any(keyword in subject_lower for keyword in ['english', 'literacy', 'language']):
+        return 'Language Arts'
+    elif any(keyword in subject_lower for keyword in ['art', 'music', 'design']):
+        return 'Arts'
+    elif any(keyword in subject_lower for keyword in ['physical', 'pe', 'sport']):
+        return 'Health & Wellness'
+    elif any(keyword in subject_lower for keyword in ['global', 'perspectives', 'social']):
+        return 'Social Sciences'
+    else:
+        return 'General'
+
+def determine_if_core_subject(subject_name):
+    """Determine if a subject is core based on its name"""
+    core_subjects = ['english', 'mathematics', 'science']
+    subject_lower = subject_name.lower()
+    
+    return any(core in subject_lower for core in core_subjects)
+
+def parse_learning_objectives(details_text):
+    """Parse learning objectives from the detailed description"""
+    # Split by sentence endings or semicolons to create individual objectives
+    import re
+    
+    # Split on periods followed by space and capital letter, or semicolons
+    objectives = re.split(r'[.;]\s+(?=[A-Z])', details_text)
+    
+    # Clean up objectives and filter out very short ones
+    cleaned_objectives = []
+    for obj in objectives:
+        obj = obj.strip().rstrip('.')
+        if len(obj) > 20:  # Only include substantial objectives
+            cleaned_objectives.append(obj)
+    
+    # If we couldn't parse well, return the whole text as one objective
+    if not cleaned_objectives:
+        cleaned_objectives = [details_text]
+    
+    return cleaned_objectives[:10]  # Limit to 10 objectives max
+
+def ensure_cambridge_curriculum_loaded():
+    """Ensure Cambridge curriculum is loaded on startup"""
+    try:
+        with app.app_context():
+            cambridge_curriculum = load_cambridge_curriculum_data()
+            if cambridge_curriculum:
+                print(f"📚 Cambridge Primary 2025 curriculum available (ID: {cambridge_curriculum.id})")
+            return cambridge_curriculum
+    except Exception as e:
+        print(f"⚠️ Error ensuring Cambridge curriculum loaded: {e}")
+        return None
 
 # Token authentication decorator
 def token_required(required_scopes=None):
@@ -560,6 +744,18 @@ try:
                   level="INFO")
         
         print("🗄️ Database tables created/verified")
+        
+        # Load Cambridge Primary 2025 curriculum on startup
+        print("📚 Loading Cambridge Primary 2025 curriculum...")
+        try:
+            cambridge_curriculum = ensure_cambridge_curriculum_loaded()
+            if cambridge_curriculum:
+                print(f"✅ Cambridge Primary 2025 curriculum loaded successfully")
+            else:
+                print(f"ℹ️ Cambridge Primary 2025 curriculum already exists or failed to load")
+        except Exception as curriculum_error:
+            print(f"⚠️ Error loading Cambridge curriculum: {curriculum_error}")
+            log_error('CURRICULUM', 'Error loading Cambridge curriculum on startup', curriculum_error)
 except Exception as e:
     print(f"⚠️ Error initializing database with app: {e}")
     import traceback
@@ -925,6 +1121,11 @@ def get_system_stats():
         total_students = 0
         sessions_today = 0
         total_sessions = 0
+        total_curriculums = 0
+        curriculum_details_count = 0
+        default_curriculum = None
+        default_curriculum_subjects = 0
+        students_with_default_curriculum = 0
         
         # Count students
         try:
@@ -989,6 +1190,32 @@ def get_system_stats():
         except Exception as e:
             log_error('DATABASE', 'Error counting total sessions', e)
         
+        # Get curriculum statistics
+        try:
+            total_curriculums = Curriculum.query.count()
+            curriculum_details_count = CurriculumDetail.query.count()
+            
+            # Get default curriculum
+            default_curriculum_obj = Curriculum.query.filter_by(is_default=True).first()
+            if default_curriculum_obj:
+                default_curriculum = default_curriculum_obj.to_dict()
+                
+                # Count subjects in default curriculum
+                default_curriculum_subjects = CurriculumDetail.query.filter_by(
+                    curriculum_id=default_curriculum_obj.id
+                ).count()
+                
+                # Count students with default curriculum assignments
+                from app.models.assessment import StudentSubject
+                students_with_default_curriculum = StudentSubject.query.join(
+                    CurriculumDetail
+                ).filter(
+                    CurriculumDetail.curriculum_id == default_curriculum_obj.id
+                ).distinct(StudentSubject.student_id).count()
+                
+        except Exception as e:
+            log_error('DATABASE', 'Error getting curriculum statistics', e)
+        
         # Get server status
         server_status = "Online"  # Assume online if we can query the database
         
@@ -1006,7 +1233,12 @@ def get_system_stats():
             'server_status': server_status,
             'phone_mappings': phone_mappings_count,
             'data_size': 'PostgreSQL DB',  # File system no longer used
-            'last_backup': None  # Backup functionality not implemented for PostgreSQL yet
+            'last_backup': None,  # Backup functionality not implemented for PostgreSQL yet
+            'total_curriculums': total_curriculums,
+            'curriculum_details_count': curriculum_details_count,
+            'default_curriculum': default_curriculum,
+            'default_curriculum_subjects': default_curriculum_subjects,
+            'students_with_default_curriculum': students_with_default_curriculum
         }
     except Exception as e:
         print(f"Error getting system stats from database: {e}")
@@ -1016,7 +1248,12 @@ def get_system_stats():
             'sessions_today': 0,
             'total_sessions': 0,
             'server_status': "Error",
-            'phone_mappings': 0  # Default to 0 on error
+            'phone_mappings': 0,  # Default to 0 on error
+            'total_curriculums': 0,
+            'curriculum_details_count': 0,
+            'default_curriculum': None,
+            'default_curriculum_subjects': 0,
+            'students_with_default_curriculum': 0
         }
 
 def get_all_schools():
@@ -1694,18 +1931,295 @@ def delete_school_route(school_id):
 # Curriculum Management Routes
 @app.route('/admin/curriculum')
 def admin_curriculum():
-    """View all curriculums"""
+    """View all curriculums with comprehensive management interface"""
     if not check_auth():
         return redirect(url_for('admin_login'))
     
-    curriculums = get_all_curriculums()
-    schools = get_all_schools()
-    schools_dict = {s['school_id']: s for s in schools}
+    try:
+        # Get all curriculums including Cambridge default curriculum
+        curriculums = get_all_curriculums()
+        
+        # Get curriculum statistics
+        curriculum_stats = {
+            'total_curriculums': len(curriculums),
+            'default_curriculum': None,
+            'template_curriculums': 0,
+            'total_subjects': 0,
+            'total_details': 0
+        }
+        
+        # Find default curriculum and calculate stats
+        for curriculum in curriculums:
+            if curriculum.get('is_default'):
+                curriculum_stats['default_curriculum'] = curriculum
+            if curriculum.get('is_template'):
+                curriculum_stats['template_curriculums'] += 1
+        
+        # Get subject and detail counts
+        try:
+            curriculum_stats['total_subjects'] = Subject.query.count()
+            curriculum_stats['total_details'] = CurriculumDetail.query.count()
+        except Exception as e:
+            log_error('ADMIN', 'Error getting curriculum statistics', e)
+        
+        return render_template('curriculum.html',
+                              curriculums=curriculums,
+                              curriculum_stats=curriculum_stats)
+                              
+    except Exception as e:
+        log_error('ADMIN', 'Error loading curriculum management page', e)
+        flash(f'Error loading curriculum page: {str(e)}', 'error')
+        return render_template('curriculum.html', curriculums=[], curriculum_stats={})
+
+@app.route('/admin/curriculum/<curriculum_id>/details')
+def curriculum_details(curriculum_id):
+    """View and manage curriculum details for a specific curriculum"""
+    if not check_auth():
+        return redirect(url_for('admin_login'))
     
-    return render_template('curriculum.html',
-                          curriculums=curriculums,
-                          schools=schools,
-                          schools_dict=schools_dict)
+    try:
+        # Get curriculum
+        curriculum = get_curriculum_by_id(curriculum_id)
+        if not curriculum:
+            flash('Curriculum not found', 'error')
+            return redirect(url_for('admin_curriculum'))
+        
+        # Get curriculum details grouped by subject and grade
+        try:
+            curriculum_details = CurriculumDetail.query.filter_by(curriculum_id=curriculum_id).all()
+            subjects = Subject.query.all()
+            
+            # Group details by subject
+            details_by_subject = {}
+            for detail in curriculum_details:
+                subject_name = detail.subject.name if detail.subject else 'Unknown Subject'
+                if subject_name not in details_by_subject:
+                    details_by_subject[subject_name] = {
+                        'subject_id': detail.subject_id,
+                        'subject': detail.subject,
+                        'grades': {}
+                    }
+                details_by_subject[subject_name]['grades'][detail.grade_level] = detail
+            
+            return render_template('curriculum_details.html',
+                                 curriculum=curriculum,
+                                 details_by_subject=details_by_subject,
+                                 subjects=subjects,
+                                 available_grades=[1, 2, 3, 4, 5, 6])
+                                 
+        except Exception as e:
+            log_error('ADMIN', 'Error getting curriculum details', e, curriculum_id=curriculum_id)
+            flash(f'Error loading curriculum details: {str(e)}', 'error')
+            return redirect(url_for('admin_curriculum'))
+            
+    except Exception as e:
+        log_error('ADMIN', 'Error in curriculum details route', e, curriculum_id=curriculum_id)
+        flash(f'Error loading curriculum details: {str(e)}', 'error')
+        return redirect(url_for('admin_curriculum'))
+
+@app.route('/admin/curriculum/<curriculum_id>/edit', methods=['GET', 'POST'])
+def edit_curriculum_basic(curriculum_id):
+    """Edit basic curriculum information (name, default status)"""
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    try:
+        curriculum = Curriculum.query.get(curriculum_id)
+        if not curriculum:
+            flash('Curriculum not found', 'error')
+            return redirect(url_for('admin_curriculum'))
+        
+        if request.method == 'POST':
+            try:
+                # Update basic curriculum info
+                curriculum.name = request.form.get('name', curriculum.name)
+                curriculum.description = request.form.get('description', curriculum.description)
+                
+                # Handle default status (only one curriculum can be default)
+                is_default = request.form.get('is_default') == 'on'
+                if is_default and not curriculum.is_default:
+                    # Remove default from other curriculums
+                    Curriculum.query.filter_by(is_default=True).update({'is_default': False})
+                    curriculum.is_default = True
+                elif not is_default:
+                    curriculum.is_default = False
+                
+                db.session.commit()
+                flash(f'Curriculum "{curriculum.name}" updated successfully!', 'success')
+                return redirect(url_for('curriculum_details', curriculum_id=curriculum_id))
+                
+            except Exception as e:
+                db.session.rollback()
+                log_error('ADMIN', 'Error updating curriculum', e, curriculum_id=curriculum_id)
+                flash(f'Error updating curriculum: {str(e)}', 'error')
+        
+        return render_template('edit_curriculum_basic.html', curriculum=curriculum)
+        
+    except Exception as e:
+        log_error('ADMIN', 'Error in edit curriculum route', e, curriculum_id=curriculum_id)
+        flash(f'Error loading curriculum: {str(e)}', 'error')
+        return redirect(url_for('admin_curriculum'))
+
+@app.route('/admin/curriculum/<curriculum_id>/details/add', methods=['GET', 'POST'])
+def add_curriculum_detail(curriculum_id):
+    """Add a new curriculum detail entry"""
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    try:
+        curriculum = Curriculum.query.get(curriculum_id)
+        if not curriculum:
+            flash('Curriculum not found', 'error')
+            return redirect(url_for('admin_curriculum'))
+        
+        subjects = Subject.query.all()
+        
+        if request.method == 'POST':
+            try:
+                subject_id = request.form.get('subject_id')
+                grade_level = int(request.form.get('grade_level'))
+                
+                # Check if detail already exists
+                existing_detail = CurriculumDetail.query.filter_by(
+                    curriculum_id=curriculum_id,
+                    subject_id=subject_id,
+                    grade_level=grade_level
+                ).first()
+                
+                if existing_detail:
+                    flash('Curriculum detail for this subject and grade already exists', 'error')
+                    return render_template('add_curriculum_detail.html',
+                                         curriculum=curriculum, subjects=subjects)
+                
+                # Parse learning objectives
+                objectives_text = request.form.get('learning_objectives', '')
+                learning_objectives = [obj.strip() for obj in objectives_text.split('\n') if obj.strip()]
+                
+                # Parse assessment criteria
+                criteria_text = request.form.get('assessment_criteria', '')
+                assessment_criteria = [crit.strip() for crit in criteria_text.split('\n') if crit.strip()]
+                
+                # Parse prerequisites
+                prereq_text = request.form.get('prerequisites', '')
+                prerequisites = [prereq.strip() for prereq in prereq_text.split('\n') if prereq.strip()]
+                
+                # Parse resources
+                resources_text = request.form.get('resources', '')
+                resources = [res.strip() for res in resources_text.split('\n') if res.strip()]
+                
+                # Create new curriculum detail
+                new_detail = CurriculumDetail(
+                    curriculum_id=curriculum_id,
+                    subject_id=subject_id,
+                    grade_level=grade_level,
+                    learning_objectives=learning_objectives,
+                    assessment_criteria=assessment_criteria,
+                    recommended_hours_per_week=int(request.form.get('recommended_hours_per_week', 4)),
+                    prerequisites=prerequisites,
+                    resources=resources,
+                    is_mandatory=request.form.get('is_mandatory') == 'on'
+                )
+                
+                db.session.add(new_detail)
+                db.session.commit()
+                
+                flash('Curriculum detail added successfully!', 'success')
+                return redirect(url_for('curriculum_details', curriculum_id=curriculum_id))
+                
+            except Exception as e:
+                db.session.rollback()
+                log_error('ADMIN', 'Error adding curriculum detail', e, curriculum_id=curriculum_id)
+                flash(f'Error adding curriculum detail: {str(e)}', 'error')
+        
+        return render_template('add_curriculum_detail.html',
+                             curriculum=curriculum, subjects=subjects)
+        
+    except Exception as e:
+        log_error('ADMIN', 'Error in add curriculum detail route', e, curriculum_id=curriculum_id)
+        flash(f'Error loading form: {str(e)}', 'error')
+        return redirect(url_for('curriculum_details', curriculum_id=curriculum_id))
+
+@app.route('/admin/curriculum/details/<detail_id>/edit', methods=['GET', 'POST'])
+def edit_curriculum_detail(detail_id):
+    """Edit a curriculum detail entry"""
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    try:
+        detail = CurriculumDetail.query.get(detail_id)
+        if not detail:
+            flash('Curriculum detail not found', 'error')
+            return redirect(url_for('admin_curriculum'))
+        
+        subjects = Subject.query.all()
+        
+        if request.method == 'POST':
+            try:
+                # Parse learning objectives
+                objectives_text = request.form.get('learning_objectives', '')
+                detail.learning_objectives = [obj.strip() for obj in objectives_text.split('\n') if obj.strip()]
+                
+                # Parse assessment criteria
+                criteria_text = request.form.get('assessment_criteria', '')
+                detail.assessment_criteria = [crit.strip() for crit in criteria_text.split('\n') if crit.strip()]
+                
+                # Parse prerequisites
+                prereq_text = request.form.get('prerequisites', '')
+                detail.prerequisites = [prereq.strip() for prereq in prereq_text.split('\n') if prereq.strip()]
+                
+                # Parse resources
+                resources_text = request.form.get('resources', '')
+                detail.resources = [res.strip() for res in resources_text.split('\n') if res.strip()]
+                
+                # Update other fields
+                detail.recommended_hours_per_week = int(request.form.get('recommended_hours_per_week', 4))
+                detail.is_mandatory = request.form.get('is_mandatory') == 'on'
+                
+                db.session.commit()
+                
+                flash('Curriculum detail updated successfully!', 'success')
+                return redirect(url_for('curriculum_details', curriculum_id=detail.curriculum_id))
+                
+            except Exception as e:
+                db.session.rollback()
+                log_error('ADMIN', 'Error updating curriculum detail', e, detail_id=detail_id)
+                flash(f'Error updating curriculum detail: {str(e)}', 'error')
+        
+        return render_template('edit_curriculum_detail.html',
+                             detail=detail, subjects=subjects)
+        
+    except Exception as e:
+        log_error('ADMIN', 'Error in edit curriculum detail route', e, detail_id=detail_id)
+        flash(f'Error loading curriculum detail: {str(e)}', 'error')
+        return redirect(url_for('admin_curriculum'))
+
+@app.route('/admin/curriculum/details/<detail_id>/delete', methods=['POST'])
+def delete_curriculum_detail(detail_id):
+    """Delete a curriculum detail entry"""
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    try:
+        detail = CurriculumDetail.query.get(detail_id)
+        if not detail:
+            flash('Curriculum detail not found', 'error')
+            return redirect(url_for('admin_curriculum'))
+        
+        curriculum_id = detail.curriculum_id
+        subject_name = detail.subject.name if detail.subject else 'Unknown'
+        grade_level = detail.grade_level
+        
+        db.session.delete(detail)
+        db.session.commit()
+        
+        flash(f'Curriculum detail for {subject_name} Grade {grade_level} deleted successfully!', 'success')
+        return redirect(url_for('curriculum_details', curriculum_id=curriculum_id))
+        
+    except Exception as e:
+        db.session.rollback()
+        log_error('ADMIN', 'Error deleting curriculum detail', e, detail_id=detail_id)
+        flash(f'Error deleting curriculum detail: {str(e)}', 'error')
+        return redirect(url_for('admin_curriculum'))
 
 @app.route('/admin/curriculum/add', methods=['GET', 'POST'])
 def add_curriculum():

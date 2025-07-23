@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ curriculum.name }} - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / 
+    <a href="{{ url_for('admin_curriculum') }}">📚 Curriculum</a> / 
+    <a href="{{ url_for('curriculum_details', curriculum_id=curriculum.id) }}">{{ curriculum.name }}</a> / 
+    <span>Edit</span>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1 style="color: #2c3e50;">Edit Curriculum: {{ curriculum.name }}</h1>
+    <a href="{{ url_for('curriculum_details', curriculum_id=curriculum.id) }}" class="btn" style="background: #7f8c8d;">
+        ← Back to Details
+    </a>
+</div>
+
+<div class="card">
+    <h2 style="color: #2c3e50; margin-top: 0;">📝 Basic Curriculum Information</h2>
+    
+    <form method="POST" style="max-width: 600px;">
+        <div class="form-group">
+            <label for="name">Curriculum Name *</label>
+            <input type="text" id="name" name="name" value="{{ curriculum.name }}" required 
+                   style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem;">
+            <small style="color: #7f8c8d;">The display name for this curriculum</small>
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="4" 
+                      style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem; resize: vertical;">{{ curriculum.description or '' }}</textarea>
+            <small style="color: #7f8c8d;">A brief description of this curriculum</small>
+        </div>
+        
+        <div class="form-group">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="checkbox" id="is_default" name="is_default" 
+                       {% if curriculum.is_default %}checked{% endif %}
+                       style="width: auto;">
+                <label for="is_default" style="margin: 0; font-weight: bold; color: #e74c3c;">
+                    Set as Default Curriculum
+                </label>
+            </div>
+            <small style="color: #7f8c8d; margin-top: 0.25rem; display: block;">
+                The default curriculum is automatically assigned to new students who are not assigned to a specific school.
+                {% if curriculum.is_default %}
+                <br><strong>This curriculum is currently the default.</strong>
+                {% else %}
+                <br><strong>Note:</strong> Setting this as default will remove the default status from any other curriculum.
+                {% endif %}
+            </small>
+        </div>
+        
+        <div class="form-group">
+            <h3 style="color: #2c3e50; margin-bottom: 1rem;">📊 Current Curriculum Information</h3>
+            
+            <div style="background: #f8f9fa; padding: 1rem; border-radius: 6px; border: 1px solid #e9ecef;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div>
+                        <strong>Type:</strong> {{ curriculum.curriculum_type or 'General' }}
+                    </div>
+                    <div>
+                        <strong>Grade Levels:</strong> 
+                        {% if curriculum.grade_levels %}
+                            Grades {{ curriculum.grade_levels | join(', ') }}
+                        {% else %}
+                            All Grades
+                        {% endif %}
+                    </div>
+                    <div>
+                        <strong>Status:</strong>
+                        {% if curriculum.is_default %}
+                            <span style="color: #27ae60; font-weight: bold;">🟢 Default</span>
+                        {% elif curriculum.is_template %}
+                            <span style="color: #3498db; font-weight: bold;">🔵 Template</span>
+                        {% else %}
+                            <span style="color: #7f8c8d; font-weight: bold;">⚪ Standard</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <strong>Created By:</strong> {{ curriculum.created_by or 'Unknown' }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        {% if curriculum.is_default %}
+        <div style="background: #fff3cd; padding: 1rem; border-radius: 6px; border-left: 4px solid #ffc107; margin-bottom: 1.5rem;">
+            <h4 style="margin: 0 0 0.5rem 0; color: #856404;">⚠️ Default Curriculum Warning</h4>
+            <p style="margin: 0; color: #856404; font-size: 0.9rem;">
+                This is currently the default curriculum. If you uncheck the default option, 
+                no curriculum will be automatically assigned to new students until another 
+                curriculum is set as default.
+            </p>
+        </div>
+        {% endif %}
+        
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+            <button type="submit" class="btn btn-success">
+                💾 Save Changes
+            </button>
+            <a href="{{ url_for('curriculum_details', curriculum_id=curriculum.id) }}" class="btn" style="background: #7f8c8d;">
+                Cancel
+            </a>
+        </div>
+    </form>
+</div>
+
+<style>
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    font-weight: bold;
+    color: #2c3e50;
+    margin-bottom: 0.5rem;
+}
+
+.form-group input[type="text"],
+.form-group textarea {
+    transition: border-color 0.2s ease;
+}
+
+.form-group input[type="text"]:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.form-group small {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.85rem;
+}
+</style>
+{% endblock %}

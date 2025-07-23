@@ -30,6 +30,27 @@
             </div>
             
             <div style="display: flex; justify-content: space-between; padding: 12px; background: #f8f9fa; border-radius: 4px;">
+                <span style="font-weight: 600;">Total Curriculums:</span>
+                <span style="color: #8e44ad; font-weight: bold;">{{ system_stats.total_curriculums or 0 }}</span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; padding: 12px; background: #f8f9fa; border-radius: 4px;">
+                <span style="font-weight: 600;">Curriculum Subjects:</span>
+                <span style="color: #2c3e50; font-weight: bold;">{{ system_stats.curriculum_details_count or 0 }}</span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; padding: 12px; background: #f8f9fa; border-radius: 4px;">
+                <span style="font-weight: 600;">Default Curriculum:</span>
+                <span style="color: {% if system_stats.default_curriculum %}#27ae60{% else %}#e74c3c{% endif %}; font-weight: bold;">
+                    {% if system_stats.default_curriculum %}
+                        ✅ {{ system_stats.default_curriculum.name }}
+                    {% else %}
+                        ❌ Not Set
+                    {% endif %}
+                </span>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; padding: 12px; background: #f8f9fa; border-radius: 4px;">
                 <span style="font-weight: 600;">Data Directory Size:</span>
                 <span style="color: #9b59b6; font-weight: bold;">{{ system_stats.data_size }}</span>
             </div>
@@ -167,6 +188,10 @@
     <div class="card">
         <h2>📁 Data Management</h2>
         <div style="display: flex; flex-direction: column; gap: 1rem;">
+            <a href="{{ url_for('admin_curriculum') }}" class="btn" style="background: #8e44ad;">
+                📚 Manage Curriculum
+            </a>
+            
             <a href="{{ url_for('admin_system_logs') }}" class="btn" style="background: #17a2b8;">
                 📋 View System Logs
             </a>

@@ -560,3 +560,79 @@ All prompts generate structured JSON responses with standardized fields:
 - **User-Friendly Messages**: Clear error communication to end users
 - **Recovery Procedures**: Documented steps for system recovery
 - **Backup Strategies**: Regular data backups with tested restore procedures
+
+## 10. Default Curriculum System
+
+### 10.1. Cambridge Primary 2025 Default Curriculum
+
+The system includes a comprehensive default curriculum based on Cambridge Primary 2025 standards, automatically assigned to students upon creation.
+
+#### 10.1.1. Data Source
+- **File Location**: [`ai-tutor/data/curriculum/cambridge_primary_2025.txt`](ai-tutor/data/curriculum/cambridge_primary_2025.txt)
+- **Format**: Tab-separated values (TSV) with headers: Grade, Subject, Mandatory, Details
+- **Content**: Complete Cambridge Primary curriculum for Grades 1-6 covering all core and optional subjects
+- **Standards Compliance**: Aligned with Cambridge Primary curriculum standards for 2025
+
+#### 10.1.2. Curriculum Structure
+```
+Grade 1-6 Subjects Include:
+- Core Mandatory: English (Literacy), Mathematics, Science
+- Optional Subjects: Global Perspectives, Computing/ICT, Art & Design, Music, Physical Education
+- Grade-Specific: Age-appropriate learning objectives and detailed descriptions
+```
+
+#### 10.1.3. Automatic Default Assignment
+- **Student Creation**: New students automatically receive complete default curriculum via `student_subjects` table
+- **All Subjects**: System creates records for all grade-appropriate subjects (mandatory and optional)
+- **Initial State**: All subjects marked as `is_in_use=true` and `is_active_for_tutoring=false` by default
+- **Curriculum Switching**: When students are assigned to schools with custom curricula, default subjects are marked `is_in_use=false`
+
+### 10.2. Curriculum Data Management
+
+#### 10.2.1. Startup Import Process
+- **Automatic Loading**: Cambridge curriculum data imported automatically on application startup
+- **Idempotent Import**: System checks for existing default curriculum before importing
+- **Error Handling**: Import failures logged with detailed error messages
+- **Data Validation**: TSV format validation with proper error reporting
+
+#### 10.2.2. Database Schema Integration
+The default curriculum integrates with the existing database schema:
+
+```sql
+-- Default curriculum creation
+INSERT INTO curriculums (name, description, is_default)
+VALUES ('Cambridge Primary 2025', 'Cambridge Primary Curriculum 2025 Standards', true);
+
+-- Subject creation and curriculum_details population
+-- Based on TSV file data with grade-level subject mappings
+```
+
+#### 10.2.3. Data File Format
+```tsv
+Grade	Subject	Mandatory	Details
+1	English (Literacy)	Yes	"Reading: Recognize all letters..."
+1	Mathematics	Yes	"Learn the foundation of the number system..."
+```
+
+### 10.3. Curriculum Management Architecture
+
+#### 10.3.1. File-Based Curriculum Data
+- **Storage**: Curriculum definitions stored in structured data files
+- **Version Control**: Curriculum changes tracked through Git
+- **Flexibility**: Support for multiple curriculum standards (Cambridge, national, school-specific)
+- **Import Process**: Automated import of curriculum data on system initialization
+
+#### 10.3.2. Default Curriculum Assignment Workflow
+```
+1. Student Creation → System checks for default curriculum
+2. Default Curriculum Exists → Create student_subjects records for all grade-appropriate subjects
+3. Subject Assignment → Mark subjects as is_in_use=true, is_active_for_tutoring=false
+4. AI Tutoring → Teachers can activate specific subjects for AI tutoring
+5. School Assignment → School curriculum can replace default (mark original as is_in_use=false)
+```
+
+#### 10.3.3. Curriculum Data Integrity
+- **Referential Integrity**: Foreign key constraints ensure data consistency
+- **Default Curriculum**: Exactly one curriculum marked as `is_default=true`
+- **Subject Consistency**: All subjects referenced in curriculum_details must exist in subjects table
+- **Grade Validation**: Grade levels validated against system-supported ranges (1-12)

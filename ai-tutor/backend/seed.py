@@ -6,6 +6,7 @@ Populates the database with default curriculum, subjects, and school data
 
 import os
 import sys
+import re
 from datetime import datetime
 
 # Add the current directory to Python path
@@ -305,6 +306,174 @@ def create_school_defaults(schools, curriculums, subjects):
     
     db.session.commit()
 
+def determine_subject_category(subject_name):
+    """Determine the category for a subject based on its name"""
+    subject_lower = subject_name.lower()
+    
+    if any(keyword in subject_lower for keyword in ['mathematics', 'math', 'computing', 'science']):
+        return 'STEM'
+    elif any(keyword in subject_lower for keyword in ['english', 'literacy', 'language']):
+        return 'Language Arts'
+    elif any(keyword in subject_lower for keyword in ['art', 'music', 'design']):
+        return 'Arts'
+    elif any(keyword in subject_lower for keyword in ['physical', 'pe', 'sport']):
+        return 'Health & Wellness'
+    elif any(keyword in subject_lower for keyword in ['global', 'perspectives', 'social']):
+        return 'Social Sciences'
+    else:
+        return 'General'
+
+def determine_if_core_subject(subject_name):
+    """Determine if a subject is core based on its name"""
+    core_subjects = ['english', 'mathematics', 'science']
+    subject_lower = subject_name.lower()
+    
+    return any(core in subject_lower for core in core_subjects)
+
+def parse_learning_objectives(details_text):
+    """Parse learning objectives from the detailed description"""
+    # Split by sentence endings or semicolons to create individual objectives
+    objectives = re.split(r'[.;]\s+(?=[A-Z])', details_text)
+    
+    # Clean up objectives and filter out very short ones
+    cleaned_objectives = []
+    for obj in objectives:
+        obj = obj.strip().rstrip('.')
+        if len(obj) > 20:  # Only include substantial objectives
+            cleaned_objectives.append(obj)
+    
+    # If we couldn't parse well, return the whole text as one objective
+    if not cleaned_objectives:
+        cleaned_objectives = [details_text]
+    
+    return cleaned_objectives[:10]  # Limit to 10 objectives max
+
+def create_cambridge_curriculum():
+    """Create Cambridge Primary 2025 curriculum from data file"""
+    try:
+        # Path to the Cambridge curriculum data file
+        data_file_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'curriculum', 'cambridge_primary_2025.txt')
+        
+        if not os.path.exists(data_file_path):
+            print(f"⚠️ Cambridge curriculum data file not found: {data_file_path}")
+            return None
+
+        print(f"📚 Loading Cambridge Primary 2025 curriculum data from TSV file...")
+        
+        # Check if default curriculum already exists
+        existing_curriculum = Curriculum.query.filter_by(name='Cambridge Primary 2025', is_default=True).first()
+        if existing_curriculum:
+            print(f"ℹ️ Cambridge Primary 2025 curriculum already exists, skipping import")
+            return existing_curriculum
+
+        # Create the default Cambridge curriculum
+        cambridge_curriculum = Curriculum(
+            name='Cambridge Primary 2025',
+            description='Cambridge Primary Programme for Grades 1-6 with comprehensive subject coverage',
+            curriculum_type='Cambridge',
+            grade_levels=[1, 2, 3, 4, 5, 6],
+            is_template=True,
+            is_default=True,
+            created_by='system'
+        )
+        
+        db.session.add(cambridge_curriculum)
+        db.session.flush()  # Get the curriculum ID
+        
+        # Read and parse the TSV file
+        with open(data_file_path, 'r', encoding='utf-8') as file:
+            lines = file.readlines()
+        
+        # Skip header line and process data
+        subject_details = {}
+        for line_num, line in enumerate(lines[1:], 2):  # Start from line 2 (skip header)
+            try:
+                parts = line.strip().split('\t')
+                if len(parts) < 4:
+                    print(f"⚠️ Skipping malformed line {line_num}: {line.strip()}")
+                    continue
+                
+                grade, subject, mandatory, details = parts[0], parts[1], parts[2], parts[3]
+                
+                # Clean the details field (remove quotes)
+                details = details.strip('"')
+                
+                grade_level = int(grade)
+                is_mandatory = mandatory.lower() == 'yes'
+                
+                # Group by subject for efficient database operations
+                if subject not in subject_details:
+                    subject_details[subject] = []
+                
+                subject_details[subject].append({
+                    'grade_level': grade_level,
+                    'is_mandatory': is_mandatory,
+                    'details': details
+                })
+                
+            except (ValueError, IndexError) as e:
+                print(f"⚠️ Error parsing line {line_num}: {e}")
+                continue
+        
+        # Create subjects and curriculum details
+        subjects_created = 0
+        details_created = 0
+        
+        for subject_name, grade_data in subject_details.items():
+            # Create or get subject
+            subject = Subject.query.filter_by(name=subject_name).first()
+            if not subject:
+                # Determine subject category and if it's core
+                category = determine_subject_category(subject_name)
+                is_core = determine_if_core_subject(subject_name)
+                
+                subject = Subject(
+                    name=subject_name,
+                    description=f'{subject_name} curriculum for Cambridge Primary Programme',
+                    category=category,
+                    is_core=is_core
+                )
+                db.session.add(subject)
+                db.session.flush()  # Get the subject ID
+                subjects_created += 1
+            
+            # Create curriculum details for each grade
+            for grade_info in grade_data:
+                # Parse learning objectives from details
+                learning_objectives = parse_learning_objectives(grade_info['details'])
+                
+                curriculum_detail = CurriculumDetail(
+                    curriculum_id=cambridge_curriculum.id,
+                    subject_id=subject.id,
+                    grade_level=grade_info['grade_level'],
+                    learning_objectives=learning_objectives,
+                    assessment_criteria=['Understanding', 'Application', 'Analysis'],
+                    recommended_hours_per_week=4 if grade_info['is_mandatory'] else 2,
+                    prerequisites=[] if grade_info['grade_level'] == 1 else [f"Grade {grade_info['grade_level']-1} {subject_name}"],
+                    resources=['Cambridge Primary Textbook', 'Online Resources', 'Interactive Activities'],
+                    is_mandatory=grade_info['is_mandatory']
+                )
+                
+                db.session.add(curriculum_detail)
+                details_created += 1
+        
+        # Commit all changes
+        db.session.commit()
+        
+        print(f"✅ Cambridge Primary 2025 curriculum imported successfully!")
+        print(f"   📚 Curriculum: {cambridge_curriculum.name}")
+        print(f"   📖 Subjects created: {subjects_created}")
+        print(f"   📝 Curriculum details created: {details_created}")
+        
+        return cambridge_curriculum
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error loading Cambridge curriculum data: {e}")
+        import traceback
+        print(f"🔍 Stack trace: {traceback.format_exc()}")
+        return None
+
 def seed_database():
     """Main seeding function"""
     print("🌱 Starting database seeding...")
@@ -322,6 +491,12 @@ def seed_database():
         print("\n📋 Creating default curriculums...")
         curriculums = create_default_curriculums(schools, subjects)
         
+        # Create Cambridge Primary 2025 curriculum
+        print("\n📚 Creating Cambridge Primary 2025 default curriculum...")
+        cambridge_curriculum = create_cambridge_curriculum()
+        if cambridge_curriculum:
+            curriculums.append(cambridge_curriculum)
+        
         # Create school defaults
         print("\n🔗 Creating school default assignments...")
         create_school_defaults(schools, curriculums, subjects)
@@ -330,6 +505,8 @@ def seed_database():
         print(f"   Created {len(subjects)} subjects")
         print(f"   Created {len(schools)} schools")
         print(f"   Created {len(curriculums)} curriculum templates")
+        if cambridge_curriculum:
+            print(f"   📚 Cambridge Primary 2025 curriculum loaded as default")
         
     except Exception as e:
         print(f"\n❌ Error during seeding: {e}")

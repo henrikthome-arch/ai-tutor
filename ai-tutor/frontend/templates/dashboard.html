@@ -29,6 +29,16 @@
         <h3>{{ stats.sessions_today }}</h3>
         <p>Sessions Today</p>
     </div>
+    
+    <div class="stat-card">
+        <h3>{{ stats.total_curriculums or 0 }}</h3>
+        <p>Total Curriculums</p>
+    </div>
+    
+    <div class="stat-card">
+        <h3>{{ stats.curriculum_details_count or 0 }}</h3>
+        <p>Curriculum Subjects</p>
+    </div>
 </div>
 
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
@@ -63,6 +73,10 @@
                 👥 Manage Students
             </a>
             
+            <a href="{{ url_for('admin_curriculum') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
+                📚 Manage Curriculum
+            </a>
+            
             <a href="{{ url_for('admin_database') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
                 🗄️ Browse Database
             </a>
@@ -79,6 +93,67 @@
 </div>
 
 <!-- Phone numbers are now managed directly through student profiles in the database-first architecture -->
+
+{% if stats.default_curriculum %}
+<div class="card" style="margin-bottom: 2rem;">
+    <h2>📚 Default Curriculum System</h2>
+    <div style="background: #e8f5e8; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #27ae60;">
+        <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center;">
+            <div>
+                <h3 style="color: #27ae60; margin: 0 0 0.5rem 0;">
+                    🟢 {{ stats.default_curriculum.name }}
+                </h3>
+                <p style="margin: 0; color: #2c3e50;">
+                    <strong>Status:</strong> Active Default Curriculum<br>
+                    <strong>Type:</strong> {{ stats.default_curriculum.curriculum_type or 'General' }}<br>
+                    <strong>Grade Levels:</strong>
+                    {% if stats.default_curriculum.grade_levels %}
+                        Grades {{ stats.default_curriculum.grade_levels | join(', ') }}
+                    {% else %}
+                        All Grades
+                    {% endif %}<br>
+                    <strong>Subjects:</strong> {{ stats.default_curriculum_subjects or 0 }} subjects available
+                </p>
+                <p style="margin: 0.5rem 0 0 0; color: #7f8c8d; font-size: 0.9rem;">
+                    ℹ️ New students without school assignment automatically receive this curriculum
+                </p>
+            </div>
+            <div style="text-align: center;">
+                <a href="{{ url_for('curriculum_details', curriculum_id=stats.default_curriculum.id) }}"
+                   class="btn btn-success" style="margin-bottom: 0.5rem;">
+                    📋 View Details
+                </a>
+                <br>
+                <span style="color: #27ae60; font-size: 0.9rem; font-weight: bold;">
+                    {{ stats.students_with_default_curriculum or 0 }} students
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="card" style="margin-bottom: 2rem;">
+    <h2>⚠️ No Default Curriculum</h2>
+    <div style="background: #fff3cd; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #ffc107;">
+        <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center;">
+            <div>
+                <h3 style="color: #856404; margin: 0 0 0.5rem 0;">
+                    No Default Curriculum Set
+                </h3>
+                <p style="margin: 0; color: #2c3e50;">
+                    New students without school assignment will not receive any curriculum automatically.
+                    <br><strong>Recommendation:</strong> Set up a default curriculum to ensure all students have learning objectives.
+                </p>
+            </div>
+            <div style="text-align: center;">
+                <a href="{{ url_for('admin_curriculum') }}" class="btn" style="background: #ffc107; color: #212529;">
+                    📚 Manage Curriculum
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <div class="card">
     <h2>📈 System Health</h2>
