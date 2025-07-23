@@ -273,11 +273,28 @@ print("🗄️ Database-first phone mapping system initialized")
 def load_cambridge_curriculum_data():
     """Load Cambridge Primary 2025 curriculum data from TSV file"""
     try:
-        # Path to the Cambridge curriculum data file
-        data_file_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'curriculum', 'cambridge_primary_2025.txt')
+        # Path to the Cambridge curriculum data file - try multiple possible locations
+        possible_paths = [
+            os.path.join(os.path.dirname(__file__), '..', 'data', 'curriculum', 'cambridge_primary_2025.txt'),
+            os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'curriculum', 'cambridge_primary_2025.txt'),
+            os.path.join('data', 'curriculum', 'cambridge_primary_2025.txt'),
+            os.path.join('..', 'data', 'curriculum', 'cambridge_primary_2025.txt'),
+            'ai-tutor/data/curriculum/cambridge_primary_2025.txt'
+        ]
         
-        if not os.path.exists(data_file_path):
-            print(f"⚠️ Cambridge curriculum data file not found: {data_file_path}")
+        data_file_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                data_file_path = path
+                print(f"📚 Found Cambridge curriculum data file at: {path}")
+                break
+        
+        if not data_file_path:
+            print(f"⚠️ Cambridge curriculum data file not found in any of these locations:")
+            for path in possible_paths:
+                print(f"   - {path}")
+            print(f"⚠️ Working directory: {os.getcwd()}")
+            print(f"⚠️ Script directory: {os.path.dirname(__file__)}")
             return
 
         print(f"📚 Loading Cambridge Primary 2025 curriculum data from {data_file_path}")
