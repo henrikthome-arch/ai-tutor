@@ -4254,6 +4254,9 @@ def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
         phone_number = message.get('phoneNumber')  # Direct from webhook
         student_id = None  # Initialize student_id to prevent UnboundLocalError
         
+        print(f"🎯 TRACE: handle_end_of_call_api_driven entry - call: {call_id}, phone: {phone_number}")
+        log_system(f"🎯 TRACE: handle_end_of_call_api_driven entry - call: {call_id}, phone: {phone_number}", level="INFO")
+        
         if not call_id:
             log_error('WEBHOOK', 'No call_id in end-of-call-report', ValueError())
             print(f"❌ No call_id in end-of-call-report")
@@ -4321,6 +4324,9 @@ def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
         
         # Student identification and session saving
         # We should already be in an app context from the vapi_webhook function
+        print(f"🔍 TRACE: About to identify/create student for phone: {customer_phone}")
+        log_system(f"🔍 TRACE: About to identify/create student for phone: {customer_phone}", level="INFO")
+        
         import flask
         if not flask.has_app_context():
             log_webhook('app-context-missing', f"No app context in handle_end_of_call_api_driven",
@@ -4329,9 +4335,11 @@ def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
             # We should already be in an app context, but just in case, create one
             with app.app_context():
                 print(f"🔄 Creating new app context for student identification")
+                log_system(f"🔄 TRACE: Creating new app context for student identification", level="INFO")
                 student_id = identify_or_create_student(customer_phone, call_id)
                 if student_id:
                     print(f"👤 Student identified/created in new app context: {student_id}")
+                    log_system(f"👤 TRACE: Student identified/created in new app context: {student_id}", level="INFO")
                     save_api_driven_session(call_id, student_id, customer_phone,
                                           duration, transcript, call_data)
                 else:
@@ -4341,20 +4349,24 @@ def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
         else:
             # Normal flow - we're already in an app context
             print(f"🔍 Identifying student for phone: {customer_phone}")
+            log_system(f"🔍 TRACE: Normal flow - identifying student for phone: {customer_phone}", level="INFO")
             student_id = identify_or_create_student(customer_phone, call_id)
             if student_id:
                 log_webhook('student-identified', f"Student identified/created: {student_id}",
                            call_id=call_id, phone=customer_phone)
                 print(f"👤 Student identified/created: {student_id}")
+                log_system(f"👤 TRACE: Student identified/created: {student_id}", level="INFO")
                 
                 # Save session data
                 print(f"💾 Saving session data for student {student_id}")
+                log_system(f"💾 TRACE: Saving session data for student {student_id}", level="INFO")
                 save_api_driven_session(call_id, student_id, customer_phone,
                                        duration, transcript, call_data)
             else:
                 log_error('WEBHOOK', f"Failed to identify or create student for call {call_id}",
                          ValueError("No student_id returned"), call_id=call_id, phone=customer_phone)
                 print(f"❌ Failed to identify or create student for call {call_id}")
+                log_system(f"❌ TRACE: Failed to identify or create student for call {call_id}", level="ERROR")
                 print(f"❌ Cannot save session without valid student_id")
                 return  # Exit early if we can't create/identify a student
         
