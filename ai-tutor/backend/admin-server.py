@@ -281,13 +281,18 @@ def load_cambridge_curriculum_data():
 
         print(f"📚 Loading Cambridge Primary 2025 curriculum data from {data_file_path}")
         
-        # Check if default curriculum already exists
-        existing_curriculum = Curriculum.query.filter_by(name='Cambridge Primary 2025', is_default=True).first()
-        if existing_curriculum:
-            print(f"ℹ️ Cambridge Primary 2025 curriculum already exists, skipping import")
-            return existing_curriculum
+        # In development mode, always reload (database was reset)
+        # In production mode, check if default curriculum already exists
+        if FLASK_ENV != 'development':
+            existing_curriculum = Curriculum.query.filter_by(name='Cambridge Primary 2025', is_default=True).first()
+            if existing_curriculum:
+                print(f"ℹ️ Cambridge Primary 2025 curriculum already exists, skipping import")
+                return existing_curriculum
+        else:
+            print(f"🔄 Development mode - will reload Cambridge curriculum even if it exists")
 
         # Create the default Cambridge curriculum
+        print(f"📚 Creating Cambridge Primary 2025 curriculum...")
         cambridge_curriculum = Curriculum(
             name='Cambridge Primary 2025',
             description='Cambridge Primary Programme for Grades 1-6 with comprehensive subject coverage',
@@ -300,6 +305,7 @@ def load_cambridge_curriculum_data():
         
         db.session.add(cambridge_curriculum)
         db.session.flush()  # Get the curriculum ID
+        print(f"📚 Curriculum created with ID: {cambridge_curriculum.id}")
         
         # Read and parse the TSV file
         with open(data_file_path, 'r', encoding='utf-8') as file:
@@ -378,15 +384,35 @@ def load_cambridge_curriculum_data():
                 db.session.add(curriculum_detail)
                 details_created += 1
         
-        # Commit all changes
-        db.session.commit()
-        
-        print(f"✅ Cambridge Primary 2025 curriculum imported successfully!")
-        print(f"   📚 Curriculum: {cambridge_curriculum.name}")
-        print(f"   📖 Subjects created: {subjects_created}")
-        print(f"   📝 Curriculum details created: {details_created}")
-        
-        return cambridge_curriculum
+        # Commit all changes with better error handling
+        try:
+            print(f"💾 Committing Cambridge curriculum data to database...")
+            db.session.commit()
+            print(f"✅ Database commit successful!")
+            
+            print(f"✅ Cambridge Primary 2025 curriculum imported successfully!")
+            print(f"   📚 Curriculum: {cambridge_curriculum.name} (ID: {cambridge_curriculum.id})")
+            print(f"   📖 Subjects created: {subjects_created}")
+            print(f"   📝 Curriculum details created: {details_created}")
+            print(f"   🎯 Is default: {cambridge_curriculum.is_default}")
+            print(f"   📋 Is template: {cambridge_curriculum.is_template}")
+            
+            # Verify the data was actually saved
+            verification_curriculum = Curriculum.query.filter_by(id=cambridge_curriculum.id).first()
+            if verification_curriculum:
+                print(f"✅ Curriculum verification successful - found in database")
+            else:
+                print(f"❌ Curriculum verification failed - not found in database")
+            
+            return cambridge_curriculum
+            
+        except Exception as commit_error:
+            print(f"❌ Error committing Cambridge curriculum data: {commit_error}")
+            db.session.rollback()
+            print(f"🔄 Database rollback completed")
+            import traceback
+            print(f"🔍 Commit error stack trace: {traceback.format_exc()}")
+            return None
         
     except Exception as e:
         db.session.rollback()
@@ -745,16 +771,35 @@ try:
         
         print("🗄️ Database tables created/verified")
         
-        # Load Cambridge Primary 2025 curriculum on startup
+        # Load Cambridge Primary 2025 curriculum on startup - ALWAYS try in development mode
         print("📚 Loading Cambridge Primary 2025 curriculum...")
         try:
-            cambridge_curriculum = ensure_cambridge_curriculum_loaded()
-            if cambridge_curriculum:
-                print(f"✅ Cambridge Primary 2025 curriculum loaded successfully")
+            # Force reload in development mode to ensure fresh data after database reset
+            if FLASK_ENV == 'development':
+                print("🔄 Development mode - forcing Cambridge curriculum reload...")
+                cambridge_curriculum = load_cambridge_curriculum_data()
             else:
-                print(f"ℹ️ Cambridge Primary 2025 curriculum already exists or failed to load")
+                cambridge_curriculum = ensure_cambridge_curriculum_loaded()
+            
+            if cambridge_curriculum:
+                print(f"✅ Cambridge Primary 2025 curriculum loaded successfully (ID: {cambridge_curriculum.id})")
+                print(f"📊 Curriculum name: {cambridge_curriculum.name}")
+                print(f"🎯 Is default: {cambridge_curriculum.is_default}")
+                
+                # Verify curriculum details were created
+                detail_count = CurriculumDetail.query.filter_by(curriculum_id=cambridge_curriculum.id).count()
+                print(f"📝 Curriculum details created: {detail_count}")
+                
+                # Verify subjects were created
+                subject_count = Subject.query.count()
+                print(f"📚 Total subjects in database: {subject_count}")
+                
+            else:
+                print(f"❌ Cambridge Primary 2025 curriculum failed to load")
         except Exception as curriculum_error:
             print(f"⚠️ Error loading Cambridge curriculum: {curriculum_error}")
+            import traceback
+            print(f"🔍 Stack trace: {traceback.format_exc()}")
             log_error('CURRICULUM', 'Error loading Cambridge curriculum on startup', curriculum_error)
 except Exception as e:
     print(f"⚠️ Error initializing database with app: {e}")
