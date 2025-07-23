@@ -1336,18 +1336,9 @@ def admin_dashboard():
             recent_students = []
             students_info = {}
         
-        # Get phone mappings from database
-        try:
-            phone_mappings = db_phone_manager.get_all_phone_mappings()
-        except Exception as e:
-            log_error('ADMIN', 'Error getting phone mappings from database for dashboard', e)
-            print(f"Dashboard error: Failed to get phone mappings from database: {e}")
-            phone_mappings = {}
-        
         return render_template('dashboard.html',
                              stats=stats,
                              recent_students=recent_students,
-                             phone_mappings=phone_mappings,
                              students_info=students_info)
     except Exception as e:
         log_error('ADMIN', 'Critical error in admin dashboard', e)
@@ -2147,65 +2138,8 @@ def admin_system():
                 'error': str(e)
             }
         
-        # Get the phone mappings from database
-        try:
-            phone_mappings = db_phone_manager.get_all_phone_mappings()
-        except Exception as e:
-            log_error('ADMIN', f'Error loading phone mappings from database: {str(e)}', e)
-            phone_mappings = {}
-        
-        # Get students info for phone mapping display with proper field access - handle dictionaries
-        students = get_all_students()
-        students_info = {}
-        phone_to_student_mapping = {}  # Map phone numbers to student info
-        
-        for student in students:
-            # Create proper name from first_name and last_name - use .get() for dictionaries
-            first_name = student.get('first_name', '')
-            last_name = student.get('last_name', '')
-            full_name = f"{first_name} {last_name}".strip() or 'Unknown'
-            
-            student_info = {
-                'name': full_name,
-                'id': student.get('id', 'unknown'),
-                'grade': student.get('grade', 'Unknown')
-            }
-            
-            students_info[student.get('id', 'unknown')] = student_info
-            
-            # Also map by phone number for direct lookup
-            phone_number = student.get('phone_number') or student.get('phone')
-            if phone_number:
-                phone_to_student_mapping[phone_number] = student_info
-                print(f"📞 Mapped phone {phone_number} to student {full_name} (ID: {student.get('id')})")
-        
-        # Create comprehensive phone mappings that include both file mappings and database phone numbers
-        comprehensive_phone_mappings = {}
-        
-        # First, add all existing file-based mappings
-        for phone_num, student_id in phone_mappings.items():
-            # Ensure consistent data types for lookup - convert student_id to int for comparison
-            try:
-                student_id_int = int(student_id)
-                if student_id_int in students_info:
-                    comprehensive_phone_mappings[phone_num] = students_info[student_id_int]
-                    print(f"📞 File mapping found: {phone_num} → {student_id_int} ({students_info[student_id_int]['name']})")
-                else:
-                    comprehensive_phone_mappings[phone_num] = {'name': 'Student not found', 'id': student_id, 'grade': 'Unknown'}
-                    print(f"📞 File mapping orphaned: {phone_num} → {student_id} (student not in database)")
-            except (ValueError, TypeError):
-                # Handle non-numeric student_id
-                comprehensive_phone_mappings[phone_num] = {'name': 'Invalid student ID', 'id': student_id, 'grade': 'Unknown'}
-                print(f"📞 File mapping invalid: {phone_num} → {student_id} (non-numeric ID)")
-        
-        # Then, add all students with phone numbers from database (this ensures new students appear)
-        for phone_num, student_info in phone_to_student_mapping.items():
-            # This will override file mappings if they exist, giving priority to database data
-            comprehensive_phone_mappings[phone_num] = student_info
-            print(f"📞 Added database phone mapping: {phone_num} → {student_info['id']} ({student_info['name']})")
-        
-        # Update the phone_mappings variable to use the comprehensive mapping
-        phone_mappings = comprehensive_phone_mappings
+        # Phone mappings are now managed directly in the database via Student.phone_number field
+        # No separate phone mapping management needed - this section is obsolete post-migration
         
         # Check for environmental issues
         environmental_issues = check_environmental_issues()
@@ -2300,8 +2234,6 @@ def admin_system():
         
         return render_template('system.html',
                             stats=stats,
-                            phone_mappings=phone_mappings,
-                            students_info=students_info,
                             system_stats=stats,
                             mcp_port=3001,
                             vapi_status=vapi_client.is_configured(),
@@ -2822,6 +2754,48 @@ def view_student_sessions(student_id):
         flash(f'Error loading sessions: {str(e)}', 'error')
         log_error('DATABASE', 'Error loading student sessions', e, student_id=student_id)
         return render_template('session_list.html', student={}, student_id=student_id, sessions=[])
+
+@app.route('/admin/sessions/<session_id>/')
+@app.route('/admin/sessions/<session_id>')
+def view_session_detail_direct(session_id):
+    """View session detail by session ID only (handles direct session links)"""
+    if not check_auth():
+        return redirect(url_for('admin_login'))
+    
+    try:
+        # Get session from database with full content
+        session = Session.query.get(session_id)
+        if not session:
+            flash('Session not found', 'error')
+            return redirect(url_for('admin_all_sessions'))
+        
+        # Get the student_id from the session to maintain compatibility
+        student_id = session.student_id
+        
+        # Get session data with content
+        session_data = session.to_dict_with_content()
+        
+        # Get transcript and analysis from session data
+        transcript = session_data.get('transcript')
+        analysis = session_data.get('summary')
+        
+        # Set display flags based on actual content
+        session_data['has_transcript_display'] = bool(transcript and len(transcript.strip()) > 0)
+        session_data['has_analysis_display'] = bool(analysis and len(analysis.strip()) > 0)
+        
+        print(f"📊 Session {session_id} display status: transcript={session_data['has_transcript_display']}, analysis={session_data['has_analysis_display']}")
+        
+        return render_template('session_detail.html',
+                             student_id=student_id,
+                             session_file=f"session_{session_id}",  # For compatibility with template
+                             session_data=session_data,
+                             transcript=transcript,
+                             analysis=analysis)
+        
+    except Exception as e:
+        flash(f'Error loading session: {str(e)}', 'error')
+        log_error('DATABASE', 'Error loading session detail', e, session_id=session_id)
+        return redirect(url_for('admin_all_sessions'))
 
 @app.route('/admin/sessions/<student_id>/<session_id>')
 def view_session_detail(student_id, session_id):

@@ -21,8 +21,8 @@
     </div>
     
     <div class="stat-card">
-        <h3>{{ stats.phone_mappings }}</h3>
-        <p>Phone Mappings</p>
+        <h3>{{ stats.server_status }}</h3>
+        <p>Server Status</p>
     </div>
     
     <div class="stat-card">
@@ -78,52 +78,7 @@
     </div>
 </div>
 
-<div class="card">
-    <h2>📱 Phone Mapping Status</h2>
-    {% if phone_mappings %}
-        <div style="max-height: 200px; overflow-y: auto;">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Phone Number</th>
-                        <th>Student</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for phone, student_id in phone_mappings.items() %}
-                    <tr>
-                        <td>{{ phone }}</td>
-                        <td>
-                            {% if students_info[student_id] %}
-                                <a href="{{ url_for('admin_student_detail', student_id=student_id) }}" 
-                                   style="color: #3498db; text-decoration: none;">
-                                   {{ students_info[student_id].name }}
-                                </a>
-                            {% else %}
-                                <span style="color: #e74c3c;">Student not found</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if students_info[student_id] %}
-                                <span style="color: #27ae60;">✓ Active</span>
-                            {% else %}
-                                <span style="color: #e74c3c;">⚠ Error</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    {% else %}
-        <p style="color: #666; font-style: italic;">No phone mappings configured</p>
-    {% endif %}
-    
-    <div style="margin-top: 1rem; text-align: center;">
-        <a href="{{ url_for('admin_system') }}" class="btn">Manage Phone Mappings</a>
-    </div>
-</div>
+<!-- Phone numbers are now managed directly through student profiles in the database-first architecture -->
 
 <div class="card">
     <h2>📈 System Health</h2>

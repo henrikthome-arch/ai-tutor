@@ -9,66 +9,8 @@
 
 <h1 style="margin-bottom: 2rem; color: #2c3e50;">System Settings & Monitoring</h1>
 
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
-    <div class="card">
-        <h2>📱 Phone Number Mappings</h2>
-        <p style="color: #666; margin-bottom: 1rem;">Manage phone number to student ID mappings for automated identification during calls.</p>
-        
-        {% if phone_mappings %}
-            <div style="max-height: 300px; overflow-y: auto;">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>📱 Phone Number</th>
-                            <th>👤 Student</th>
-                            <th>⚡ Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for phone, student_id in phone_mappings.items() %}
-                        <tr>
-                            <td style="font-family: monospace;">{{ phone }}</td>
-                            <td>
-                                {% if students_info[student_id] %}
-                                    <a href="{{ url_for('admin_student_detail', student_id=student_id) }}" 
-                                       style="color: #3498db; text-decoration: none;">
-                                       {{ students_info[student_id].name }}
-                                    </a>
-                                    <br>
-                                    <span style="color: #666; font-size: 0.9rem;">ID: {{ student_id }}</span>
-                                {% else %}
-                                    <span style="color: #e74c3c;">⚠ Student not found</span>
-                                    <br>
-                                    <span style="color: #666; font-size: 0.9rem;">ID: {{ student_id }}</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <button class="btn btn-danger"
-                                        style="padding: 4px 8px; font-size: 0.8rem;"
-                                        onclick="removePhoneMapping('{{ phone }}')">
-                                    🗑️ Remove
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% else %}
-            <div style="text-align: center; padding: 2rem; color: #666; background: #f8f9fa; border-radius: 4px;">
-                <div style="font-size: 2rem; margin-bottom: 1rem;">📱</div>
-                <h4>No Phone Mappings</h4>
-                <p>No phone numbers are currently mapped to students.</p>
-            </div>
-        {% endif %}
-        
-        <div style="margin-top: 1rem; text-align: center;">
-            <button class="btn btn-success" onclick="addPhoneMapping()">
-                ➕ Add Phone Mapping
-            </button>
-        </div>
-    </div>
-    
+<!-- Phone numbers are now managed directly through student profiles in the database-first architecture -->
+<div style="display: grid; grid-template-columns: 1fr; gap: 2rem; margin-bottom: 2rem;">
     <div class="card">
         <h2>📊 System Statistics</h2>
         <div style="display: flex; flex-direction: column; gap: 1rem;">
@@ -83,8 +25,8 @@
             </div>
             
             <div style="display: flex; justify-content: space-between; padding: 12px; background: #f8f9fa; border-radius: 4px;">
-                <span style="font-weight: 600;">Phone Mappings:</span>
-                <span style="color: #e67e22; font-weight: bold;">{{ system_stats.phone_mappings }}</span>
+                <span style="font-weight: 600;">Sessions Today:</span>
+                <span style="color: #e67e22; font-weight: bold;">{{ system_stats.sessions_today }}</span>
             </div>
             
             <div style="display: flex; justify-content: space-between; padding: 12px; background: #f8f9fa; border-radius: 4px;">
@@ -307,58 +249,5 @@
     {% endif %}
 </div>
 
-<script>
-async function removePhoneMapping(phoneNumber) {
-    if (!confirm(`Are you sure you want to remove the phone mapping for ${phoneNumber}?`)) {
-        return;
-    }
-    
-    try {
-        const formData = new FormData();
-        formData.append('phone_number', phoneNumber);
-        
-        const response = await fetch('/admin/phone-mappings/remove', {
-            method: 'POST',
-            body: formData
-        });
-        
-        if (response.ok) {
-            location.reload(); // Refresh the page to show changes
-        } else {
-            const error = await response.json();
-            alert(`Error: ${error.error || 'Failed to remove phone mapping'}`);
-        }
-    } catch (error) {
-        alert(`Error: ${error.message}`);
-    }
-}
-
-async function addPhoneMapping() {
-    const phoneNumber = prompt('Enter phone number (e.g., +30-123-456-7890):');
-    if (!phoneNumber) return;
-    
-    const studentId = prompt('Enter student ID:');
-    if (!studentId) return;
-    
-    try {
-        const formData = new FormData();
-        formData.append('phone_number', phoneNumber);
-        formData.append('student_id', studentId);
-        
-        const response = await fetch('/admin/phone-mappings/add', {
-            method: 'POST',
-            body: formData
-        });
-        
-        if (response.ok) {
-            location.reload(); // Refresh the page to show changes
-        } else {
-            const error = await response.json();
-            alert(`Error: ${error.error || 'Failed to add phone mapping'}`);
-        }
-    } catch (error) {
-        alert(`Error: ${error.message}`);
-    }
-}
-</script>
+<!-- Phone number management functions removed - phone numbers are now managed directly through student profiles -->
 {% endblock %}
