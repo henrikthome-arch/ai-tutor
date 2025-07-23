@@ -311,6 +311,239 @@
     {% endif %}
 </div>
 
+<!-- Student Subjects and Curriculum Information -->
+<div class="card">
+    <h2 style="color: #2c3e50; margin-top: 0;">📚 Student Subjects & Curriculum</h2>
+    
+    {% if progress.student_subjects_detailed %}
+        <div style="margin-bottom: 1rem;">
+            <p style="color: #7f8c8d; margin: 0;">
+                Showing {{ progress.student_subjects_detailed|length }} subjects assigned to this student with curriculum goals and progress details.
+            </p>
+        </div>
+        
+        {% for subject in progress.student_subjects_detailed %}
+        <div class="subject-detail-section" style="margin-bottom: 2rem; border: 1px solid #e9ecef; border-radius: 8px; padding: 1.5rem; background: #f8f9fa;">
+            <!-- Subject Header -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <div>
+                    <h3 style="color: #2c3e50; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                        📖 {{ subject.subject_name }}
+                        {% if subject.is_core_subject %}
+                        <span class="badge" style="background: #e74c3c; color: white; font-size: 0.7rem;">CORE</span>
+                        {% endif %}
+                        {% if subject.is_mandatory %}
+                        <span class="badge" style="background: #f39c12; color: white; font-size: 0.7rem;">MANDATORY</span>
+                        {% endif %}
+                    </h3>
+                    <p style="color: #7f8c8d; margin: 0.25rem 0 0 0; font-size: 0.9rem;">
+                        {{ subject.subject_description or 'No description available' }}
+                    </p>
+                    <div style="margin-top: 0.5rem;">
+                        <span class="badge" style="background: #3498db; color: white; font-size: 0.7rem;">{{ subject.subject_category or 'General' }}</span>
+                        <span class="badge" style="background: #7f8c8d; color: white; font-size: 0.7rem;">Grade {{ subject.grade_level }}</span>
+                        {% if subject.curriculum_is_default %}
+                        <span class="badge" style="background: #27ae60; color: white; font-size: 0.7rem;">DEFAULT CURRICULUM</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    {% if subject.is_active_for_tutoring %}
+                    <span class="badge" style="background: #27ae60; color: white;">ACTIVE</span>
+                    {% else %}
+                    <span class="badge" style="background: #95a5a6; color: white;">INACTIVE</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Subject Details Grid -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                <!-- Learning Goals & Objectives -->
+                <div>
+                    <h4 style="color: #34495e; margin: 0 0 0.5rem 0; font-size: 1rem;">🎯 Learning Objectives</h4>
+                    {% if subject.learning_objectives %}
+                    <ul style="margin: 0; padding-left: 1.5rem; font-size: 0.9rem; color: #555;">
+                        {% for objective in subject.learning_objectives %}
+                        <li style="margin-bottom: 0.25rem;">{{ objective }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p style="color: #7f8c8d; font-style: italic; margin: 0;">No learning objectives defined</p>
+                    {% endif %}
+                    
+                    {% if subject.goals_description %}
+                    <div style="margin-top: 0.75rem;">
+                        <h5 style="color: #34495e; margin: 0 0 0.25rem 0; font-size: 0.9rem;">📝 Goals Description</h5>
+                        <p style="color: #555; font-size: 0.9rem; margin: 0;">{{ subject.goals_description }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Assessment & Progress -->
+                <div>
+                    <h4 style="color: #34495e; margin: 0 0 0.5rem 0; font-size: 1rem;">📊 Student Progress</h4>
+                    
+                    <!-- Progress Metrics -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem;">
+                        {% if subject.progress_percentage is not none %}
+                        <div>
+                            <span style="font-size: 0.8rem; color: #7f8c8d;">Progress:</span>
+                            <div style="font-weight: bold; color: #27ae60;">{{ subject.progress_percentage }}%</div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if subject.completion_percentage is not none %}
+                        <div>
+                            <span style="font-size: 0.8rem; color: #7f8c8d;">Completion:</span>
+                            <div style="font-weight: bold; color: #3498db;">{{ subject.completion_percentage }}%</div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if subject.mastery_level %}
+                        <div>
+                            <span style="font-size: 0.8rem; color: #7f8c8d;">Mastery:</span>
+                            <div style="font-weight: bold; color: #9b59b6;">{{ subject.mastery_level|title }}</div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if subject.grade_score %}
+                        <div>
+                            <span style="font-size: 0.8rem; color: #7f8c8d;">Grade:</span>
+                            <div style="font-weight: bold; color: #e67e22;">{{ subject.grade_score }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Assessment Criteria -->
+                    {% if subject.assessment_criteria %}
+                    <div style="margin-bottom: 0.75rem;">
+                        <h5 style="color: #34495e; margin: 0 0 0.25rem 0; font-size: 0.85rem;">📋 Assessment Criteria</h5>
+                        <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                            {% for criteria in subject.assessment_criteria %}
+                            <span style="background: #ecf0f1; color: #2c3e50; padding: 2px 6px; border-radius: 12px; font-size: 0.75rem;">{{ criteria }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Comments Section -->
+            <div style="margin-top: 1rem; border-top: 1px solid #ecf0f1; padding-top: 1rem;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <!-- Teacher Comments -->
+                    <div>
+                        <h5 style="color: #34495e; margin: 0 0 0.5rem 0; font-size: 0.9rem;">👩‍🏫 Teacher Notes & Comments</h5>
+                        {% if subject.teacher_notes %}
+                        <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 0.5rem; margin-bottom: 0.5rem;">
+                            <strong style="font-size: 0.8rem; color: #856404;">Teacher Notes:</strong>
+                            <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: #856404;">{{ subject.teacher_notes }}</p>
+                        </div>
+                        {% endif %}
+                        {% if subject.comments_teacher %}
+                        <div style="background: #d1ecf1; border-left: 4px solid #17a2b8; padding: 0.5rem;">
+                            <strong style="font-size: 0.8rem; color: #0c5460;">Teacher Comments:</strong>
+                            <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: #0c5460;">{{ subject.comments_teacher }}</p>
+                        </div>
+                        {% endif %}
+                        {% if not subject.teacher_notes and not subject.comments_teacher %}
+                        <p style="color: #7f8c8d; font-style: italic; margin: 0; font-size: 0.85rem;">No teacher comments available</p>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- AI Tutor Analysis -->
+                    <div>
+                        <h5 style="color: #34495e; margin: 0 0 0.5rem 0; font-size: 0.9rem;">🤖 AI Tutor Analysis</h5>
+                        {% if subject.ai_tutor_notes %}
+                        <div style="background: #d4edda; border-left: 4px solid #28a745; padding: 0.5rem; margin-bottom: 0.5rem;">
+                            <strong style="font-size: 0.8rem; color: #155724;">AI Notes:</strong>
+                            <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: #155724;">{{ subject.ai_tutor_notes }}</p>
+                        </div>
+                        {% endif %}
+                        {% if subject.ai_assessment %}
+                        <div style="background: #f8d7da; border-left: 4px solid #dc3545; padding: 0.5rem; margin-bottom: 0.5rem;">
+                            <strong style="font-size: 0.8rem; color: #721c24;">AI Assessment:</strong>
+                            <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: #721c24;">{{ subject.ai_assessment }}</p>
+                        </div>
+                        {% endif %}
+                        {% if subject.weaknesses %}
+                        <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 0.5rem;">
+                            <strong style="font-size: 0.8rem; color: #856404;">Areas for Improvement:</strong>
+                            <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: #856404;">{{ subject.weaknesses }}</p>
+                        </div>
+                        {% endif %}
+                        {% if not subject.ai_tutor_notes and not subject.ai_assessment and not subject.weaknesses %}
+                        <p style="color: #7f8c8d; font-style: italic; margin: 0; font-size: 0.85rem;">No AI analysis available</p>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Grade Motivation -->
+                {% if subject.grade_motivation %}
+                <div style="margin-top: 0.75rem; background: #e7f3ff; border-radius: 6px; padding: 0.75rem;">
+                    <h6 style="color: #0066cc; margin: 0 0 0.25rem 0; font-size: 0.85rem;">💪 Motivational Feedback</h6>
+                    <p style="margin: 0; font-size: 0.9rem; color: #004080;">{{ subject.grade_motivation }}</p>
+                </div>
+                {% endif %}
+            </div>
+            
+            <!-- Additional Information -->
+            <div style="margin-top: 1rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; font-size: 0.85rem; color: #666;">
+                {% if subject.recommended_hours_per_week %}
+                <div>
+                    <strong>Recommended Hours/Week:</strong> {{ subject.recommended_hours_per_week }}
+                </div>
+                {% endif %}
+                <div>
+                    <strong>Curriculum:</strong> {{ subject.curriculum_name }} ({{ subject.curriculum_type or 'General' }})
+                </div>
+                {% if subject.updated_at %}
+                <div>
+                    <strong>Last Updated:</strong> {{ subject.updated_at.split('T')[0] if 'T' in subject.updated_at else subject.updated_at }}
+                </div>
+                {% endif %}
+            </div>
+            
+            <!-- Prerequisites and Resources -->
+            {% if subject.prerequisites or subject.resources %}
+            <div style="margin-top: 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                {% if subject.prerequisites %}
+                <div>
+                    <h6 style="color: #34495e; margin: 0 0 0.25rem 0; font-size: 0.8rem;">📋 Prerequisites</h6>
+                    <ul style="margin: 0; padding-left: 1rem; font-size: 0.75rem; color: #666;">
+                        {% for prerequisite in subject.prerequisites %}
+                        <li>{{ prerequisite }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+                
+                {% if subject.resources %}
+                <div>
+                    <h6 style="color: #34495e; margin: 0 0 0.25rem 0; font-size: 0.8rem;">📚 Resources</h6>
+                    <ul style="margin: 0; padding-left: 1rem; font-size: 0.75rem; color: #666;">
+                        {% for resource in subject.resources %}
+                        <li>{{ resource }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+    <div style="text-align: center; padding: 2rem; color: #666;">
+        <div style="font-size: 2rem; margin-bottom: 1rem;">📚</div>
+        <h4>No Subjects Assigned</h4>
+        <p>This student doesn't have any subjects assigned yet.</p>
+        <p style="color: #7f8c8d; font-size: 0.9rem;">
+            Subjects are automatically assigned when students are created if a default curriculum is available.
+        </p>
+    </div>
+    {% endif %}
+</div>
+
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
         <h2>🕒 Recent Sessions</h2>

@@ -123,24 +123,21 @@
                         <strong style="color: #34495e;">Learning Objectives:</strong>
                         <ul style="margin: 0.5rem 0; padding-left: 1.5rem; font-size: 0.9rem; color: #555;">
                             {% if detail.learning_objectives %}
-                                {% for objective in detail.learning_objectives[:3] %}
+                                {% for objective in detail.learning_objectives %}
                                 <li>{{ objective }}</li>
                                 {% endfor %}
-                                {% if detail.learning_objectives|length > 3 %}
-                                <li style="color: #7f8c8d; font-style: italic;">
-                                    ... and {{ detail.learning_objectives|length - 3 }} more
-                                </li>
-                                {% endif %}
                             {% else %}
                                 <li style="color: #7f8c8d; font-style: italic;">No objectives defined</li>
                             {% endif %}
                         </ul>
                     </div>
                     
+                    {% if detail.recommended_hours_per_week %}
                     <div style="margin-bottom: 1rem; font-size: 0.9rem;">
-                        <strong style="color: #34495e;">Hours/Week:</strong> 
-                        <span style="color: #555;">{{ detail.recommended_hours_per_week or 4 }}</span>
+                        <strong style="color: #34495e;">Hours/Week:</strong>
+                        <span style="color: #555;">{{ detail.recommended_hours_per_week }}</span>
                     </div>
+                    {% endif %}
                     
                     <div class="action-buttons">
                         <a href="{{ url_for('edit_curriculum_detail', detail_id=detail.id) }}" class="btn-small" style="background: #3498db;">

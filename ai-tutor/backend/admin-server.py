@@ -1123,10 +1123,78 @@ def get_student_data(student_id):
                 
                 print(f"📈 Enhanced progress data: {len(progress['subjects'])} subjects, {len(progress['goals'])} goals")
             
-            # Get individual subject assessments for backward compatibility
+            # Get comprehensive student-subject data with curriculum details
             student_subjects = assessment_repository.get_by_student_id(student_id)
             assessments_data = student_subjects  # StudentSubject assessments
             print(f"📊 Retrieved {len(assessments_data)} subject assessments for student {student_id}")
+            
+            # Get detailed student subjects with curriculum information
+            try:
+                from app.models.assessment import StudentSubject
+                from app.models.curriculum import CurriculumDetail, Subject, Curriculum
+                
+                # Query comprehensive student subject data with joins
+                comprehensive_subjects = db.session.query(StudentSubject, CurriculumDetail, Subject, Curriculum)\
+                    .join(CurriculumDetail, StudentSubject.curriculum_detail_id == CurriculumDetail.id)\
+                    .join(Subject, CurriculumDetail.subject_id == Subject.id)\
+                    .join(Curriculum, CurriculumDetail.curriculum_id == Curriculum.id)\
+                    .filter(StudentSubject.student_id == student_id)\
+                    .all()
+                
+                # Format comprehensive subject data for template
+                student_subjects_detailed = []
+                for student_subject, curriculum_detail, subject, curriculum in comprehensive_subjects:
+                    subject_data = {
+                        # StudentSubject fields (progress, comments, etc.)
+                        'id': student_subject.id,
+                        'is_active_for_tutoring': student_subject.is_active_for_tutoring,
+                        'is_in_use': student_subject.is_in_use,
+                        'teacher_notes': student_subject.teacher_notes,
+                        'ai_tutor_notes': student_subject.ai_tutor_notes,
+                        'progress_percentage': student_subject.progress_percentage,
+                        'ai_assessment': student_subject.ai_assessment,
+                        'weaknesses': student_subject.weaknesses,
+                        'mastery_level': student_subject.mastery_level,
+                        'comments_tutor': student_subject.comments_tutor,
+                        'comments_teacher': student_subject.comments_teacher,
+                        'completion_percentage': student_subject.completion_percentage,
+                        'grade_score': student_subject.grade_score,
+                        'grade_motivation': student_subject.grade_motivation,
+                        'created_at': student_subject.created_at.isoformat() if student_subject.created_at else None,
+                        'updated_at': student_subject.updated_at.isoformat() if student_subject.updated_at else None,
+                        
+                        # Subject information
+                        'subject_name': subject.name,
+                        'subject_description': subject.description,
+                        'subject_category': subject.category,
+                        'is_core_subject': subject.is_core,
+                        
+                        # Curriculum detail information (goals, objectives, etc.)
+                        'grade_level': curriculum_detail.grade_level,
+                        'is_mandatory': curriculum_detail.is_mandatory,
+                        'learning_objectives': curriculum_detail.learning_objectives,
+                        'assessment_criteria': curriculum_detail.assessment_criteria,
+                        'recommended_hours_per_week': curriculum_detail.recommended_hours_per_week,
+                        'prerequisites': curriculum_detail.prerequisites,
+                        'resources': curriculum_detail.resources,
+                        'goals_description': curriculum_detail.goals_description,
+                        
+                        # Curriculum information
+                        'curriculum_name': curriculum.name,
+                        'curriculum_type': curriculum.curriculum_type,
+                        'curriculum_is_default': curriculum.is_default
+                    }
+                    student_subjects_detailed.append(subject_data)
+                
+                print(f"📚 Retrieved {len(student_subjects_detailed)} detailed subjects for student {student_id}")
+                
+                # Add to progress data
+                progress['student_subjects_detailed'] = student_subjects_detailed
+                
+            except Exception as subjects_error:
+                log_error('DATABASE', f'Error getting detailed student subjects: {str(subjects_error)}', subjects_error, student_id=student_id)
+                print(f"❌ Error getting detailed student subjects: {subjects_error}")
+                progress['student_subjects_detailed'] = []
             
         except Exception as assessment_error:
             log_error('DATABASE', f'Error getting assessments for student: {str(assessment_error)}', assessment_error, student_id=student_id)
