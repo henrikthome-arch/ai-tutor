@@ -3329,6 +3329,191 @@ def assign_default_curriculum_to_student_route(student_id):
         flash(f'Error assigning curriculum: {str(e)}', 'error')
         return jsonify({'error': f'Failed to assign curriculum: {str(e)}'}), 500
 
+@app.route('/admin/debug/student/<student_id>/subjects')
+def debug_student_subjects(student_id):
+    """Debug route to see what StudentSubject records exist for a student"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        from app.models.assessment import StudentSubject
+        from app.models.curriculum import CurriculumDetail, Subject, Curriculum
+        
+        # Get all StudentSubject records for this student
+        student_subjects = StudentSubject.query.filter_by(student_id=student_id).all()
+        
+        # Get detailed info with joins
+        detailed_subjects = db.session.query(StudentSubject, CurriculumDetail, Subject, Curriculum)\
+            .join(CurriculumDetail, StudentSubject.curriculum_detail_id == CurriculumDetail.id)\
+            .join(Subject, CurriculumDetail.subject_id == Subject.id)\
+            .join(Curriculum, CurriculumDetail.curriculum_id == Curriculum.id)\
+            .filter(StudentSubject.student_id == student_id)\
+            .all()
+        
+        debug_info = {
+            'student_id': student_id,
+            'total_student_subjects': len(student_subjects),
+            'detailed_subjects_count': len(detailed_subjects),
+            'student_subjects_raw': [
+                {
+                    'id': ss.id,
+                    'curriculum_detail_id': ss.curriculum_detail_id,
+                    'is_active_for_tutoring': ss.is_active_for_tutoring,
+                    'is_in_use': ss.is_in_use,
+                    'progress_percentage': ss.progress_percentage,
+                    'created_at': ss.created_at.isoformat() if ss.created_at else None,
+                    'updated_at': ss.updated_at.isoformat() if ss.updated_at else None
+                }
+                for ss in student_subjects
+            ],
+            'detailed_subjects_info': [
+                {
+                    'student_subject_id': ss.id,
+                    'subject_name': subj.name,
+                    'subject_category': subj.category,
+                    'grade_level': cd.grade_level,
+                    'curriculum_name': curr.name,
+                    'curriculum_is_default': curr.is_default,
+                    'is_mandatory': cd.is_mandatory,
+                    'progress_percentage': ss.progress_percentage,
+                    'is_active_for_tutoring': ss.is_active_for_tutoring,
+                    'is_in_use': ss.is_in_use,
+                    'learning_objectives_count': len(cd.learning_objectives) if cd.learning_objectives else 0,
+                    'assessment_criteria_count': len(cd.assessment_criteria) if cd.assessment_criteria else 0
+                }
+                for ss, cd, subj, curr in detailed_subjects
+            ]
+        }
+        
+        # Also check what the admin_student_detail query returns
+        try:
+            admin_query_result = db.session.query(StudentSubject, CurriculumDetail, Subject, Curriculum)\
+                .join(CurriculumDetail, StudentSubject.curriculum_detail_id == CurriculumDetail.id)\
+                .join(Subject, CurriculumDetail.subject_id == Subject.id)\
+                .join(Curriculum, CurriculumDetail.curriculum_id == Curriculum.id)\
+                .filter(StudentSubject.student_id == student_id)\
+                .all()
+            
+            debug_info['admin_query_matches'] = len(admin_query_result)
+            debug_info['admin_query_successful'] = True
+        except Exception as e:
+            debug_info['admin_query_error'] = str(e)
+            debug_info['admin_query_successful'] = False
+        
+        # Check if default curriculum exists
+        try:
+            default_curriculum = Curriculum.query.filter_by(is_default=True).first()
+            debug_info['default_curriculum'] = {
+                'exists': default_curriculum is not None,
+                'id': default_curriculum.id if default_curriculum else None,
+                'name': default_curriculum.name if default_curriculum else None
+            }
+        except Exception as e:
+            debug_info['default_curriculum_error'] = str(e)
+        
+        return jsonify({
+            'success': True,
+            'debug_info': debug_info
+        })
+        
+    except Exception as e:
+        log_error('DEBUG', f'Error in debug route for student {student_id}', e, student_id=student_id)
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'student_id': student_id
+        }), 500
+
+@app.route('/admin/students/<student_id>/delete-and-reassign-curriculum', methods=['POST'])
+def delete_and_reassign_curriculum(student_id):
+    """Delete all existing curriculum assignments for a student and reassign default curriculum"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        # Verify student exists
+        student = student_repository.get_by_id(student_id)
+        if not student:
+            return jsonify({'error': 'Student not found'}), 404
+        
+        student_name = f"{student.get('first_name', '')} {student.get('last_name', '')}".strip()
+        
+        # Import required models
+        from app.models.assessment import StudentSubject
+        from app.models.curriculum import CurriculumDetail, Subject, Curriculum
+        
+        # Get existing StudentSubject records before deletion
+        existing_subjects = StudentSubject.query.filter_by(student_id=student_id).all()
+        existing_count = len(existing_subjects)
+        
+        # Get details about what we're deleting for logging
+        deleted_subjects_info = []
+        if existing_subjects:
+            for ss in existing_subjects:
+                try:
+                    curriculum_detail = CurriculumDetail.query.get(ss.curriculum_detail_id)
+                    if curriculum_detail:
+                        subject = Subject.query.get(curriculum_detail.subject_id)
+                        curriculum = Curriculum.query.get(curriculum_detail.curriculum_id)
+                        deleted_subjects_info.append({
+                            'subject_name': subject.name if subject else 'Unknown',
+                            'grade_level': curriculum_detail.grade_level,
+                            'curriculum_name': curriculum.name if curriculum else 'Unknown'
+                        })
+                except Exception as e:
+                    deleted_subjects_info.append({
+                        'subject_name': 'Error retrieving info',
+                        'grade_level': 'Unknown',
+                        'curriculum_name': 'Unknown'
+                    })
+        
+        # Delete all existing StudentSubject records for this student
+        if existing_count > 0:
+            print(f"🗑️ Deleting {existing_count} existing StudentSubject records for student {student_id}")
+            StudentSubject.query.filter_by(student_id=student_id).delete()
+            db.session.flush()  # Flush to ensure deletions are processed
+            print(f"✅ Deleted {existing_count} StudentSubject records")
+        else:
+            print(f"ℹ️ No existing StudentSubject records found for student {student_id}")
+        
+        # Import the function from student_repository
+        from app.repositories.student_repository import assign_default_curriculum_to_student
+        
+        # Assign default curriculum
+        with app.app_context():
+            subjects_assigned = assign_default_curriculum_to_student(int(student_id))
+            
+            # Commit all changes (deletions and new assignments)
+            db.session.commit()
+            
+            log_admin_action('delete_and_reassign_curriculum', session.get('admin_username', 'unknown'),
+                            student_id=student_id,
+                            student_name=student_name,
+                            deleted_count=existing_count,
+                            subjects_assigned=subjects_assigned,
+                            deleted_subjects=deleted_subjects_info,
+                            ip_address=request.remote_addr)
+            
+            message = f'Successfully deleted {existing_count} existing subjects and assigned {subjects_assigned} new subjects from default curriculum to {student_name}'
+            flash(message, 'success')
+            
+            return jsonify({
+                'success': True,
+                'message': message,
+                'deleted_count': existing_count,
+                'subjects_assigned': subjects_assigned,
+                'deleted_subjects': deleted_subjects_info
+            })
+        
+    except Exception as e:
+        # Rollback on error
+        db.session.rollback()
+        log_error('ADMIN', f'Error in delete and reassign curriculum for student {student_id}', e,
+                 student_id=student_id,
+                 admin_user=session.get('admin_username', 'unknown'))
+        flash(f'Error deleting and reassigning curriculum: {str(e)}', 'error')
+        return jsonify({'error': f'Failed to delete and reassign curriculum: {str(e)}'}), 500
+
 
 # All Sessions Overview Route
 @app.route('/admin/sessions')

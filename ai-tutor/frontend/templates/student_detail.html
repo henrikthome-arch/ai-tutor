@@ -313,7 +313,27 @@
 
 <!-- Student Subjects and Curriculum Information -->
 <div class="card">
-    <h2 style="color: #2c3e50; margin-top: 0;">📚 Student Subjects & Curriculum</h2>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2 style="color: #2c3e50; margin: 0;">📚 Student Subjects & Curriculum</h2>
+        <div style="display: flex; gap: 0.5rem;">
+            <button
+                class="btn"
+                style="background: #17a2b8; color: white; font-size: 0.8rem; padding: 6px 12px;"
+                onclick="debugStudentSubjects('{{ student.id }}')"
+                title="Debug curriculum assignment issues"
+            >
+                🔍 Debug
+            </button>
+            <button
+                class="btn"
+                style="background: #dc3545; color: white; font-size: 0.8rem; padding: 6px 12px;"
+                onclick="deleteAndReassignCurriculum('{{ student.id }}', '{{ student.name }}')"
+                title="Delete all current assignments and reassign default curriculum"
+            >
+                🔄 Reset Curriculum
+            </button>
+        </div>
+    </div>
     
     {% if progress.student_subjects_detailed %}
         <div style="margin-bottom: 1rem;">
@@ -689,6 +709,130 @@ function assignDefaultCurriculum(studentId, studentName) {
         // Restore button state
         assignBtn.textContent = originalText;
         assignBtn.disabled = false;
+    });
+}
+
+function debugStudentSubjects(studentId) {
+    // Show loading state
+    const debugBtn = event.target;
+    const originalText = debugBtn.textContent;
+    debugBtn.textContent = '🔄 Debugging...';
+    debugBtn.disabled = true;
+    
+    fetch(`/admin/debug/student/${studentId}/subjects`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Create a detailed debug report
+            let debugReport = `=== CURRICULUM DEBUG REPORT ===\n`;
+            debugReport += `Student ID: ${data.debug_info.student_id}\n\n`;
+            
+            debugReport += `📊 SUMMARY:\n`;
+            debugReport += `• Total StudentSubject records: ${data.debug_info.total_student_subjects}\n`;
+            debugReport += `• Detailed subjects query matches: ${data.debug_info.detailed_subjects_count}\n`;
+            debugReport += `• Admin query successful: ${data.debug_info.admin_query_successful}\n`;
+            
+            if (data.debug_info.default_curriculum) {
+                debugReport += `• Default curriculum exists: ${data.debug_info.default_curriculum.exists}\n`;
+                if (data.debug_info.default_curriculum.exists) {
+                    debugReport += `• Default curriculum: ${data.debug_info.default_curriculum.name} (ID: ${data.debug_info.default_curriculum.id})\n`;
+                }
+            }
+            
+            debugReport += `\n📋 RAW STUDENT SUBJECT RECORDS:\n`;
+            if (data.debug_info.student_subjects_raw.length > 0) {
+                data.debug_info.student_subjects_raw.forEach((ss, index) => {
+                    debugReport += `${index + 1}. ID: ${ss.id}, Curriculum Detail ID: ${ss.curriculum_detail_id}\n`;
+                    debugReport += `   Active: ${ss.is_active_for_tutoring}, In Use: ${ss.is_in_use}\n`;
+                    debugReport += `   Progress: ${ss.progress_percentage}%, Created: ${ss.created_at}\n\n`;
+                });
+            } else {
+                debugReport += `No StudentSubject records found.\n`;
+            }
+            
+            debugReport += `\n📚 DETAILED SUBJECTS INFO:\n`;
+            if (data.debug_info.detailed_subjects_info.length > 0) {
+                data.debug_info.detailed_subjects_info.forEach((subj, index) => {
+                    debugReport += `${index + 1}. ${subj.subject_name} (Grade ${subj.grade_level})\n`;
+                    debugReport += `   Curriculum: ${subj.curriculum_name} (Default: ${subj.curriculum_is_default})\n`;
+                    debugReport += `   Category: ${subj.subject_category}, Mandatory: ${subj.is_mandatory}\n`;
+                    debugReport += `   Progress: ${subj.progress_percentage}%, Active: ${subj.is_active_for_tutoring}\n`;
+                    debugReport += `   Learning Objectives: ${subj.learning_objectives_count}, Assessment Criteria: ${subj.assessment_criteria_count}\n\n`;
+                });
+            } else {
+                debugReport += `No detailed subject information found.\n`;
+            }
+            
+            if (data.debug_info.admin_query_error) {
+                debugReport += `\n❌ ADMIN QUERY ERROR:\n${data.debug_info.admin_query_error}\n`;
+            }
+            
+            if (data.debug_info.default_curriculum_error) {
+                debugReport += `\n❌ DEFAULT CURRICULUM ERROR:\n${data.debug_info.default_curriculum_error}\n`;
+            }
+            
+            // Show the debug report in an alert (for now) - could be improved with a modal
+            alert(debugReport);
+        } else {
+            alert(`❌ Debug Error: ${data.error}`);
+        }
+        
+        // Restore button state
+        debugBtn.textContent = originalText;
+        debugBtn.disabled = false;
+    })
+    .catch(error => {
+        console.error('Debug request failed:', error);
+        alert(`❌ Failed to debug student subjects: ${error.message}`);
+        // Restore button state
+        debugBtn.textContent = originalText;
+        debugBtn.disabled = false;
+    });
+}
+
+function deleteAndReassignCurriculum(studentId, studentName) {
+    if (!confirm(`⚠️ RESET CURRICULUM for "${studentName}"?\n\nThis will:\n• DELETE all existing subject assignments\n• REASSIGN the complete default curriculum\n\nThis action cannot be undone. Continue?`)) {
+        return;
+    }
+    
+    // Show loading state
+    const resetBtn = event.target;
+    const originalText = resetBtn.textContent;
+    resetBtn.textContent = '🔄 Resetting...';
+    resetBtn.disabled = true;
+    
+    fetch(`/admin/students/${studentId}/delete-and-reassign-curriculum`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            let message = `✅ ${data.message}`;
+            if (data.deleted_count > 0) {
+                message += `\n\n📋 Deleted Subjects:`;
+                data.deleted_subjects.forEach((subj, index) => {
+                    message += `\n${index + 1}. ${subj.subject_name} (Grade ${subj.grade_level}) - ${subj.curriculum_name}`;
+                });
+            }
+            alert(message);
+            // Reload the page to show the new assignments
+            window.location.reload();
+        } else {
+            alert(`❌ Error: ${data.error}`);
+            // Restore button state
+            resetBtn.textContent = originalText;
+            resetBtn.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Reset curriculum request failed:', error);
+        alert(`❌ Failed to reset curriculum: ${error.message}`);
+        // Restore button state
+        resetBtn.textContent = originalText;
+        resetBtn.disabled = false;
     });
 }
 </script>
