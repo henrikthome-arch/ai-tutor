@@ -274,12 +274,23 @@ def load_cambridge_curriculum_data():
     """Load Cambridge Primary 2025 curriculum data from TSV file"""
     try:
         # Path to the Cambridge curriculum data file - try multiple possible locations
+        # Script is at: /opt/render/project/src/ai-tutor/backend/admin-server.py
+        # Working dir: /opt/render/project/src
+        # Target file: /opt/render/project/src/ai-tutor/data/curriculum/cambridge_primary_2025.txt
         possible_paths = [
+            # Relative to script directory
             os.path.join(os.path.dirname(__file__), '..', 'data', 'curriculum', 'cambridge_primary_2025.txt'),
             os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'curriculum', 'cambridge_primary_2025.txt'),
+            # Relative to working directory
+            os.path.join('ai-tutor', 'data', 'curriculum', 'cambridge_primary_2025.txt'),
             os.path.join('data', 'curriculum', 'cambridge_primary_2025.txt'),
             os.path.join('..', 'data', 'curriculum', 'cambridge_primary_2025.txt'),
-            'ai-tutor/data/curriculum/cambridge_primary_2025.txt'
+            # Absolute paths for production
+            '/opt/render/project/src/ai-tutor/data/curriculum/cambridge_primary_2025.txt',
+            '/opt/render/project/ai-tutor/data/curriculum/cambridge_primary_2025.txt',
+            # Additional relative paths
+            os.path.join(os.getcwd(), 'ai-tutor', 'data', 'curriculum', 'cambridge_primary_2025.txt'),
+            os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'data', 'curriculum', 'cambridge_primary_2025.txt'))
         ]
         
         data_file_path = None
@@ -292,9 +303,45 @@ def load_cambridge_curriculum_data():
         if not data_file_path:
             print(f"⚠️ Cambridge curriculum data file not found in any of these locations:")
             for path in possible_paths:
-                print(f"   - {path}")
+                print(f"   - {path} {'(exists)' if os.path.exists(path) else '(not found)'}")
             print(f"⚠️ Working directory: {os.getcwd()}")
             print(f"⚠️ Script directory: {os.path.dirname(__file__)}")
+            
+            # List contents of directories to help debug
+            try:
+                working_dir = os.getcwd()
+                if os.path.exists(working_dir):
+                    print(f"📁 Contents of working directory ({working_dir}):")
+                    for item in os.listdir(working_dir)[:10]:  # Limit to first 10 items
+                        print(f"   - {item}")
+                
+                ai_tutor_path = os.path.join(working_dir, 'ai-tutor')
+                if os.path.exists(ai_tutor_path):
+                    print(f"📁 Contents of ai-tutor directory ({ai_tutor_path}):")
+                    for item in os.listdir(ai_tutor_path)[:10]:
+                        print(f"   - {item}")
+                    
+                    data_path = os.path.join(ai_tutor_path, 'data')
+                    if os.path.exists(data_path):
+                        print(f"📁 Contents of data directory ({data_path}):")
+                        for item in os.listdir(data_path):
+                            print(f"   - {item}")
+                        
+                        curriculum_path = os.path.join(data_path, 'curriculum')
+                        if os.path.exists(curriculum_path):
+                            print(f"📁 Contents of curriculum directory ({curriculum_path}):")
+                            for item in os.listdir(curriculum_path):
+                                print(f"   - {item}")
+                        else:
+                            print(f"❌ Curriculum directory does not exist: {curriculum_path}")
+                    else:
+                        print(f"❌ Data directory does not exist: {data_path}")
+                else:
+                    print(f"❌ ai-tutor directory does not exist: {ai_tutor_path}")
+                    
+            except Exception as debug_error:
+                print(f"⚠️ Error during directory debugging: {debug_error}")
+            
             return
 
         print(f"📚 Loading Cambridge Primary 2025 curriculum data from {data_file_path}")
