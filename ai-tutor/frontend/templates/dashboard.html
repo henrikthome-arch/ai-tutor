@@ -41,54 +41,28 @@
     </div>
 </div>
 
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
-    <div class="card">
-        <h2>📚 Recent Activity</h2>
-        {% if recent_activity %}
-            <div style="max-height: 300px; overflow-y: auto;">
-                {% for activity in recent_activity %}
-                <div style="padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <strong>{{ activity.student_name }}</strong>
-                        <br>
-                        <span style="color: #666; font-size: 0.9rem;">{{ activity.action }}</span>
-                    </div>
-                    <span style="color: #999; font-size: 0.8rem;">{{ activity.time }}</span>
-                </div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <p style="color: #666; font-style: italic;">No recent activity</p>
-        {% endif %}
+<div class="card" style="margin-bottom: 2rem;">
+    <h2>🎯 Quick Actions</h2>
+    <div style="display: grid; gap: 1rem;">
+        <a href="{{ url_for('admin_students') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
+            👥 Manage Students
+        </a>
         
-        <div style="margin-top: 1rem; text-align: center;">
-            <a href="{{ url_for('admin_students') }}" class="btn">View All Students</a>
-        </div>
-    </div>
-    
-    <div class="card">
-        <h2>🎯 Quick Actions</h2>
-        <div style="display: grid; gap: 1rem;">
-            <a href="{{ url_for('admin_students') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
-                👥 Manage Students
-            </a>
-            
-            <a href="{{ url_for('admin_curriculum') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
-                📚 Manage Curriculum
-            </a>
-            
-            <a href="{{ url_for('admin_database') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
-                🗄️ Browse Database
-            </a>
-            
-            <a href="{{ url_for('admin_system') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
-                ⚙️ System Settings
-            </a>
-            
-            <a href="{{ url_for('admin_all_sessions') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
-                📊 View Sessions
-            </a>
-        </div>
+        <a href="{{ url_for('admin_curriculum') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
+            📚 Manage Curriculum
+        </a>
+        
+        <a href="{{ url_for('admin_database') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
+            🗄️ Browse Database
+        </a>
+        
+        <a href="{{ url_for('admin_system') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
+            ⚙️ System Settings
+        </a>
+        
+        <a href="{{ url_for('admin_all_sessions') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
+            📊 View Sessions
+        </a>
     </div>
 </div>
 
