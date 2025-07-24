@@ -123,8 +123,8 @@ def get_recent_assessments(days: int = 7) -> List[Dict[str, Any]]:
     """
     cutoff_date = datetime.utcnow() - timedelta(days=days)
     student_subjects = StudentSubject.query.filter(
-        StudentSubject.last_assessment_date >= cutoff_date
-    ).order_by(desc(StudentSubject.last_assessment_date)).all()
+        StudentSubject.updated_at >= cutoff_date
+    ).order_by(desc(StudentSubject.updated_at)).all()
     
     return [ss.to_dict() for ss in student_subjects]
 
@@ -189,8 +189,9 @@ def update(student_id, subject_id, assessment_data: Dict[str, Any]) -> Optional[
                 setattr(student_subject, key, value)
         
         # Update last assessment date if assessment data is being updated
-        if any(key in assessment_data for key in ['current_mastery_level', 'performance_score', 'completed_topics', 'learning_goals']):
-            student_subject.last_assessment_date = datetime.utcnow()
+        if any(key in assessment_data for key in ['mastery_level', 'progress_percentage', 'ai_assessment']):
+            # last_assessment_date doesn't exist, updated_at is handled automatically
+            pass
         
         db.session.commit()
         
@@ -229,22 +230,33 @@ def update_progress(student_id, subject_id, progress_data: Dict[str, Any]) -> Op
         
         # Update progress-specific fields
         if 'mastery_level' in progress_data:
-            student_subject.current_mastery_level = progress_data['mastery_level']
+            student_subject.mastery_level = progress_data['mastery_level']
         
         if 'performance_score' in progress_data:
-            student_subject.performance_score = progress_data['performance_score']
+            # Map performance_score to progress_percentage (0-100 scale)
+            student_subject.progress_percentage = progress_data['performance_score'] / 100.0 if progress_data['performance_score'] <= 100 else progress_data['performance_score']
         
         if 'completed_topics' in progress_data:
-            student_subject.completed_topics = progress_data['completed_topics']
+            # completed_topics doesn't exist in model, store in ai_assessment field as JSON
+            student_subject.ai_assessment = f"Completed topics: {progress_data['completed_topics']}"
         
         if 'learning_goals' in progress_data:
-            student_subject.learning_goals = progress_data['learning_goals']
+            # learning_goals doesn't exist in model, append to teacher_notes
+            if student_subject.teacher_notes:
+                student_subject.teacher_notes += f"\nLearning goals: {progress_data['learning_goals']}"
+            else:
+                student_subject.teacher_notes = f"Learning goals: {progress_data['learning_goals']}"
         
         if 'strengths' in progress_data:
-            student_subject.strengths = progress_data['strengths']
+            # strengths doesn't exist in model, store in comments_tutor
+            if student_subject.comments_tutor:
+                student_subject.comments_tutor += f"\nStrengths: {progress_data['strengths']}"
+            else:
+                student_subject.comments_tutor = f"Strengths: {progress_data['strengths']}"
         
         if 'areas_for_improvement' in progress_data:
-            student_subject.areas_for_improvement = progress_data['areas_for_improvement']
+            # Map areas_for_improvement to weaknesses field
+            student_subject.weaknesses = progress_data['areas_for_improvement']
         
         # Note: session_count and total_time_minutes fields don't exist in StudentSubject model
         # These would need to be added to the model if session tracking is required
@@ -253,8 +265,8 @@ def update_progress(student_id, subject_id, progress_data: Dict[str, Any]) -> Op
         # if 'total_time_minutes' in progress_data:
         #     student_subject.total_time_minutes = progress_data['total_time_minutes']
         
-        # Always update last assessment date when progress is updated
-        student_subject.last_assessment_date = datetime.utcnow()
+        # updated_at is handled automatically by the model
+        # student_subject.last_assessment_date doesn't exist
         
         db.session.commit()
         
@@ -371,12 +383,9 @@ def enroll_student_in_subject(student_id, subject_id, grade_level: int,
             'grade_level': grade_level,
             'enrollment_date': datetime.utcnow(),
             'is_in_use': True,
-            'current_mastery_level': 'beginner',
-            'performance_score': 0.0,
-            'completed_topics': [],
-            'learning_goals': [],
-            'strengths': [],
-            'areas_for_improvement': []
+            'mastery_level': 'beginner',
+            'progress_percentage': 0.0
+            # Note: completed_topics, learning_goals, strengths, areas_for_improvement don't exist in current model
             # Note: session_count and total_time_minutes not available in current model
         }
         
@@ -459,14 +468,14 @@ def get_student_progress_summary(student_id) -> Dict[str, Any]:
         total_time_minutes = 0  # Default to 0 since time tracking not implemented
         total_time_hours = total_time_minutes / 60.0
         
-        # Calculate average performance (excluding 0 scores)
-        performance_scores = [ss.performance_score for ss in active_subjects if ss.performance_score > 0]
+        # Calculate average performance using progress_percentage (excluding 0 scores)
+        performance_scores = [ss.progress_percentage * 100 for ss in active_subjects if ss.progress_percentage and ss.progress_percentage > 0]
         average_performance = sum(performance_scores) / len(performance_scores) if performance_scores else 0.0
         
         # Count mastery levels
         mastery_counts = {}
         for ss in active_subjects:
-            level = ss.current_mastery_level
+            level = ss.mastery_level if ss.mastery_level else 'unknown'
             mastery_counts[level] = mastery_counts.get(level, 0) + 1
         
         return {
@@ -477,7 +486,7 @@ def get_student_progress_summary(student_id) -> Dict[str, Any]:
             'total_time_hours': round(total_time_hours, 2),
             'mastery_distribution': mastery_counts,
             'subjects': [ss.to_dict() for ss in active_subjects],
-            'last_updated': max(ss.last_assessment_date for ss in active_subjects if ss.last_assessment_date) if active_subjects else None
+            'last_updated': max(ss.updated_at for ss in active_subjects if ss.updated_at) if active_subjects else None
         }
     except (ValueError, TypeError):
         return {'error': 'Invalid student_id'}
@@ -512,13 +521,13 @@ def get_subject_performance_stats(subject_id) -> Dict[str, Any]:
         
         # Calculate statistics
         total_students = len(enrollments)
-        performance_scores = [e.performance_score for e in enrollments if e.performance_score > 0]
+        performance_scores = [e.progress_percentage * 100 for e in enrollments if e.progress_percentage and e.progress_percentage > 0]
         average_performance = sum(performance_scores) / len(performance_scores) if performance_scores else 0.0
         
         # Mastery level distribution
         mastery_counts = {}
         for enrollment in enrollments:
-            level = enrollment.current_mastery_level
+            level = enrollment.mastery_level if enrollment.mastery_level else 'unknown'
             mastery_counts[level] = mastery_counts.get(level, 0) + 1
         
         # Grade level distribution
@@ -576,7 +585,7 @@ def get_class_analytics(grade_level: int = None, subject_id = None) -> Dict[str,
         
         # Calculate analytics
         unique_students = len(set(e.student_id for e in enrollments))
-        performance_scores = [e.performance_score for e in enrollments if e.performance_score > 0]
+        performance_scores = [e.progress_percentage * 100 for e in enrollments if e.progress_percentage and e.progress_percentage > 0]
         average_performance = sum(performance_scores) / len(performance_scores) if performance_scores else 0.0
         
         return {
