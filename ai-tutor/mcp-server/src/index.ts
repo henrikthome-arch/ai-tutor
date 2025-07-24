@@ -326,6 +326,198 @@ app.post('/mcp/get-student-context', async (req, res) => {
   }
 });
 
+// MCP Tool: Get comprehensive VAPI context by phone number
+app.post('/mcp/get-vapi-context', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const { phone_number, call_type = 'tutoring' } = req.body;
+    
+    console.log(`[${new Date().toISOString()}] MCP: get-vapi-context called for phone: ${phone_number}, call_type: ${call_type}`);
+    
+    if (!phone_number) {
+      console.log(`[${new Date().toISOString()}] MCP: get-vapi-context error - phone_number is required`);
+      return res.status(400).json({ error: 'phone_number is required' });
+    }
+
+    // Load phone mapping to find student
+    let phoneMapping;
+    let student_id = null;
+    
+    try {
+      phoneMapping = await readJsonFile('phone_mapping.json');
+      student_id = phoneMapping.phone_to_student?.[phone_number];
+    } catch (error) {
+      console.log(`[${new Date().toISOString()}] MCP: Phone mapping not found, treating as first call`);
+    }
+
+    // Load school information (enhanced with rich context)
+    let schoolData;
+    try {
+      schoolData = await readJsonFile('schools/school_data.json');
+    } catch (error) {
+      console.log(`[${new Date().toISOString()}] MCP: Could not load school data: ${error.message}`);
+      schoolData = { schools: [] };
+    }
+
+    // Default school (International School of Greece)
+    const defaultSchool = schoolData.schools?.find(s => s.school_id === 'international_school_greece') || {
+      school_id: 'international_school_greece',
+      name: 'International School of Greece',
+      location: 'Athens, Greece',
+      background: 'A prestigious international school offering a blend of Greek and international curriculum for students from diverse backgrounds.',
+      curriculum_type: 'International Baccalaureate'
+    };
+
+    // If no student found (first call scenario)
+    if (!student_id) {
+      const duration = Date.now() - startTime;
+      console.log(`[${new Date().toISOString()}] MCP: get-vapi-context first call scenario for ${phone_number} in ${duration}ms`);
+      
+      return res.json({
+        success: true,
+        data: {
+          is_first_call: true,
+          phone_number: phone_number,
+          call_type: call_type,
+          school_context: {
+            info: defaultSchool,
+            enhanced_info: defaultSchool.enhanced_info || {},
+            message: "Welcome to our AI tutoring system! This appears to be your first call."
+          },
+          curriculum_overview: {
+            available_grades: ['1', '2', '3', '4', '5', '6'],
+            main_subjects: ['mathematics', 'english', 'science', 'modern_greek_language'],
+            curriculum_system: 'Cambridge Primary + Greek National Requirements',
+            approach: 'Personalized learning adapted to each student\'s interests and learning style'
+          },
+          session_guidance: {
+            first_call_approach: 'Introduction and assessment',
+            recommended_duration: '20-30 minutes',
+            focus_areas: ['getting to know the student', 'identifying interests', 'assessing current level', 'explaining how the tutoring works'],
+            next_steps: 'After this call, we\'ll create a personalized learning profile for future sessions'
+          }
+        }
+      });
+    }
+
+    // Student found - get comprehensive context
+    const profile = await readJsonFile(`students/${student_id}/profile.json`);
+    let progress = null;
+    let recentSessions = [];
+    
+    try {
+      progress = await readJsonFile(`students/${student_id}/progress.json`);
+    } catch (error) {
+      console.log(`[${new Date().toISOString()}] MCP: No progress file for ${student_id}`);
+    }
+
+    // Get recent sessions
+    try {
+      const sessionFiles = await listFiles(`students/${student_id}/sessions`);
+      const recentSummaryFiles = sessionFiles
+        .filter(file => file.endsWith('_summary.json'))
+        .sort((a, b) => b.localeCompare(a))
+        .slice(0, 3);
+
+      for (const file of recentSummaryFiles) {
+        const sessionDate = file.replace('_summary.json', '');
+        const summary = await readJsonFile(`students/${student_id}/sessions/${file}`);
+        recentSessions.push({
+          date: sessionDate,
+          summary: summary
+        });
+      }
+    } catch (error) {
+      console.log(`[${new Date().toISOString()}] MCP: No sessions found for ${student_id}`);
+    }
+
+    // Get curriculum data based on student's grade and school
+    let curriculumContext = {};
+    try {
+      const curriculum = await readJsonFile('curriculum/international_school_greece.json');
+      const gradeData = curriculum.grades?.[profile.student_info?.grade?.toString()];
+      
+      curriculumContext = {
+        grade_subjects: gradeData,
+        school_type: curriculum.school_type,
+        curriculum_system: curriculum.curriculum_system,
+        learning_goals: curriculum.learning_goals_by_subject || {}
+      };
+    } catch (error) {
+      console.log(`[${new Date().toISOString()}] MCP: Could not load curriculum for ${student_id}`);
+    }
+
+    const duration = Date.now() - startTime;
+    console.log(`[${new Date().toISOString()}] MCP: get-vapi-context completed for ${student_id} (${phone_number}) in ${duration}ms`);
+    
+    res.json({
+      success: true,
+      data: {
+        is_first_call: false,
+        phone_number: phone_number,
+        student_id: student_id,
+        call_type: call_type,
+        student_context: {
+          profile: profile,
+          progress: progress,
+          recent_sessions: recentSessions,
+          session_count: recentSessions.length
+        },
+        school_context: {
+          info: defaultSchool,
+          enhanced_info: defaultSchool.enhanced_info || {}
+        },
+        curriculum_context: curriculumContext,
+        tutoring_guidance: {
+          optimal_duration: profile.session_preferences?.optimal_duration || '30-40 minutes',
+          attention_span: profile.session_preferences?.attention_span || '10-15 minutes',
+          preferred_rewards: profile.session_preferences?.preferred_rewards || [],
+          key_strategies: profile.practical_session_guidance?.map(g => ({
+            strategy: g.strategy,
+            implementation: g.implementation
+          })) || [],
+          areas_for_growth: profile.areas_for_growth || [],
+          motivational_triggers: profile.key_takeaways?.motivational_triggers || {}
+        }
+      }
+    });
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.log(`[${new Date().toISOString()}] MCP: get-vapi-context error for ${req.body?.phone_number} in ${duration}ms: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// MCP Tool: Get school information with enhanced details
+app.post('/mcp/get-school-info', async (req, res) => {
+  try {
+    const { school_id = 'international_school_greece' } = req.body;
+    
+    const schoolData = await readJsonFile('schools/school_data.json');
+    const school = schoolData.schools?.find(s => s.school_id === school_id);
+    
+    if (!school) {
+      return res.status(404).json({
+        success: false,
+        error: `School not found: ${school_id}`
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: school
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
@@ -403,6 +595,37 @@ app.post('/mcp/get-system-logs', validateToken('logs:read'), async (req, res) =>
 app.get('/mcp/tools', (req, res) => {
   res.json({
     tools: [
+      {
+        name: 'get-vapi-context',
+        description: 'VAPI-OPTIMIZED: Get comprehensive context for VAPI calls including student data, school info, curriculum, and tutoring guidance. Handles both existing students and first-call scenarios using phone number lookup.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            phone_number: {
+              type: 'string',
+              description: 'The phone number used to identify the student (e.g., "+12345678901")'
+            },
+            call_type: {
+              type: 'string',
+              description: 'Type of call: "tutoring", "assessment", "introduction" (default: "tutoring")'
+            }
+          },
+          required: ['phone_number']
+        }
+      },
+      {
+        name: 'get-school-info',
+        description: 'Get comprehensive school information including mission, values, teaching philosophy, and programs',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            school_id: {
+              type: 'string',
+              description: 'School identifier (default: "international_school_greece")'
+            }
+          }
+        }
+      },
       {
         name: 'get-student-profile',
         description: 'Get detailed profile information for a student including personality, interests, and learning preferences',

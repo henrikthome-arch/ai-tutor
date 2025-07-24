@@ -58,6 +58,7 @@ EXTRACTION GUIDELINES:
 RESPONSE FORMAT:
 You must provide extracted information in JSON format with these fields:
 {
+  "name": <string - student's full name or null if not mentioned>,
   "age": <integer or null>,
   "grade": <integer or null>,
   "interests": [<list of strings>],
@@ -69,13 +70,18 @@ You must provide extracted information in JSON format with these fields:
   "confidence_score": <float between 0.0 and 1.0>
 }
 
-IMPORTANT: For age and grade, return ONLY numeric values (e.g., 12, not "12 years old"). For each field, provide the exact information mentioned by the student. If the information is not present, use null for numeric fields and empty arrays for lists.""",
+IMPORTANT:
+- For name, extract the student's actual name if they introduce themselves (e.g., "Hi, I'm Sarah" → "Sarah")
+- For age and grade, return ONLY numeric values (e.g., 12, not "12 years old")
+- For each field, provide the exact information mentioned by the student
+- If the information is not present, use null for numeric fields and empty arrays for lists.""",
             user_prompt_template="""Please extract student profile information from this conversation transcript.
 
 CONVERSATION TRANSCRIPT:
 {transcript}
 
 Extract only information that is explicitly stated by the student. Format your response as a valid JSON object with the following fields:
+- name: The student's full name if they introduce themselves (e.g., "Hi, I'm Sarah" → "Sarah")
 - age: The student's age (integer only, e.g., 10, not "10 years old")
 - grade: The student's grade level (integer only, e.g., 4, not "4th grade")
 - interests: List of the student's interests or hobbies
@@ -85,7 +91,7 @@ Extract only information that is explicitly stated by the student. Format your r
 
 If information for a field is not present in the transcript, use null for numeric fields and empty arrays for lists.
 
-IMPORTANT: Look for statements like "I'm 10" or "I'm in 4th grade" or "I like playing games" and extract them accurately.
+IMPORTANT: Look for statements like "Hi, I'm Emma" or "My name is John" or "I'm 10" or "I'm in 4th grade" or "I like playing games" and extract them accurately.
 For age and grade, return ONLY the numeric value - no text formatting.
 Do not include any explanatory text in your response, ONLY the JSON object.
 """,
@@ -259,6 +265,7 @@ TRANSCRIPT:
 TASK: Extract student information from this conversation and return ONLY a JSON object with the following structure:
 
 {{
+  "name": <string or null>,
   "age": <number or null>,
   "grade": <number or null>,
   "interests": ["list", "of", "interests"],
@@ -271,14 +278,16 @@ TASK: Extract student information from this conversation and return ONLY a JSON 
 }}
 
 EXTRACTION RULES:
-1. Look for explicit statements like "I'm 8 years old", "I'm in 3rd grade", "I like soccer"
-2. Extract hobbies, interests, sports, activities mentioned by the student
-3. Note any subjects or topics the student mentions liking or finding difficult
-4. For age: ONLY return the numeric value (e.g., 8, not "8 years old")
-5. For grade: ONLY return the numeric value (e.g., 3, not "third grade" or "Grade 3")
-6. If the student mentions grade level with words like "third grade", convert to number: 3
-7. Be very careful to extract ALL mentioned interests and hobbies
-8. Return confidence_score as 0.9 if you found clear information, 0.5 if uncertain, 0.1 if very little found
+1. Look for explicit statements like "Hi, I'm Emma", "My name is John", "I'm 8 years old", "I'm in 3rd grade", "I like soccer"
+2. Extract the student's actual name if they introduce themselves
+3. Extract hobbies, interests, sports, activities mentioned by the student
+4. Note any subjects or topics the student mentions liking or finding difficult
+5. For name: Extract the actual name, not descriptive terms like "student" or "kid"
+6. For age: ONLY return the numeric value (e.g., 8, not "8 years old")
+7. For grade: ONLY return the numeric value (e.g., 3, not "third grade" or "Grade 3")
+8. If the student mentions grade level with words like "third grade", convert to number: 3
+9. Be very careful to extract ALL mentioned interests and hobbies
+10. Return confidence_score as 0.9 if you found clear information, 0.5 if uncertain, 0.1 if very little found
 
 IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
 """
@@ -630,6 +639,80 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             
             # Track changes
             updated_fields = []
+            
+            # Update student name if extracted from transcript
+            name_updated = False
+            if 'name' in extracted_info and extracted_info['name'] and extracted_info['name'] != 'Unknown':
+                try:
+                    full_name = str(extracted_info['name']).strip()
+                    if full_name and full_name.lower() not in ['unknown', 'student', 'not specified']:
+                        # Parse full name into first and last name
+                        name_parts = full_name.split()
+                        if len(name_parts) >= 1:
+                            new_first_name = name_parts[0]
+                            new_last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+                            
+                            # Only update if the current name looks like a default name
+                            current_first = student.first_name or ''
+                            current_last = student.last_name or ''
+                            current_full = f"{current_first} {current_last}".strip()
+                            
+                            # Check if current name is a default/generated name pattern
+                            is_default_name = (
+                                current_first == 'Student' or
+                                current_full.startswith('Student ') or
+                                'Unknown_' in current_full or
+                                len(current_full) <= 10  # Very short names are likely defaults
+                            )
+                            
+                            if is_default_name:
+                                student.first_name = new_first_name
+                                student.last_name = new_last_name
+                                updated_fields.append('name')
+                                name_updated = True
+                                logger.info(f"Updated student name from '{current_full}' to '{full_name}'")
+                            else:
+                                logger.info(f"Keeping existing name '{current_full}', extracted '{full_name}' (not a default name)")
+                except (ValueError, TypeError, AttributeError) as e:
+                    logger.warning(f"Invalid name value: {extracted_info.get('name')}: {e}")
+            
+            # Handle conditional prompt response format (student_profile wrapper)
+            profile_data = extracted_info
+            if 'student_profile' in extracted_info:
+                profile_data = extracted_info['student_profile']
+                
+                # Also try to extract name from student_profile
+                if not name_updated and 'name' in profile_data and profile_data['name']:
+                    try:
+                        full_name = str(profile_data['name']).strip()
+                        if full_name and full_name.lower() not in ['unknown', 'student', 'not specified']:
+                            # Parse full name into first and last name
+                            name_parts = full_name.split()
+                            if len(name_parts) >= 1:
+                                new_first_name = name_parts[0]
+                                new_last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+                                
+                                # Only update if the current name looks like a default name
+                                current_first = student.first_name or ''
+                                current_last = student.last_name or ''
+                                current_full = f"{current_first} {current_last}".strip()
+                                
+                                # Check if current name is a default/generated name pattern
+                                is_default_name = (
+                                    current_first == 'Student' or
+                                    current_full.startswith('Student ') or
+                                    'Unknown_' in current_full or
+                                    len(current_full) <= 10  # Very short names are likely defaults
+                                )
+                                
+                                if is_default_name:
+                                    student.first_name = new_first_name
+                                    student.last_name = new_last_name
+                                    updated_fields.append('name')
+                                    name_updated = True
+                                    logger.info(f"Updated student name from conditional prompt: '{current_full}' to '{full_name}'")
+                    except (ValueError, TypeError, AttributeError) as e:
+                        logger.warning(f"Invalid conditional prompt name value: {profile_data.get('name')}: {e}")
             
             # Update age by calculating date_of_birth if provided
             if 'age' in extracted_info and extracted_info['age'] is not None:

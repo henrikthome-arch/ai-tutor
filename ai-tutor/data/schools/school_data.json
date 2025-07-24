@@ -12,6 +12,33 @@
         "english_grade_4": [4],
         "math_grade_5": [5],
         "history_grade_5": [5]
+      },
+      "enhanced_info": {
+        "mission": "To provide a world-class international education that celebrates Greek heritage while preparing students for global citizenship.",
+        "values": [
+          "Academic Excellence",
+          "Cultural Appreciation",
+          "Critical Thinking",
+          "Global Mindedness",
+          "Community Service"
+        ],
+        "teaching_philosophy": "We believe in nurturing each student's individual potential through personalized learning, encouraging curiosity, creativity, and collaboration in a multicultural environment.",
+        "unique_programs": [
+          "Bilingual Greek-English instruction",
+          "Cambridge Primary curriculum with Greek national requirements",
+          "International Baccalaureate preparation",
+          "Rich cultural exchange programs",
+          "Environmental sustainability projects"
+        ],
+        "academic_approach": "Our approach combines the rigor of Cambridge Primary standards with the cultural richness of Greek education. We emphasize hands-on learning, project-based assessments, and develop students who can think critically in both Greek and English.",
+        "student_support": "Small class sizes (max 20 students) ensure personalized attention. We provide extra support for bilingual learners and have specialized programs for students with different learning needs.",
+        "extracurricular_highlights": [
+          "Ancient Greek history and archaeology club",
+          "International Model United Nations",
+          "Robotics and STEM innovation lab",
+          "Traditional Greek dance and music",
+          "Environmental conservation projects"
+        ]
       }
     },
     {
@@ -20,7 +47,34 @@
       "location": "New York, USA",
       "background": "A modern school focused on STEM education and innovative teaching methods.",
       "curriculum_type": "American Common Core",
-      "curriculum_mapping": {}
+      "curriculum_mapping": {},
+      "enhanced_info": {
+        "mission": "To prepare students for the future through innovative STEM education and 21st-century learning skills.",
+        "values": [
+          "Innovation",
+          "Scientific Inquiry",
+          "Technology Integration",
+          "Collaborative Learning",
+          "Future Readiness"
+        ],
+        "teaching_philosophy": "We believe in project-based learning that connects real-world problems with academic concepts, fostering creativity and problem-solving skills.",
+        "unique_programs": [
+          "Advanced STEM laboratory facilities",
+          "Coding and robotics from elementary level",
+          "Maker space for engineering projects",
+          "Partnership with local tech companies",
+          "Student innovation competitions"
+        ],
+        "academic_approach": "Integration of technology in all subjects, emphasis on data analysis, scientific method, and engineering design process.",
+        "student_support": "Individual learning plans, peer tutoring programs, and specialized support for gifted and talented students.",
+        "extracurricular_highlights": [
+          "Science Olympiad team",
+          "First Lego League robotics",
+          "Young Engineers Club",
+          "Mathematics competition teams",
+          "Technology showcase events"
+        ]
+      }
     },
     {
       "school_id": "british_international",
@@ -28,7 +82,34 @@
       "location": "London, UK",
       "background": "A traditional British curriculum school with emphasis on academic excellence and character development.",
       "curriculum_type": "British National Curriculum",
-      "curriculum_mapping": {}
+      "curriculum_mapping": {},
+      "enhanced_info": {
+        "mission": "To provide an outstanding British education that develops well-rounded individuals with strong academic foundations and exemplary character.",
+        "values": [
+          "Academic Excellence",
+          "Integrity",
+          "Respect",
+          "Responsibility",
+          "Tradition with Innovation"
+        ],
+        "teaching_philosophy": "We maintain high academic standards while nurturing each child's personal development, emphasizing discipline, respect, and the pursuit of excellence.",
+        "unique_programs": [
+          "Traditional British house system",
+          "Comprehensive sports programme",
+          "Music and performing arts excellence",
+          "Duke of Edinburgh Award scheme",
+          "Classical education elements"
+        ],
+        "academic_approach": "Structured curriculum following British National standards, emphasis on literacy, numeracy, and critical thinking with traditional assessment methods.",
+        "student_support": "Pastoral care system, learning support department, and individual attention within structured classroom environments.",
+        "extracurricular_highlights": [
+          "Inter-house competitions",
+          "School orchestra and choir",
+          "Rugby, cricket, and football teams",
+          "Debating society",
+          "Community service projects"
+        ]
+      }
     }
   ]
 }
