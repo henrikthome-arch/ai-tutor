@@ -41,7 +41,12 @@
 </div>
 
 <div class="card">
-    <h2>🗂️ Database Tables</h2>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2>🗂️ Database Tables</h2>
+        <button id="copyAllTablesBtn" class="btn" style="background: #3498db; color: white; font-size: 0.9rem; padding: 6px 12px;">
+            📋 Copy All as Markdown
+        </button>
+    </div>
     
     {% if tables %}
     <table class="table">
@@ -247,8 +252,89 @@ document.addEventListener('DOMContentLoaded', function() {
             cancelBtn.disabled = false;
         });
     });
+    // Copy all tables functionality
+    const copyAllBtn = document.getElementById('copyAllTablesBtn');
+    const copyAllToast = document.getElementById('copyAllToast');
+
+    if (copyAllBtn) {
+        copyAllBtn.addEventListener('click', function() {
+            copyAllTablesAsMarkdown();
+        });
+    }
+
+    function copyAllTablesAsMarkdown() {
+        // Build markdown for entire database structure
+        let markdown = `# Database Structure Overview\n\n`;
+        markdown += `**Database Type:** PostgreSQL\n`;
+        markdown += `**Last Updated:** ${new Date().toLocaleString()}\n\n`;
+        
+        // Add overview table
+        const tableRows = document.querySelectorAll('.table tbody tr');
+        if (tableRows.length > 0) {
+            markdown += `## Tables Summary\n\n`;
+            markdown += `| Table Name | Record Count | Actions |\n`;
+            markdown += `| --- | --- | --- |\n`;
+            
+            tableRows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length >= 3) {
+                    const tableName = cells[0].textContent.trim();
+                    const recordCount = cells[1].textContent.trim();
+                    const browseUrl = cells[2].querySelector('a') ? cells[2].querySelector('a').href : 'N/A';
+                    markdown += `| ${tableName} | ${recordCount} | [Browse](${browseUrl}) |\n`;
+                }
+            });
+            
+            markdown += `\n`;
+            markdown += `## Individual Table Details\n\n`;
+            markdown += `*Note: Click on individual table "Browse" links and use the "Copy as Markdown" button on each table page to get detailed table contents.*\n\n`;
+            
+            // Add table details section
+            tableRows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length >= 2) {
+                    const tableName = cells[0].textContent.trim();
+                    const recordCount = cells[1].textContent.trim();
+                    markdown += `### ${tableName}\n`;
+                    markdown += `- **Records:** ${recordCount}\n`;
+                    markdown += `- **Purpose:** *Database table for ${tableName.toLowerCase().replace(/_/g, ' ')}*\n\n`;
+                }
+            });
+        } else {
+            markdown += `*No tables found in database.*\n`;
+        }
+        
+        // Copy to clipboard
+        navigator.clipboard.writeText(markdown).then(function() {
+            showCopyAllToast();
+        }).catch(function(err) {
+            console.error('Failed to copy text: ', err);
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = markdown;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            showCopyAllToast();
+        });
+    }
+
+    function showCopyAllToast() {
+        if (copyAllToast) {
+            copyAllToast.style.display = 'block';
+            setTimeout(function() {
+                copyAllToast.style.display = 'none';
+            }, 3000);
+        }
+    }
 });
 </script>
+
+<!-- Copy All Status Toast -->
+<div id="copyAllToast" style="display: none; position: fixed; top: 20px; right: 20px; background: #27ae60; color: white; padding: 1rem 1.5rem; border-radius: 4px; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+    ✅ Database structure copied to clipboard as markdown!
+</div>
 
 <style>
 @keyframes progress {

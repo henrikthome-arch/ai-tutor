@@ -829,14 +829,14 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                 print(f"🔍 DEBUG: ❌ No valid names extracted from AI response")
                 print(f"🔍 DEBUG: new_first_name='{new_first_name}', new_last_name='{new_last_name}'")
             
-            # Use extracted_info directly for profile data (simplified approach)
-            profile_data = extracted_info
+            # Handle nested student_profile structure consistently for ALL fields
+            student_profile_data = extracted_info.get('student_profile', {})
             
-            # Update age by calculating date_of_birth if provided - handle nested structure
+            # Update age by calculating date_of_birth if provided - handle nested structure properly
             age_val = None
-            if profile_data and profile_data.get('age') is not None:
-                age_val = profile_data.get('age')
-                logger.info(f"🔍 DEBUG: Found age in profile_data: {age_val}")
+            if student_profile_data and student_profile_data.get('age') is not None:
+                age_val = student_profile_data.get('age')
+                logger.info(f"🔍 DEBUG: Found age in student_profile_data: {age_val}")
             elif extracted_info.get('age') is not None:
                 age_val = extracted_info.get('age')
                 logger.info(f"🔍 DEBUG: Found age in extracted_info: {age_val}")
@@ -857,11 +857,11 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                 except (ValueError, TypeError):
                     logger.warning(f"Invalid age value: {age_val}")
             
-            # Update grade_level in Student model if provided - handle nested structure
+            # Update grade_level in Student model if provided - handle nested structure properly
             grade_val = None
-            if profile_data and profile_data.get('grade') is not None:
-                grade_val = profile_data.get('grade')
-                logger.info(f"🔍 DEBUG: Found grade in profile_data: {grade_val}")
+            if student_profile_data and student_profile_data.get('grade') is not None:
+                grade_val = student_profile_data.get('grade')
+                logger.info(f"🔍 DEBUG: Found grade in student_profile_data: {grade_val}")
             elif extracted_info.get('grade') is not None:
                 grade_val = extracted_info.get('grade')
                 logger.info(f"🔍 DEBUG: Found grade in extracted_info: {grade_val}")
@@ -883,11 +883,11 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             if profile.learning_preferences is None:
                 profile.learning_preferences = []
             
-            # Handle interests - check nested structure first
+            # Handle interests - check nested structure first properly
             interests_to_add = []
-            if profile_data and profile_data.get('interests'):
-                interests_to_add = profile_data.get('interests', [])
-                logger.info(f"🔍 DEBUG: Found interests in profile_data: {interests_to_add}")
+            if student_profile_data and student_profile_data.get('interests'):
+                interests_to_add = student_profile_data.get('interests', [])
+                logger.info(f"🔍 DEBUG: Found interests in student_profile_data: {interests_to_add}")
             elif extracted_info.get('interests'):
                 interests_to_add = extracted_info.get('interests', [])
                 logger.info(f"🔍 DEBUG: Found interests in extracted_info: {interests_to_add}")
@@ -905,11 +905,11 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                     updated_fields.append('interests')
                     logger.info(f"Added new interests: {new_interests}")
             
-            # Handle learning preferences - check nested structure first
+            # Handle learning preferences - check nested structure first properly
             learning_prefs_to_add = []
-            if profile_data and profile_data.get('learning_preferences'):
-                learning_prefs_to_add = profile_data.get('learning_preferences', [])
-                logger.info(f"🔍 DEBUG: Found learning_preferences in profile_data: {learning_prefs_to_add}")
+            if student_profile_data and student_profile_data.get('learning_preferences'):
+                learning_prefs_to_add = student_profile_data.get('learning_preferences', [])
+                logger.info(f"🔍 DEBUG: Found learning_preferences in student_profile_data: {learning_prefs_to_add}")
             elif extracted_info.get('learning_preferences'):
                 learning_prefs_to_add = extracted_info.get('learning_preferences', [])
                 logger.info(f"🔍 DEBUG: Found learning_preferences in extracted_info: {learning_prefs_to_add}")

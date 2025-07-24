@@ -14,7 +14,10 @@
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
         <h2>📋 Table Contents</h2>
-        <div>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <button id="copyTableBtn" class="btn" style="background: #3498db; color: white; font-size: 0.9rem; padding: 6px 12px;">
+                📋 Copy as Markdown
+            </button>
             <span style="background: #e3f2fd; padding: 4px 12px; border-radius: 12px; font-size: 0.9rem;">
                 {{ items|length }} records
             </span>
@@ -134,4 +137,98 @@
         {% endif %}
     </div>
 </div>
+
+<!-- Copy Status Toast -->
+<div id="copyToast" style="display: none; position: fixed; top: 20px; right: 20px; background: #27ae60; color: white; padding: 1rem 1.5rem; border-radius: 4px; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+    ✅ Table copied to clipboard as markdown!
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const copyBtn = document.getElementById('copyTableBtn');
+    const toast = document.getElementById('copyToast');
+    
+    if (copyBtn) {
+        copyBtn.addEventListener('click', function() {
+            copyTableAsMarkdown();
+        });
+    }
+    
+    function copyTableAsMarkdown() {
+        // Get table info from DOM
+        const tableTitle = document.querySelector('h1').textContent.trim();
+        const recordsSpan = document.querySelector('span[style*="background: #e3f2fd"]');
+        const recordCount = recordsSpan ? recordsSpan.textContent.replace(' records', '').trim() : '0';
+        
+        // Build markdown table
+        let markdown = `# ${tableTitle}\n\n`;
+        markdown += `**Records:** ${recordCount}\n\n`;
+        
+        // Find the HTML table
+        const table = document.querySelector('.table');
+        if (!table) {
+            markdown += '*No table data available.*\n';
+        } else {
+            // Get headers (exclude "Actions" column)
+            const headerRow = table.querySelector('thead tr');
+            const headers = Array.from(headerRow.querySelectorAll('th')).slice(0, -1);
+            
+            if (headers.length === 0) {
+                markdown += '*No table headers found.*\n';
+            } else {
+                // Table headers
+                markdown += '| ' + headers.map(th => th.textContent.trim()).join(' | ') + ' |\n';
+                
+                // Table separator
+                markdown += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
+                
+                // Table rows
+                const bodyRows = table.querySelectorAll('tbody tr');
+                if (bodyRows.length === 0) {
+                    markdown += '| ' + headers.map(() => '*No data*').join(' | ') + ' |\n';
+                } else {
+                    bodyRows.forEach(row => {
+                        const cells = Array.from(row.querySelectorAll('td')).slice(0, -1); // Exclude actions column
+                        const cellValues = cells.map(cell => {
+                            let text = cell.textContent.trim();
+                            // Clean up the text for markdown
+                            text = text.replace(/\|/g, '\\|'); // Escape pipes
+                            text = text.replace(/\n/g, ' '); // Replace newlines with spaces
+                            text = text.replace(/\r/g, ''); // Remove carriage returns
+                            // Limit length for readability
+                            if (text.length > 100) {
+                                text = text.substring(0, 100) + '...';
+                            }
+                            return text || '*empty*';
+                        });
+                        markdown += '| ' + cellValues.join(' | ') + ' |\n';
+                    });
+                }
+            }
+        }
+        
+        // Copy to clipboard
+        navigator.clipboard.writeText(markdown).then(function() {
+            showToast();
+        }).catch(function(err) {
+            console.error('Failed to copy text: ', err);
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = markdown;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            showToast();
+        });
+    }
+    
+    function showToast() {
+        toast.style.display = 'block';
+        setTimeout(function() {
+            toast.style.display = 'none';
+        }, 3000);
+    }
+});
+</script>
 {% endblock %}
