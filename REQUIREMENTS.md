@@ -17,6 +17,7 @@ This document outlines the detailed requirements for the AI Tutor system, coveri
 -   **JSON-Structured AI Responses**: All AI prompts must generate structured JSON output for consistent data extraction and processing.
 -   **Call Type Detection**: Automatic determination of new vs returning students based on phone number presence in the database.
 -   **VAPI Integration**: Complete integration with VAPI for voice call handling, including webhook processing, call data retrieval, and transcript analysis.
+-   **AI-Driven Webhook Processing**: Post-processing of VAPI webhook calls must focus on having the AI deliver extracted data and analysis in structured JSON format. The system code should simply take this JSON data and move it to the database without complex transcript parsing or regex operations. This approach ensures simplicity, maintainability, and reliability by leveraging AI intelligence for data extraction rather than brittle text processing.
 -   **Automatic Student Registration**: System must automatically create student profiles for new callers using phone number identification and conversation analysis.
 -   **Automatic Default Curriculum Assignment**: Upon student creation, system must automatically generate student_subjects records from the system default curriculum, enabling immediate progress tracking.
 -   **Phone Number Management**: Robust phone number normalization, mapping, and international format handling for student identification.
@@ -143,7 +144,8 @@ The system must implement a conditional prompt selection mechanism to provide ap
   - `progress_tracking.md`: Learning progress evaluation
 
 #### 3.1.3. JSON Response Format Requirements
-- **Standardized Structure**: All prompts must generate JSON responses with consistent field naming
+- **Standardized Structure**: All prompts must generate JSON responses with consistent field naming to enable direct database storage without complex processing
+- **AI-Driven Data Extraction**: The AI must perform all data extraction, analysis, and structuring, delivering ready-to-store JSON data that requires no additional parsing, regex operations, or complex text processing by the application code
 - **Required JSON Fields**:
   - `student_profile`: Student information and characteristics
   - `session_analysis`: Session content analysis and insights
@@ -152,6 +154,7 @@ The system must implement a conditional prompt selection mechanism to provide ap
 - **Data Validation**: System must validate JSON structure before database storage
 - **Error Recovery**: Invalid JSON responses must be logged and trigger fallback processing
 - **Schema Versioning**: JSON schema must support future extensions without breaking existing functionality
+- **Processing Simplicity**: Application code should perform simple JSON-to-database mapping without transcript analysis, pattern matching, or data interpretation
 
 #### 3.1.4. Prompt Selection Logic Requirements
 - **Automatic Detection**: System must automatically select appropriate prompts without manual intervention
