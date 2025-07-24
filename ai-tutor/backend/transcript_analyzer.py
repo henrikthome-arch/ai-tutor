@@ -700,52 +700,71 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             
             logger.info(f"🔍 DEBUG: Starting name extraction from extracted_info: {json.dumps(extracted_info, indent=2)}")
             print(f"🔍 DEBUG: Starting name extraction from extracted_info keys: {list(extracted_info.keys())}")
+            print(f"🔍 DEBUG: Raw extracted_info type: {type(extracted_info)}")
+            print(f"🔍 DEBUG: Raw extracted_info content: {extracted_info}")
             
-            # Check for nested student_profile structure first (from conditional prompts)
+            # Extract names from student_profile structure (conditional prompts always use this)
             profile_data = extracted_info.get('student_profile', {})
             if profile_data:
-                logger.info(f"🔍 DEBUG: Found nested student_profile data: {json.dumps(profile_data, indent=2)}")
-                print(f"🔍 DEBUG: Found nested student_profile data: {profile_data}")
-                if profile_data.get('first_name') and str(profile_data['first_name']).strip() not in ['Unknown', 'unknown', '', 'None']:
-                    new_first_name = str(profile_data['first_name']).strip()
-                    logger.info(f"🔍 DEBUG: Extracted first_name from profile: '{new_first_name}'")
-                    print(f"🔍 DEBUG: Extracted first_name from profile: '{new_first_name}'")
+                logger.info(f"🔍 DEBUG: Found student_profile data: {json.dumps(profile_data, indent=2)}")
+                print(f"🔍 DEBUG: Found student_profile data: {profile_data}")
+                print(f"🔍 DEBUG: student_profile type: {type(profile_data)}")
                 
-                if profile_data.get('last_name') and str(profile_data['last_name']).strip() not in ['Unknown', 'unknown', '', 'None']:
-                    new_last_name = str(profile_data['last_name']).strip()
-                    logger.info(f"🔍 DEBUG: Extracted last_name from profile: '{new_last_name}'")
-                    print(f"🔍 DEBUG: Extracted last_name from profile: '{new_last_name}'")
+                # Log each field extraction attempt
+                first_name_raw = profile_data.get('first_name')
+                print(f"🔍 DEBUG: Raw first_name from profile_data: '{first_name_raw}' (type: {type(first_name_raw)})")
+                
+                if first_name_raw is not None:
+                    first_name_str = str(first_name_raw).strip()
+                    print(f"🔍 DEBUG: first_name after str() and strip(): '{first_name_str}'")
+                    print(f"🔍 DEBUG: Checking if '{first_name_str}' is in excluded values: {first_name_str in ['Unknown', 'unknown', '', 'None']}")
+                    
+                    if first_name_str not in ['Unknown', 'unknown', '', 'None']:
+                        new_first_name = first_name_str
+                        logger.info(f"🔍 DEBUG: ✅ ACCEPTED first_name: '{new_first_name}'")
+                        print(f"🔍 DEBUG: ✅ ACCEPTED first_name: '{new_first_name}'")
+                    else:
+                        logger.info(f"🔍 DEBUG: ❌ REJECTED first_name: '{first_name_str}' (excluded value)")
+                        print(f"🔍 DEBUG: ❌ REJECTED first_name: '{first_name_str}' (excluded value)")
+                else:
+                    logger.info(f"🔍 DEBUG: ❌ first_name is None or missing")
+                    print(f"🔍 DEBUG: ❌ first_name is None or missing")
+                
+                last_name_raw = profile_data.get('last_name')
+                print(f"🔍 DEBUG: Raw last_name from profile_data: '{last_name_raw}' (type: {type(last_name_raw)})")
+                
+                if last_name_raw is not None:
+                    last_name_str = str(last_name_raw).strip()
+                    print(f"🔍 DEBUG: last_name after str() and strip(): '{last_name_str}'")
+                    print(f"🔍 DEBUG: Checking if '{last_name_str}' is in excluded values: {last_name_str in ['Unknown', 'unknown', '', 'None']}")
+                    
+                    if last_name_str not in ['Unknown', 'unknown', '', 'None']:
+                        new_last_name = last_name_str
+                        logger.info(f"🔍 DEBUG: ✅ ACCEPTED last_name: '{new_last_name}'")
+                        print(f"🔍 DEBUG: ✅ ACCEPTED last_name: '{new_last_name}'")
+                    else:
+                        logger.info(f"🔍 DEBUG: ❌ REJECTED last_name: '{last_name_str}' (excluded value)")
+                        print(f"🔍 DEBUG: ❌ REJECTED last_name: '{last_name_str}' (excluded value)")
+                else:
+                    logger.info(f"🔍 DEBUG: ❌ last_name is None or missing")
+                    print(f"🔍 DEBUG: ❌ last_name is None or missing")
             else:
-                logger.info(f"🔍 DEBUG: No nested student_profile data found")
-                print(f"🔍 DEBUG: No nested student_profile data found")
-            
-            # Fallback to direct fields (from legacy analysis)
-            if not new_first_name and extracted_info.get('first_name') and str(extracted_info['first_name']).strip() not in ['Unknown', 'unknown', '', 'None']:
-                new_first_name = str(extracted_info['first_name']).strip()
-                logger.info(f"🔍 DEBUG: Extracted first_name directly: '{new_first_name}'")
-                print(f"🔍 DEBUG: Extracted first_name directly: '{new_first_name}'")
-            
-            if not new_last_name and extracted_info.get('last_name') and str(extracted_info['last_name']).strip() not in ['Unknown', 'unknown', '', 'None']:
-                new_last_name = str(extracted_info['last_name']).strip()
-                logger.info(f"🔍 DEBUG: Extracted last_name directly: '{new_last_name}'")
-                print(f"🔍 DEBUG: Extracted last_name directly: '{new_last_name}'")
-            
-            # Additional fallback: check for "name" field that might contain full name
-            if not new_first_name and not new_last_name:
-                name_field = None
-                if profile_data and profile_data.get('name'):
-                    name_field = profile_data.get('name')
-                elif extracted_info.get('name'):
-                    name_field = extracted_info.get('name')
+                logger.warning(f"🔍 DEBUG: No student_profile data found in extracted_info")
+                print(f"🔍 DEBUG: No student_profile data found in extracted_info")
                 
-                if name_field and str(name_field).strip() not in ['Unknown', 'unknown', '', 'None']:
-                    name_parts = str(name_field).strip().split()
-                    if len(name_parts) >= 1:
-                        new_first_name = name_parts[0]
-                        if len(name_parts) >= 2:
-                            new_last_name = ' '.join(name_parts[1:])
-                        logger.info(f"🔍 DEBUG: Extracted from 'name' field: first='{new_first_name}', last='{new_last_name}'")
-                        print(f"🔍 DEBUG: Extracted from 'name' field: first='{new_first_name}', last='{new_last_name}'")
+                # Try to extract directly from extracted_info as fallback
+                print(f"🔍 DEBUG: Trying direct extraction from extracted_info...")
+                direct_first = extracted_info.get('first_name')
+                direct_last = extracted_info.get('last_name')
+                print(f"🔍 DEBUG: Direct first_name: '{direct_first}', last_name: '{direct_last}'")
+                
+                if direct_first and str(direct_first).strip() not in ['Unknown', 'unknown', '', 'None']:
+                    new_first_name = str(direct_first).strip()
+                    print(f"🔍 DEBUG: ✅ Using direct first_name: '{new_first_name}'")
+                
+                if direct_last and str(direct_last).strip() not in ['Unknown', 'unknown', '', 'None']:
+                    new_last_name = str(direct_last).strip()
+                    print(f"🔍 DEBUG: ✅ Using direct last_name: '{new_last_name}'")
             
             if new_first_name or new_last_name:
                 logger.info(f"🔍 DEBUG: Processing extracted names - first: '{new_first_name}', last: '{new_last_name}'")
@@ -780,11 +799,15 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                     final_first = new_first_name if new_first_name else current_first
                     final_last = new_last_name if new_last_name else current_last
                     
-                    logger.info(f"🔍 DEBUG: Updating name from '{current_full}' to '{final_first} {final_last}'")
+                    logger.info(f"🔍 DEBUG: ✅ PROCEEDING with name update from '{current_full}' to '{final_first} {final_last}'")
+                    print(f"🔍 DEBUG: ✅ PROCEEDING with name update from '{current_full}' to '{final_first} {final_last}'")
                     
                     # Store old values for logging
                     old_first = student.first_name
                     old_last = student.last_name
+                    
+                    logger.info(f"🔍 DEBUG: BEFORE update - student.first_name='{old_first}', student.last_name='{old_last}'")
+                    print(f"🔍 DEBUG: BEFORE update - student.first_name='{old_first}', student.last_name='{old_last}'")
                     
                     # Update the student object
                     student.first_name = final_first
@@ -792,13 +815,19 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                     updated_fields.append('name')
                     name_updated = True
                     
+                    logger.info(f"🔍 DEBUG: AFTER update - student.first_name='{student.first_name}', student.last_name='{student.last_name}'")
+                    print(f"🔍 DEBUG: AFTER update - student.first_name='{student.first_name}', student.last_name='{student.last_name}'")
                     logger.info(f"🔍 DEBUG: Name update applied - OLD: first='{old_first}', last='{old_last}' -> NEW: first='{student.first_name}', last='{student.last_name}'")
+                    print(f"🔍 DEBUG: updated_fields now contains: {updated_fields}")
                     logger.info(f"Updated student name using direct extraction: first_name='{new_first_name}', last_name='{new_last_name}'")
                 else:
-                    logger.info(f"🔍 DEBUG: NOT updating name - current '{current_full}' is not detected as default")
+                    logger.info(f"🔍 DEBUG: ❌ NOT updating name - current '{current_full}' is not detected as default")
+                    print(f"🔍 DEBUG: ❌ NOT updating name - current '{current_full}' is not detected as default")
                     logger.info(f"Keeping existing name '{current_full}', extracted first='{new_first_name}', last='{new_last_name}' (not a default name)")
             else:
-                logger.info(f"🔍 DEBUG: No valid names extracted from AI response")
+                logger.info(f"🔍 DEBUG: ❌ No valid names extracted from AI response")
+                print(f"🔍 DEBUG: ❌ No valid names extracted from AI response")
+                print(f"🔍 DEBUG: new_first_name='{new_first_name}', new_last_name='{new_last_name}'")
             
             # Use extracted_info directly for profile data (simplified approach)
             profile_data = extracted_info
