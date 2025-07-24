@@ -2698,49 +2698,57 @@ def admin_database():
     try:
         # Use app context for all database operations
         with app.app_context():
-            # Initialize stats with default values
-            stats = {
-                'students': 0,
-                'schools': 0,
-                'curriculums': 0,
-                'sessions': 0,
-                'assessments': 0
-            }
+            # Use SQLAlchemy inspector to automatically discover all tables
+            inspector = inspect(db.engine)
+            table_names = inspector.get_table_names()
             
-            # Get counts of each model with error handling for each query
-            try:
-                stats['students'] = Student.query.count()
-            except Exception as e:
-                log_error('DATABASE', 'Error counting students in database browser', e)
-                
-            try:
-                stats['schools'] = School.query.count()
-            except Exception as e:
-                log_error('DATABASE', 'Error counting schools in database browser', e)
-                
-            try:
-                stats['curriculums'] = Curriculum.query.count()
-            except Exception as e:
-                log_error('DATABASE', 'Error counting curriculums in database browser', e)
-                
-            try:
-                stats['sessions'] = Session.query.count()
-            except Exception as e:
-                log_error('DATABASE', 'Error counting sessions in database browser', e)
-                
-            try:
-                stats['assessments'] = Assessment.query.count()
-            except Exception as e:
-                log_error('DATABASE', 'Error counting assessments in database browser', e)
-        
-            # Get list of tables
-            tables = [
-                {'name': 'Students', 'count': stats['students'], 'url': url_for('admin_database_table', table='students')},
-                {'name': 'Schools', 'count': stats['schools'], 'url': url_for('admin_database_table', table='schools')},
-                {'name': 'Curriculums', 'count': stats['curriculums'], 'url': url_for('admin_database_table', table='curriculums')},
-                {'name': 'Sessions', 'count': stats['sessions'], 'url': url_for('admin_database_table', table='sessions')},
-                {'name': 'Assessments', 'count': stats['assessments'], 'url': url_for('admin_database_table', table='assessments')}
-            ]
+            print(f"🔍 Database browser: Discovered {len(table_names)} tables: {table_names}")
+            log_system(f"Database browser: Discovered {len(table_names)} tables",
+                      table_names=table_names, level="INFO")
+            
+            tables = []
+            stats = {}
+            
+            # Get count for each discovered table
+            for table_name in sorted(table_names):
+                try:
+                    # Use raw SQL to count records in each table
+                    from sqlalchemy import text
+                    result = db.session.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar()
+                    count = result if result is not None else 0
+                    
+                    # Format table name for display (capitalize and replace underscores)
+                    display_name = table_name.replace('_', ' ').title()
+                    
+                    tables.append({
+                        'name': display_name,
+                        'table_name': table_name,  # Keep original name for URL
+                        'count': count,
+                        'url': url_for('admin_database_table', table=table_name)
+                    })
+                    
+                    # Store in stats for backward compatibility
+                    stats[table_name] = count
+                    
+                    print(f"📊 Table {table_name}: {count} records")
+                    
+                except Exception as e:
+                    log_error('DATABASE', f'Error counting records in table {table_name}', e,
+                             table_name=table_name)
+                    print(f"❌ Error counting {table_name}: {e}")
+                    
+                    # Add table with unknown count
+                    display_name = table_name.replace('_', ' ').title()
+                    tables.append({
+                        'name': display_name,
+                        'table_name': table_name,
+                        'count': '?',
+                        'url': url_for('admin_database_table', table=table_name)
+                    })
+                    stats[table_name] = 0
+            
+            print(f"✅ Database browser: Successfully processed {len(tables)} tables")
+            log_system(f"Database browser: Successfully processed {len(tables)} tables", level="INFO")
             
             return render_template('database.html',
                                 tables=tables,
@@ -2748,6 +2756,7 @@ def admin_database():
     except Exception as e:
         flash(f'Error accessing database: {str(e)}', 'error')
         log_error('DATABASE', 'Error accessing database browser', e)
+        print(f"❌ Database browser error: {e}")
         return render_template('database.html', tables=[], stats={})
 
 @app.route('/admin/database/<table>')
@@ -2758,45 +2767,86 @@ def admin_database_table(table):
     try:
         # Use app context for all database operations
         with app.app_context():
-            items = []
+            # Verify table exists using SQLAlchemy inspector
+            inspector = inspect(db.engine)
+            table_names = inspector.get_table_names()
             
-            # Get table data based on table name with error handling
+            if table not in table_names:
+                flash(f'Table "{table}" not found in database', 'error')
+                log_error('DATABASE', f'Table not found: {table}', ValueError(f'Table {table} not found'),
+                         table_name=table, available_tables=table_names)
+                return redirect(url_for('admin_database'))
+            
+            print(f"🔍 Accessing table: {table}")
+            log_system(f"Database browser: Accessing table {table}", table_name=table, level="INFO")
+            
+            items = []
+            columns = []
+            
             try:
-                if table == 'students':
-                    query_items = Student.query.all()
-                    items = [item.to_dict() for item in query_items]
-                elif table == 'schools':
-                    query_items = School.query.all()
-                    items = [item.to_dict() for item in query_items]
-                elif table == 'curriculums':
-                    query_items = Curriculum.query.all()
-                    items = [item.to_dict() for item in query_items]
-                elif table == 'sessions':
-                    query_items = Session.query.all()
-                    items = [item.to_dict() for item in query_items]
-                elif table == 'assessments':
-                    query_items = Assessment.query.all()
-                    items = [item.to_dict() for item in query_items]
-                else:
-                    flash(f'Unknown table: {table}', 'error')
-                    return redirect(url_for('admin_database'))
+                # Get column information from inspector
+                table_columns = inspector.get_columns(table)
+                columns = [col['name'] for col in table_columns]
+                
+                print(f"📊 Table {table} columns: {columns}")
+                
+                # Use raw SQL to query the table to avoid model dependencies
+                from sqlalchemy import text
+                
+                # Limit to 100 records for performance
+                query = text(f'SELECT * FROM "{table}" LIMIT 100')
+                result = db.session.execute(query)
+                
+                # Convert rows to dictionaries
+                for row in result:
+                    # Convert row to dictionary using column names
+                    row_dict = {}
+                    for i, column_name in enumerate(columns):
+                        value = row[i]
+                        # Handle different data types for display
+                        if value is None:
+                            row_dict[column_name] = None
+                        elif isinstance(value, (dict, list)):
+                            # Convert JSON/array fields to string for display
+                            row_dict[column_name] = json.dumps(value) if value else None
+                        else:
+                            row_dict[column_name] = str(value)
+                    items.append(row_dict)
+                
+                print(f"📊 Retrieved {len(items)} records from table {table}")
+                log_system(f"Database browser: Retrieved {len(items)} records from table {table}",
+                          table_name=table, record_count=len(items), level="INFO")
+                
             except Exception as query_error:
-                log_error('DATABASE', f'Error querying {table} table', query_error)
-                flash(f'Error querying {table} table: {str(query_error)}', 'error')
+                log_error('DATABASE', f'Error querying table {table}', query_error, table_name=table)
+                flash(f'Error querying table {table}: {str(query_error)}', 'error')
+                print(f"❌ Error querying table {table}: {query_error}")
+                
+                # Try to get column names even if query failed
+                try:
+                    table_columns = inspector.get_columns(table)
+                    columns = [col['name'] for col in table_columns]
+                except Exception as col_error:
+                    log_error('DATABASE', f'Error getting columns for table {table}', col_error, table_name=table)
+                    print(f"❌ Error getting columns for table {table}: {col_error}")
         
-        # Get column names from first item
-        columns = []
-        if items:
-            columns = list(items[0].keys())
+        # Format table name for display
+        display_name = table.replace('_', ' ').title()
         
         return render_template('database_table.html',
-                             table_name=table,
+                             table_name=display_name,
+                             table_name_raw=table,  # Keep original for URLs
                              items=items,
                              columns=columns)
     except Exception as e:
         flash(f'Error accessing table {table}: {str(e)}', 'error')
-        log_error('DATABASE', f'Error accessing database table {table}', e)
-        return render_template('database_table.html', table_name=table, items=[], columns=[])
+        log_error('DATABASE', f'Error accessing database table {table}', e, table_name=table)
+        print(f"❌ Database table error for {table}: {e}")
+        return render_template('database_table.html',
+                             table_name=table.replace('_', ' ').title(),
+                             table_name_raw=table,
+                             items=[],
+                             columns=[])
 
 @app.route('/admin/database/view/<table>/<item_id>')
 def admin_database_view(table, item_id):
@@ -2806,46 +2856,117 @@ def admin_database_view(table, item_id):
     try:
         # Use app context for all database operations
         with app.app_context():
-            # Get item data based on table name and ID with error handling
-            item = None
+            # Verify table exists using SQLAlchemy inspector
+            inspector = inspect(db.engine)
+            table_names = inspector.get_table_names()
+            
+            if table not in table_names:
+                flash(f'Table "{table}" not found in database', 'error')
+                log_error('DATABASE', f'Table not found: {table}', ValueError(f'Table {table} not found'),
+                         table_name=table, available_tables=table_names, item_id=item_id)
+                return redirect(url_for('admin_database'))
+            
+            print(f"🔍 Viewing item in table: {table}, ID: {item_id}")
+            log_system(f"Database browser: Viewing item in table {table}",
+                      table_name=table, item_id=item_id, level="INFO")
+            
+            item_data = {}
+            
             try:
-                if table == 'students':
-                    item = Student.query.get(item_id)
-                elif table == 'schools':
-                    item = School.query.get(item_id)
-                elif table == 'curriculums':
-                    item = Curriculum.query.get(item_id)
-                elif table == 'sessions':
-                    item = Session.query.get(item_id)
-                elif table == 'assessments':
-                    item = Assessment.query.get(item_id)
+                # Get column information from inspector
+                table_columns = inspector.get_columns(table)
+                columns = [col['name'] for col in table_columns]
+                
+                # Get primary key columns to build the WHERE clause
+                primary_keys = inspector.get_pk_constraint(table)['constrained_columns']
+                if not primary_keys:
+                    # If no primary key defined, assume 'id' column
+                    primary_keys = ['id']
+                
+                print(f"📊 Table {table} columns: {columns}")
+                print(f"🔑 Primary key columns: {primary_keys}")
+                
+                # Use raw SQL to query the specific item
+                from sqlalchemy import text
+                
+                # Build WHERE clause for primary key(s)
+                if len(primary_keys) == 1:
+                    # Single primary key
+                    pk_column = primary_keys[0]
+                    # Try to convert item_id to appropriate type
+                    try:
+                        # Most primary keys are integers
+                        pk_value = int(item_id)
+                        where_clause = f'"{pk_column}" = {pk_value}'
+                    except ValueError:
+                        # String primary key
+                        where_clause = f'"{pk_column}" = \'{item_id}\''
+                else:
+                    # Composite primary key - this is more complex, assume single for now
+                    pk_column = primary_keys[0]
+                    try:
+                        pk_value = int(item_id)
+                        where_clause = f'"{pk_column}" = {pk_value}'
+                    except ValueError:
+                        where_clause = f'"{pk_column}" = \'{item_id}\''
+                
+                query = text(f'SELECT * FROM "{table}" WHERE {where_clause} LIMIT 1')
+                result = db.session.execute(query)
+                
+                # Get the first row
+                row = result.fetchone()
+                
+                if row:
+                    # Convert row to dictionary using column names
+                    for i, column_name in enumerate(columns):
+                        value = row[i]
+                        # Handle different data types for display
+                        if value is None:
+                            item_data[column_name] = None
+                        elif isinstance(value, (dict, list)):
+                            # Keep JSON/array fields as-is for proper formatting
+                            item_data[column_name] = value
+                        elif isinstance(value, (int, float, bool)):
+                            # Keep numeric and boolean values as-is
+                            item_data[column_name] = value
+                        else:
+                            # Convert other types to string
+                            item_data[column_name] = str(value)
+                    
+                    print(f"📊 Retrieved item from table {table}: {len(item_data)} fields")
+                    log_system(f"Database browser: Retrieved item from table {table}",
+                              table_name=table, item_id=item_id, field_count=len(item_data), level="INFO")
+                else:
+                    # Item not found
+                    flash(f'Item not found: {table}/{item_id}', 'error')
+                    log_error('DATABASE', f'Item not found: {table}/{item_id}',
+                             ValueError(f'Item {item_id} not found in table {table}'),
+                             table_name=table, item_id=item_id)
+                    return redirect(url_for('admin_database_table', table=table))
+                
             except Exception as query_error:
-                log_error('DATABASE', f'Error querying {table}/{item_id}', query_error)
-                flash(f'Error querying {table}/{item_id}: {str(query_error)}', 'error')
-                return redirect(url_for('admin_database_table', table=table))
-            
-            if not item:
-                flash(f'Item not found: {table}/{item_id}', 'error')
-                return redirect(url_for('admin_database_table', table=table))
-            
-            # Convert to dictionary with error handling
-            try:
-                item_data = item.to_dict()
-            except Exception as dict_error:
-                log_error('DATABASE', f'Error converting {table}/{item_id} to dictionary', dict_error)
-                flash(f'Error converting item to dictionary: {str(dict_error)}', 'error')
+                log_error('DATABASE', f'Error querying item {table}/{item_id}', query_error,
+                         table_name=table, item_id=item_id)
+                flash(f'Error querying item {table}/{item_id}: {str(query_error)}', 'error')
+                print(f"❌ Error querying item {table}/{item_id}: {query_error}")
                 return redirect(url_for('admin_database_table', table=table))
         
         # Format as JSON for display
         content = json.dumps(item_data, indent=2, ensure_ascii=False)
         
+        # Format table name for display
+        display_name = table.replace('_', ' ').title()
+        
         return render_template('database_view.html',
-                             table_name=table,
+                             table_name=display_name,
+                             table_name_raw=table,  # Keep original for URLs
                              item_id=item_id,
                              content=content)
     except Exception as e:
         flash(f'Error viewing item {table}/{item_id}: {str(e)}', 'error')
-        log_error('DATABASE', f'Error viewing database item {table}/{item_id}', e)
+        log_error('DATABASE', f'Error viewing database item {table}/{item_id}', e,
+                 table_name=table, item_id=item_id)
+        print(f"❌ Database item view error for {table}/{item_id}: {e}")
         return redirect(url_for('admin_database_table', table=table))
 
 @app.route('/admin/database/reset', methods=['POST'])
