@@ -205,7 +205,9 @@ Do not include any explanatory text in your response, ONLY the JSON object.
             
             # Store AI processing debug information if session_id provided
             if session_id:
-                self._store_ai_processing_step(
+                logger.info(f"🔍 DEBUG: Storing AI processing step for session_id {session_id}")
+                print(f"🔍 DEBUG: Storing AI processing step for session_id {session_id}")
+                step_stored = self._store_ai_processing_step(
                     session_id=session_id,
                     step_number=1,
                     prompt=formatted_prompt['user_prompt'],
@@ -217,6 +219,15 @@ Do not include any explanatory text in your response, ONLY the JSON object.
                         'timestamp': analysis.timestamp.isoformat()
                     }
                 )
+                if step_stored:
+                    logger.info(f"🔍 DEBUG: Successfully stored AI processing step for session {session_id}")
+                    print(f"🔍 DEBUG: Successfully stored AI processing step for session {session_id}")
+                else:
+                    logger.error(f"🔍 DEBUG: Failed to store AI processing step for session {session_id}")
+                    print(f"🔍 DEBUG: Failed to store AI processing step for session {session_id}")
+            else:
+                logger.warning(f"🔍 DEBUG: No session_id provided - cannot store AI processing step")
+                print(f"🔍 DEBUG: No session_id provided - cannot store AI processing step")
             
             # Extract and process the JSON response
             try:
@@ -469,7 +480,11 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
         session_id = None
         if additional_context and 'session_id' in additional_context:
             session_id = additional_context['session_id']
-            logger.info(f"Found session_id {session_id} in additional_context for AI processing step storage")
+            logger.info(f"🔍 DEBUG: Found session_id {session_id} in additional_context for AI processing step storage")
+            print(f"🔍 DEBUG: Found session_id {session_id} in additional_context for AI processing step storage")
+        else:
+            logger.warning(f"🔍 DEBUG: No session_id found in additional_context: {additional_context}")
+            print(f"🔍 DEBUG: No session_id found in additional_context: {additional_context}")
         
         # Create event loop if needed
         try:
@@ -675,7 +690,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             # Track changes
             updated_fields = []
             
-            # Update student name if extracted from transcript - simplified logic
+            # Update student name if extracted from transcript - enhanced debugging
             name_updated = False
             extracted_name = None
             
@@ -683,26 +698,37 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             new_first_name = None
             new_last_name = None
             
+            logger.info(f"🔍 DEBUG: Starting name extraction from extracted_info: {json.dumps(extracted_info, indent=2)}")
+            print(f"🔍 DEBUG: Starting name extraction from extracted_info keys: {list(extracted_info.keys())}")
+            
             # Check for nested student_profile structure first (from conditional prompts)
             profile_data = extracted_info.get('student_profile', {})
             if profile_data:
-                logger.info(f"🔍 DEBUG: Found nested student_profile data")
-                if profile_data.get('first_name') and profile_data['first_name'] not in ['Unknown', 'unknown', '']:
+                logger.info(f"🔍 DEBUG: Found nested student_profile data: {json.dumps(profile_data, indent=2)}")
+                print(f"🔍 DEBUG: Found nested student_profile data: {profile_data}")
+                if profile_data.get('first_name') and profile_data['first_name'] not in ['Unknown', 'unknown', '', None]:
                     new_first_name = str(profile_data['first_name']).strip()
                     logger.info(f"🔍 DEBUG: Extracted first_name from profile: '{new_first_name}'")
+                    print(f"🔍 DEBUG: Extracted first_name from profile: '{new_first_name}'")
                 
-                if profile_data.get('last_name') and profile_data['last_name'] not in ['Unknown', 'unknown', '']:
+                if profile_data.get('last_name') and profile_data['last_name'] not in ['Unknown', 'unknown', '', None]:
                     new_last_name = str(profile_data['last_name']).strip()
                     logger.info(f"🔍 DEBUG: Extracted last_name from profile: '{new_last_name}'")
+                    print(f"🔍 DEBUG: Extracted last_name from profile: '{new_last_name}'")
+            else:
+                logger.info(f"🔍 DEBUG: No nested student_profile data found")
+                print(f"🔍 DEBUG: No nested student_profile data found")
             
             # Fallback to direct fields (from legacy analysis)
-            if not new_first_name and extracted_info.get('first_name') and extracted_info['first_name'] not in ['Unknown', 'unknown', '']:
+            if not new_first_name and extracted_info.get('first_name') and extracted_info['first_name'] not in ['Unknown', 'unknown', '', None]:
                 new_first_name = str(extracted_info['first_name']).strip()
                 logger.info(f"🔍 DEBUG: Extracted first_name directly: '{new_first_name}'")
+                print(f"🔍 DEBUG: Extracted first_name directly: '{new_first_name}'")
             
-            if not new_last_name and extracted_info.get('last_name') and extracted_info['last_name'] not in ['Unknown', 'unknown', '']:
+            if not new_last_name and extracted_info.get('last_name') and extracted_info['last_name'] not in ['Unknown', 'unknown', '', None]:
                 new_last_name = str(extracted_info['last_name']).strip()
                 logger.info(f"🔍 DEBUG: Extracted last_name directly: '{new_last_name}'")
+                print(f"🔍 DEBUG: Extracted last_name directly: '{new_last_name}'")
             
             if new_first_name or new_last_name:
                 logger.info(f"🔍 DEBUG: Processing extracted names - first: '{new_first_name}', last: '{new_last_name}'")
@@ -864,23 +890,54 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                 logger.info(f"🔍 DEBUG: Final student state before commit - first: '{final_first}', last: '{final_last}', full: '{final_full}'")
                 
                 try:
+                    logger.info(f"🔍 DEBUG: About to commit database changes for student {student_id}")
+                    print(f"🔍 DEBUG: About to commit database changes for student {student_id}")
+                    
+                    # Log pending changes before commit
+                    if name_updated:
+                        logger.info(f"🔍 DEBUG: Pending name changes - first: '{student.first_name}', last: '{student.last_name}'")
+                        print(f"🔍 DEBUG: Pending name changes - first: '{student.first_name}', last: '{student.last_name}'")
+                    
+                    # Flush to send changes to database without committing
+                    db.session.flush()
+                    logger.info(f"🔍 DEBUG: Session flushed successfully")
+                    print(f"🔍 DEBUG: Session flushed successfully")
+                    
+                    # Now commit the transaction
                     db.session.commit()
                     logger.info(f"🔍 DEBUG: Database commit successful for student {student_id}")
+                    print(f"🔍 DEBUG: Database commit successful for student {student_id}")
                     
-                    # Verify the commit by re-querying
+                    # Verify the commit by re-querying in a new transaction
                     try:
+                        # Force a new query to bypass any session cache
+                        db.session.expire_all()
                         verification_student = Student.query.get(student_id)
                         if verification_student:
                             verify_first = verification_student.first_name or ''
                             verify_last = verification_student.last_name or ''
                             verify_full = f"{verify_first} {verify_last}".strip()
                             logger.info(f"🔍 DEBUG: Post-commit verification - first: '{verify_first}', last: '{verify_last}', full: '{verify_full}'")
+                            print(f"🔍 DEBUG: Post-commit verification - first: '{verify_first}', last: '{verify_last}', full: '{verify_full}'")
+                            
+                            # Check if the update actually took effect
+                            if name_updated and verify_first == new_first_name:
+                                logger.info(f"🔍 DEBUG: ✅ Name update verified successfully - '{verify_full}'")
+                                print(f"🔍 DEBUG: ✅ Name update verified successfully - '{verify_full}'")
+                            elif name_updated:
+                                logger.error(f"🔍 DEBUG: ❌ Name update verification failed - expected '{new_first_name}', got '{verify_first}'")
+                                print(f"🔍 DEBUG: ❌ Name update verification failed - expected '{new_first_name}', got '{verify_first}'")
                         else:
                             logger.error(f"🔍 DEBUG: Post-commit verification failed - student {student_id} not found")
+                            print(f"🔍 DEBUG: Post-commit verification failed - student {student_id} not found")
                     except Exception as verify_error:
                         logger.error(f"🔍 DEBUG: Post-commit verification error: {verify_error}")
+                        print(f"🔍 DEBUG: Post-commit verification error: {verify_error}")
+                        import traceback
+                        logger.error(f"🔍 DEBUG: Verification error traceback: {traceback.format_exc()}")
                     
                     logger.info(f"Updated profile for student {student_id} with fields: {updated_fields}")
+                    print(f"Updated profile for student {student_id} with fields: {updated_fields}")
                     
                     # Log successful update to system logger
                     from system_logger import log_ai_analysis
@@ -889,8 +946,20 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                                    student_id=student_id)
                     return True
                 except Exception as e:
-                    db.session.rollback()
                     logger.error(f"🔍 DEBUG: Database commit failed for student {student_id}: {e}")
+                    print(f"🔍 DEBUG: Database commit failed for student {student_id}: {e}")
+                    import traceback
+                    logger.error(f"🔍 DEBUG: Commit error traceback: {traceback.format_exc()}")
+                    print(f"🔍 DEBUG: Commit error traceback: {traceback.format_exc()}")
+                    
+                    try:
+                        db.session.rollback()
+                        logger.info(f"🔍 DEBUG: Database rollback completed")
+                        print(f"🔍 DEBUG: Database rollback completed")
+                    except Exception as rollback_error:
+                        logger.error(f"🔍 DEBUG: Rollback error: {rollback_error}")
+                        print(f"🔍 DEBUG: Rollback error: {rollback_error}")
+                    
                     logger.error(f"Error saving profile updates for student {student_id}: {e}")
                     return False
             else:
