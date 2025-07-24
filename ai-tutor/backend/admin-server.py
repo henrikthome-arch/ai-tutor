@@ -4525,12 +4525,14 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
                    call_id=call_id, phone=clean_phone, original_phone=phone_number)
         
         # Use database-first phone lookup instead of legacy file-based mapping
-        print(f"🔍 Checking database for phone: {clean_phone}")
+        print(f"🔍 TRACE: Checking database for phone: {clean_phone}")
+        log_system(f"🔍 TRACE: Checking database for phone: {clean_phone}", level="INFO")
         student_id = db_phone_manager.get_student_by_phone(clean_phone)
         
         # If found, verify the student exists in the database
         if student_id:
-            print(f"📱 Found phone mapping: {clean_phone} → {student_id}")
+            print(f"📱 TRACE: Found existing phone mapping: {clean_phone} → {student_id}")
+            log_system(f"📱 TRACE: Found existing phone mapping: {clean_phone} → {student_id}", level="INFO")
             try:
                 # Verify student exists in database - ensure student_id is a string
                 student_id_str = str(student_id)
@@ -4549,7 +4551,8 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
                         last_name = student.get('last_name', '')
                         full_name = f"{first_name} {last_name}".strip() or 'Unknown'
                         
-                        print(f"👤 Found existing student: {full_name} (ID: {student_id_str})")
+                        print(f"👤 TRACE: Found existing student: {full_name} (ID: {student_id_str}) - SKIPPING curriculum verification")
+                        log_system(f"👤 TRACE: Found existing student: {full_name} (ID: {student_id_str}) - SKIPPING curriculum verification", level="INFO")
                         return student_id_str
                     else:
                         # Student mapping exists but student doesn't exist in database
@@ -4583,7 +4586,8 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
         # Create new student if not found
         log_webhook('student-not-found', f"No student found for phone: {clean_phone}",
                    call_id=call_id, phone=clean_phone)
-        print(f"👤 No student found for phone: {clean_phone}, creating new student")
+        print(f"👤 TRACE: No student found for phone: {clean_phone}, creating new student")
+        log_system(f"👤 TRACE: No student found for phone: {clean_phone}, creating new student", level="INFO")
         
         # Pass the normalized phone to create_student_from_call
         print(f"🆕 TRACE: About to call create_student_from_call for phone: {clean_phone}")
@@ -4597,10 +4601,12 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
         if new_student_id:
             log_webhook('student-created', f"Created new student {new_student_id}",
                        call_id=call_id, student_id=new_student_id, phone=clean_phone)
-            print(f"✅ Successfully created new student: {new_student_id}")
+            print(f"✅ TRACE: Successfully created new student: {new_student_id} (curriculum verification should have been called)")
+            log_system(f"✅ TRACE: Successfully created new student: {new_student_id} (curriculum verification should have been called)", level="INFO")
             return new_student_id
         else:
-            print(f"❌ Failed to create new student")
+            print(f"❌ TRACE: Failed to create new student")
+            log_system(f"❌ TRACE: Failed to create new student", level="ERROR")
             log_webhook('student-creation-failed', f"Failed to create new student for phone: {clean_phone}",
                        call_id=call_id, phone=clean_phone)
             return None
@@ -4709,7 +4715,8 @@ def create_student_from_call(phone: str, call_id: str) -> str:
             if not new_student:
                 log_error('DATABASE', f"Failed to create student in database", ValueError("Database operation failed"),
                          call_id=call_id, phone=normalized_phone)
-                print(f"❌ Failed to create student in database - repository returned None")
+                print(f"❌ TRACE: Failed to create student in database - repository returned None")
+                log_system(f"❌ TRACE: Student creation failed - repository returned None", level="ERROR")
                 # Return None to indicate failure - don't use temp IDs as they cause FK constraint violations
                 return None
             
@@ -4717,29 +4724,41 @@ def create_student_from_call(phone: str, call_id: str) -> str:
             student_id = str(new_student['id'])
             print(f"🔍 TRACE: Starting curriculum verification for student {student_id}")
             log_system(f"🔍 TRACE: Starting curriculum verification for student {student_id}", level="INFO")
+            print(f"📊 TRACE: Student data: {json.dumps(new_student, indent=2)}")
+            log_system(f"📊 TRACE: Student data received from repository", student_id=student_id, level="INFO")
             
             try:
                 # Check if we have an app context
                 import flask
                 if not flask.has_app_context():
-                    print(f"⚠️ No app context for curriculum verification, creating one")
+                    print(f"⚠️ TRACE: No app context for curriculum verification, creating one")
+                    log_system(f"⚠️ TRACE: No app context for curriculum verification, creating one", level="WARNING")
                     with app.app_context():
-                        print(f"🔄 Created app context for curriculum verification")
+                        print(f"🔄 TRACE: Created app context for curriculum verification")
                         log_system(f"🔄 TRACE: Created app context for curriculum verification", level="INFO")
+                        print(f"📚 TRACE: About to call verify_and_assign_curriculum({student_id}, {call_id})")
+                        log_system(f"📚 TRACE: About to call verify_and_assign_curriculum", student_id=student_id, call_id=call_id, level="INFO")
                         verify_and_assign_curriculum(student_id, call_id)
+                        print(f"📚 TRACE: Completed verify_and_assign_curriculum call")
+                        log_system(f"📚 TRACE: Completed verify_and_assign_curriculum call", level="INFO")
                 else:
-                    print(f"✅ App context exists for curriculum verification")
+                    print(f"✅ TRACE: App context exists for curriculum verification")
                     log_system(f"✅ TRACE: App context exists for curriculum verification", level="INFO")
+                    print(f"📚 TRACE: About to call verify_and_assign_curriculum({student_id}, {call_id})")
+                    log_system(f"📚 TRACE: About to call verify_and_assign_curriculum", student_id=student_id, call_id=call_id, level="INFO")
                     verify_and_assign_curriculum(student_id, call_id)
+                    print(f"📚 TRACE: Completed verify_and_assign_curriculum call")
+                    log_system(f"📚 TRACE: Completed verify_and_assign_curriculum call", level="INFO")
                     
             except Exception as verification_error:
                 log_error('WEBHOOK', f"Error in curriculum verification wrapper for new student", verification_error,
                          call_id=call_id, student_id=student_id)
-                print(f"❌ Error in curriculum verification wrapper: {verification_error}")
+                print(f"❌ TRACE: Error in curriculum verification wrapper: {verification_error}")
                 log_system(f"❌ TRACE: Error in curriculum verification wrapper: {verification_error}", level="ERROR")
                 # Print full stack trace for debugging
                 import traceback
-                print(f"🔍 Full stack trace: {traceback.format_exc()}")
+                print(f"🔍 TRACE: Full stack trace: {traceback.format_exc()}")
+                log_system(f"🔍 TRACE: Full verification error stack trace", error_trace=traceback.format_exc(), level="ERROR")
         except Exception as db_error:
             # The repository should handle rollback, but ensure we're in a clean state
             try:
