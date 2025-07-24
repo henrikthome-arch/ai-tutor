@@ -754,7 +754,7 @@
 
 <script>
 function deleteStudent(studentId, studentName) {
-    if (!confirm(`Are you sure you want to delete student "${studentName}"?\n\nThis action will permanently delete:\n• Student profile and data\n• All session records\n• Phone number mapping\n\nThis action cannot be undone.`)) {
+    if (!confirm(`Are you sure you want to delete student "${studentName}"?\n\nThis action will permanently delete:\n• Student profile and personal data\n• All curriculum assignments and progress\n• All session records and transcripts\n• Assessment data and analytics\n• Phone number mapping\n• AI tutor analysis and notes\n\n⚠️ This action cannot be undone and will completely remove all data associated with this student.`)) {
         return;
     }
     
