@@ -636,12 +636,11 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
     def update_student_profile(self, student_id, extracted_info):
         """Update student profile with extracted information using SQL database"""
         if not extracted_info:
-            logger.info(f"🔍 DEBUG: No extracted_info provided for student {student_id}")
+            logger.info(f"No extracted_info provided for student {student_id}")
             return False
         
-        # Add comprehensive debugging
-        logger.info(f"🔍 DEBUG: Starting profile update for student {student_id}")
-        logger.info(f"🔍 DEBUG: Extracted info received: {json.dumps(extracted_info, indent=2)}")
+        logger.info(f"Starting profile update for student {student_id}")
+        logger.info(f"Extracted info received: {json.dumps(extracted_info, indent=2)}")
         
         try:
             # Import models and app context
@@ -652,24 +651,22 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             
             # Ensure we have app context
             if not flask.has_app_context():
-                logger.error("🔍 DEBUG: No Flask app context for profile update")
+                logger.error("No Flask app context for profile update")
                 return False
             
             # Get student from database
             try:
                 student = Student.query.get(student_id)
                 if not student:
-                    logger.warning(f"🔍 DEBUG: Student {student_id} not found in database")
+                    logger.warning(f"Student {student_id} not found in database")
                     return False
                 
-                # Log current student state
                 current_first = student.first_name or ''
                 current_last = student.last_name or ''
-                current_full = f"{current_first} {current_last}".strip()
-                logger.info(f"🔍 DEBUG: Current student name: first='{current_first}', last='{current_last}', full='{current_full}'")
+                logger.info(f"Current student name: '{current_first}' '{current_last}'")
                 
             except Exception as e:
-                logger.error(f"🔍 DEBUG: Error getting student {student_id}: {e}")
+                logger.error(f"Error getting student {student_id}: {e}")
                 return False
             
             # Get or create profile for student
@@ -690,146 +687,105 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             # Track changes
             updated_fields = []
             
-            # Update student name if extracted from transcript - simplified logic
-            name_updated = False
-            new_first_name = None
-            new_last_name = None
-            
-            logger.info(f"🔍 DEBUG: Starting name extraction from extracted_info")
-            print(f"🔍 DEBUG: extracted_info keys: {list(extracted_info.keys())}")
-            
-            # Try multiple extraction methods to find the name
-            extraction_methods = [
-                # Method 1: nested student_profile structure (conditional prompts)
-                ('student_profile', lambda info: info.get('student_profile', {})),
-                # Method 2: direct from extracted_info (fallback)
-                ('direct', lambda info: info)
-            ]
-            
-            for method_name, extract_func in extraction_methods:
-                data = extract_func(extracted_info)
-                if not data:
-                    continue
-                    
-                print(f"🔍 DEBUG: Trying {method_name} extraction from: {data}")
+            # PART 1: Standardized Data Access
+            def extract_name_from_ai_response(extracted_info):
+                """Extract first and last name from AI response with standardized logic"""
+                # Priority order for extracting name information
+                sources = [
+                    extracted_info.get('student_profile', {}),  # Nested structure from conditional prompts
+                    extracted_info                              # Direct structure from fallback prompts
+                ]
                 
-                # Extract first name
-                first_name_raw = data.get('first_name')
-                if first_name_raw is not None:
-                    first_name_str = str(first_name_raw).strip()
-                    if first_name_str and first_name_str not in ['Unknown', 'unknown', 'None', 'null']:
-                        new_first_name = first_name_str
-                        print(f"🔍 DEBUG: ✅ Found first_name '{new_first_name}' via {method_name}")
-                        break
+                for source in sources:
+                    if not source:
+                        continue
                         
-                # Extract last name
-                last_name_raw = data.get('last_name')
-                if last_name_raw is not None:
-                    last_name_str = str(last_name_raw).strip()
-                    if last_name_str and last_name_str not in ['Unknown', 'unknown', 'None', 'null']:
-                        new_last_name = last_name_str
-                        print(f"🔍 DEBUG: Found last_name '{new_last_name}' via {method_name}")
+                    first_name = source.get('first_name')
+                    last_name = source.get('last_name')
+                    
+                    # Clean and validate first name
+                    if first_name:
+                        first_name = str(first_name).strip()
+                        if first_name and first_name not in ['Unknown', 'unknown', 'None', 'null', '']:
+                            # Also extract last name if available
+                            if last_name:
+                                last_name = str(last_name).strip()
+                                if last_name in ['Unknown', 'unknown', 'None', 'null', '']:
+                                    last_name = None
+                            
+                            return first_name, last_name
+                
+                return None, None
             
-            # Apply name update if we found a valid first name
+            # Extract name using standardized logic
+            new_first_name, new_last_name = extract_name_from_ai_response(extracted_info)
+            
+            # PART 2: Decisive Update Rule
             if new_first_name:
                 current_first = student.first_name or ''
-                current_last = student.last_name or ''
                 
-                print(f"🔍 DEBUG: Current name: '{current_first}' '{current_last}'")
-                print(f"🔍 DEBUG: Extracted name: '{new_first_name}' '{new_last_name or ''}'")
+                logger.info(f"Current name: '{current_first}' - Extracted name: '{new_first_name}'")
                 
-                # Simple check: if current first name looks like a placeholder, update it
-                import re
-                is_placeholder_name = (
-                    current_first == 'Student' or
-                    current_first.startswith('Unknown') or
-                    re.match(r'^Student.*\d+$', f"{current_first} {current_last}".strip()) or
-                    not current_first or current_first.isdigit()
-                )
-                
-                print(f"🔍 DEBUG: Is placeholder name: {is_placeholder_name}")
-                
-                if is_placeholder_name:
-                    print(f"🔍 DEBUG: ✅ UPDATING name from '{current_first}' to '{new_first_name}'")
+                # Simple, decisive rule: If current first name starts with "Student", update it
+                if current_first.startswith('Student'):
+                    logger.info(f"✅ UPDATING placeholder name '{current_first}' to '{new_first_name}'")
                     
                     student.first_name = new_first_name
                     if new_last_name:
                         student.last_name = new_last_name
-                    elif not current_last or current_last.isdigit():
-                        student.last_name = ''  # Clear placeholder last name
                     
                     updated_fields.append('name')
-                    name_updated = True
-                    logger.info(f"Updated student name to: '{student.first_name}' '{student.last_name}'")
+                    logger.info(f"Updated student name to: '{student.first_name}' '{student.last_name or ''}'")
                 else:
-                    print(f"🔍 DEBUG: ❌ Keeping existing name '{current_first}' (not a placeholder)")
+                    logger.info(f"Keeping existing name '{current_first}' (not a placeholder)")
             else:
-                print(f"🔍 DEBUG: ❌ No valid first name extracted")
+                logger.info("No valid first name extracted from AI response")
             
-            # Handle nested student_profile structure consistently for ALL fields
-            student_profile_data = extracted_info.get('student_profile', {})
-            
-            # Update age by calculating date_of_birth if provided - handle nested structure properly
-            age_val = None
-            if student_profile_data and student_profile_data.get('age') is not None:
-                age_val = student_profile_data.get('age')
-                logger.info(f"🔍 DEBUG: Found age in student_profile_data: {age_val}")
-            elif extracted_info.get('age') is not None:
-                age_val = extracted_info.get('age')
-                logger.info(f"🔍 DEBUG: Found age in extracted_info: {age_val}")
-            
-            if age_val is not None:
-                try:
-                    age_val = int(age_val)
-                    # Calculate approximate date of birth (use current year - age, January 1st)
-                    from datetime import date
-                    current_year = date.today().year
-                    birth_year = current_year - age_val
-                    calculated_dob = date(birth_year, 1, 1)
+            # Update other profile fields using the same standardized approach
+            def extract_field_value(field_name, expected_type=None):
+                """Extract field value from AI response using standardized logic"""
+                sources = [
+                    extracted_info.get('student_profile', {}),
+                    extracted_info
+                ]
+                
+                for source in sources:
+                    if not source:
+                        continue
                     
-                    # Update student's date_of_birth
-                    student.date_of_birth = calculated_dob
-                    updated_fields.append('date_of_birth')
-                    logger.info(f"Updating date_of_birth to {calculated_dob} (age {age_val})")
-                except (ValueError, TypeError):
-                    logger.warning(f"Invalid age value: {age_val}")
+                    value = source.get(field_name)
+                    if value is not None:
+                        if expected_type == int:
+                            try:
+                                return int(value)
+                            except (ValueError, TypeError):
+                                continue
+                        else:
+                            return value
+                return None
             
-            # Update grade_level in Student model if provided - handle nested structure properly
-            grade_val = None
-            if student_profile_data and student_profile_data.get('grade') is not None:
-                grade_val = student_profile_data.get('grade')
-                logger.info(f"🔍 DEBUG: Found grade in student_profile_data: {grade_val}")
-            elif extracted_info.get('grade') is not None:
-                grade_val = extracted_info.get('grade')
-                logger.info(f"🔍 DEBUG: Found grade in extracted_info: {grade_val}")
+            # Update age by calculating date_of_birth if provided
+            age_val = extract_field_value('age', int)
+            if age_val is not None and 3 <= age_val <= 18:
+                from datetime import date
+                current_year = date.today().year
+                birth_year = current_year - age_val
+                calculated_dob = date(birth_year, 1, 1)
+                
+                student.date_of_birth = calculated_dob
+                updated_fields.append('date_of_birth')
+                logger.info(f"Updated date_of_birth to {calculated_dob} (age {age_val})")
             
-            if grade_val is not None:
-                try:
-                    grade_val = int(grade_val)
-                    # Validate grade range
-                    if 1 <= grade_val <= 12:
-                        student.grade_level = grade_val
-                        updated_fields.append('grade_level')
-                        logger.info(f"Updating grade_level to {grade_val}")
-                    else:
-                        logger.warning(f"Grade value out of range: {grade_val}")
-                except (ValueError, TypeError):
-                    logger.warning(f"Invalid grade value: {grade_val}")
+            # Update grade_level in Student model if provided
+            grade_val = extract_field_value('grade', int)
+            if grade_val is not None and 1 <= grade_val <= 12:
+                student.grade_level = grade_val
+                updated_fields.append('grade_level')
+                logger.info(f"Updated grade_level to {grade_val}")
             
-            # Initialize learning_preferences if None for interests
-            if profile.learning_preferences is None:
-                profile.learning_preferences = []
-            
-            # Handle interests - check nested structure first properly
-            interests_to_add = []
-            if student_profile_data and student_profile_data.get('interests'):
-                interests_to_add = student_profile_data.get('interests', [])
-                logger.info(f"🔍 DEBUG: Found interests in student_profile_data: {interests_to_add}")
-            elif extracted_info.get('interests'):
-                interests_to_add = extracted_info.get('interests', [])
-                logger.info(f"🔍 DEBUG: Found interests in extracted_info: {interests_to_add}")
-            
-            if interests_to_add:
+            # Handle interests
+            interests_to_add = extract_field_value('interests')
+            if interests_to_add and isinstance(interests_to_add, list):
                 current_interests = profile.interests or []
                 new_interests = []
                 for interest in interests_to_add:
@@ -842,16 +798,13 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                     updated_fields.append('interests')
                     logger.info(f"Added new interests: {new_interests}")
             
-            # Handle learning preferences - check nested structure first properly
-            learning_prefs_to_add = []
-            if student_profile_data and student_profile_data.get('learning_preferences'):
-                learning_prefs_to_add = student_profile_data.get('learning_preferences', [])
-                logger.info(f"🔍 DEBUG: Found learning_preferences in student_profile_data: {learning_prefs_to_add}")
-            elif extracted_info.get('learning_preferences'):
-                learning_prefs_to_add = extracted_info.get('learning_preferences', [])
-                logger.info(f"🔍 DEBUG: Found learning_preferences in extracted_info: {learning_prefs_to_add}")
-            
-            if learning_prefs_to_add:
+            # Handle learning preferences
+            learning_prefs_to_add = extract_field_value('learning_preferences')
+            if learning_prefs_to_add and isinstance(learning_prefs_to_add, list):
+                # Initialize learning_preferences if None
+                if profile.learning_preferences is None:
+                    profile.learning_preferences = []
+                    
                 current_prefs = profile.learning_preferences or []
                 new_prefs = []
                 for pref in learning_prefs_to_add:
@@ -866,63 +819,11 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             
             # Save changes if any were made
             if updated_fields:
-                logger.info(f"🔍 DEBUG: Changes detected, attempting to save. Updated fields: {updated_fields}")
-                
-                # Log final state before commit
-                final_first = student.first_name or ''
-                final_last = student.last_name or ''
-                final_full = f"{final_first} {final_last}".strip()
-                logger.info(f"🔍 DEBUG: Final student state before commit - first: '{final_first}', last: '{final_last}', full: '{final_full}'")
+                logger.info(f"Changes detected, saving updated fields: {updated_fields}")
                 
                 try:
-                    logger.info(f"🔍 DEBUG: About to commit database changes for student {student_id}")
-                    print(f"🔍 DEBUG: About to commit database changes for student {student_id}")
-                    
-                    # Log pending changes before commit
-                    if name_updated:
-                        logger.info(f"🔍 DEBUG: Pending name changes - first: '{student.first_name}', last: '{student.last_name}'")
-                        print(f"🔍 DEBUG: Pending name changes - first: '{student.first_name}', last: '{student.last_name}'")
-                    
-                    # Flush to send changes to database without committing
-                    db.session.flush()
-                    logger.info(f"🔍 DEBUG: Session flushed successfully")
-                    print(f"🔍 DEBUG: Session flushed successfully")
-                    
-                    # Now commit the transaction
                     db.session.commit()
-                    logger.info(f"🔍 DEBUG: Database commit successful for student {student_id}")
-                    print(f"🔍 DEBUG: Database commit successful for student {student_id}")
-                    
-                    # Verify the commit by re-querying in a new transaction
-                    try:
-                        # Force a new query to bypass any session cache
-                        db.session.expire_all()
-                        verification_student = Student.query.get(student_id)
-                        if verification_student:
-                            verify_first = verification_student.first_name or ''
-                            verify_last = verification_student.last_name or ''
-                            verify_full = f"{verify_first} {verify_last}".strip()
-                            logger.info(f"🔍 DEBUG: Post-commit verification - first: '{verify_first}', last: '{verify_last}', full: '{verify_full}'")
-                            print(f"🔍 DEBUG: Post-commit verification - first: '{verify_first}', last: '{verify_last}', full: '{verify_full}'")
-                            
-                            # Check if the update actually took effect
-                            if name_updated and verify_first == new_first_name:
-                                logger.info(f"🔍 DEBUG: ✅ Name update verified successfully - '{verify_full}'")
-                                print(f"🔍 DEBUG: ✅ Name update verified successfully - '{verify_full}'")
-                            elif name_updated:
-                                logger.error(f"🔍 DEBUG: ❌ Name update verification failed - expected '{new_first_name}', got '{verify_first}'")
-                                print(f"🔍 DEBUG: ❌ Name update verification failed - expected '{new_first_name}', got '{verify_first}'")
-                        else:
-                            logger.error(f"🔍 DEBUG: Post-commit verification failed - student {student_id} not found")
-                            print(f"🔍 DEBUG: Post-commit verification failed - student {student_id} not found")
-                    except Exception as verify_error:
-                        logger.error(f"🔍 DEBUG: Post-commit verification error: {verify_error}")
-                        print(f"🔍 DEBUG: Post-commit verification error: {verify_error}")
-                        import traceback
-                        logger.error(f"🔍 DEBUG: Verification error traceback: {traceback.format_exc()}")
-                    
-                    logger.info(f"Updated profile for student {student_id} with fields: {updated_fields}")
-                    print(f"Updated profile for student {student_id} with fields: {updated_fields}")
+                    logger.info(f"Successfully updated profile for student {student_id} with fields: {updated_fields}")
                     
                     # Log successful update to system logger
                     from system_logger import log_ai_analysis
@@ -931,24 +832,16 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                                    student_id=student_id)
                     return True
                 except Exception as e:
-                    logger.error(f"🔍 DEBUG: Database commit failed for student {student_id}: {e}")
-                    print(f"🔍 DEBUG: Database commit failed for student {student_id}: {e}")
-                    import traceback
-                    logger.error(f"🔍 DEBUG: Commit error traceback: {traceback.format_exc()}")
-                    print(f"🔍 DEBUG: Commit error traceback: {traceback.format_exc()}")
-                    
+                    logger.error(f"Database commit failed for student {student_id}: {e}")
                     try:
                         db.session.rollback()
-                        logger.info(f"🔍 DEBUG: Database rollback completed")
-                        print(f"🔍 DEBUG: Database rollback completed")
                     except Exception as rollback_error:
-                        logger.error(f"🔍 DEBUG: Rollback error: {rollback_error}")
-                        print(f"🔍 DEBUG: Rollback error: {rollback_error}")
+                        logger.error(f"Rollback error: {rollback_error}")
                     
                     logger.error(f"Error saving profile updates for student {student_id}: {e}")
                     return False
             else:
-                logger.info(f"🔍 DEBUG: No profile updates needed for student {student_id} - no fields changed")
+                logger.info(f"No profile updates needed for student {student_id}")
                 return True
             
         except Exception as e:
