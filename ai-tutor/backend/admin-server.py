@@ -5276,11 +5276,12 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
                 
                 # Use conditional prompt analysis with phone number for call type detection
                 if phone:
-                    print(f"🔍 Calling analyzer.analyze_transcript_with_conditional_prompts_sync() with phone {phone}")
+                    print(f"🔍 Calling analyzer.analyze_transcript_with_conditional_prompts_sync() with phone {phone} and session_id {new_session.get('id')}")
                     analysis_result = analyzer.analyze_transcript_with_conditional_prompts_sync(
                         transcript=transcript,
                         student_id=student_id,
-                        phone_number=phone
+                        phone_number=phone,
+                        additional_context={'session_id': new_session.get('id')}
                     )
                     print(f"📊 Conditional analysis result: {json.dumps(analysis_result, indent=2)[:500] if analysis_result else 'None'}...")
                     
@@ -5467,9 +5468,12 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
                 print(f"🔍 Analyzing webhook transcript for student {student_id} using conditional prompts...")
                 print(f"📄 Transcript preview: {combined_transcript[:200]}...")
                 
+                # Note: We don't have a session_id in the fallback webhook handler since it uses the old save method
+                # This is a limitation of the fallback approach
+                
                 # Use conditional prompt analysis with phone number for call type detection
                 if customer_phone:
-                    print(f"🔍 Calling analyzer.analyze_transcript_with_conditional_prompts_sync() with phone {customer_phone}")
+                    print(f"🔍 Calling analyzer.analyze_transcript_with_conditional_prompts_sync() with phone {customer_phone} (fallback - no session_id)")
                     analysis_result = analyzer.analyze_transcript_with_conditional_prompts_sync(
                         transcript=combined_transcript,
                         student_id=student_id,

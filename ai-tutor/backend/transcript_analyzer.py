@@ -465,6 +465,12 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
         if not transcript:
             return {}
         
+        # Extract session_id from additional_context if provided
+        session_id = None
+        if additional_context and 'session_id' in additional_context:
+            session_id = additional_context['session_id']
+            logger.info(f"Found session_id {session_id} in additional_context for AI processing step storage")
+        
         # Create event loop if needed
         try:
             loop = asyncio.get_event_loop()
@@ -479,7 +485,8 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                     transcript=transcript,
                     phone_number=phone_number,
                     subject_hint=subject_hint,
-                    additional_context=additional_context
+                    additional_context=additional_context,
+                    session_id=session_id
                 )
             )
             
@@ -672,17 +679,30 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             name_updated = False
             extracted_name = None
             
-            # Direct name extraction: AI provides first_name and last_name fields directly
+            # Handle both direct and nested name extraction formats
             new_first_name = None
             new_last_name = None
             
-            if extracted_info.get('first_name') and extracted_info['first_name'] not in ['Unknown', 'unknown', '']:
-                new_first_name = str(extracted_info['first_name']).strip()
-                logger.info(f"🔍 DEBUG: Extracted first_name: '{new_first_name}'")
+            # Check for nested student_profile structure first (from conditional prompts)
+            profile_data = extracted_info.get('student_profile', {})
+            if profile_data:
+                logger.info(f"🔍 DEBUG: Found nested student_profile data")
+                if profile_data.get('first_name') and profile_data['first_name'] not in ['Unknown', 'unknown', '']:
+                    new_first_name = str(profile_data['first_name']).strip()
+                    logger.info(f"🔍 DEBUG: Extracted first_name from profile: '{new_first_name}'")
+                
+                if profile_data.get('last_name') and profile_data['last_name'] not in ['Unknown', 'unknown', '']:
+                    new_last_name = str(profile_data['last_name']).strip()
+                    logger.info(f"🔍 DEBUG: Extracted last_name from profile: '{new_last_name}'")
             
-            if extracted_info.get('last_name') and extracted_info['last_name'] not in ['Unknown', 'unknown', '']:
+            # Fallback to direct fields (from legacy analysis)
+            if not new_first_name and extracted_info.get('first_name') and extracted_info['first_name'] not in ['Unknown', 'unknown', '']:
+                new_first_name = str(extracted_info['first_name']).strip()
+                logger.info(f"🔍 DEBUG: Extracted first_name directly: '{new_first_name}'")
+            
+            if not new_last_name and extracted_info.get('last_name') and extracted_info['last_name'] not in ['Unknown', 'unknown', '']:
                 new_last_name = str(extracted_info['last_name']).strip()
-                logger.info(f"🔍 DEBUG: Extracted last_name: '{new_last_name}'")
+                logger.info(f"🔍 DEBUG: Extracted last_name directly: '{new_last_name}'")
             
             if new_first_name or new_last_name:
                 logger.info(f"🔍 DEBUG: Processing extracted names - first: '{new_first_name}', last: '{new_last_name}'")
@@ -738,10 +758,18 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             # Use extracted_info directly for profile data (simplified approach)
             profile_data = extracted_info
             
-            # Update age by calculating date_of_birth if provided
-            if 'age' in extracted_info and extracted_info['age'] is not None:
+            # Update age by calculating date_of_birth if provided - handle nested structure
+            age_val = None
+            if profile_data and profile_data.get('age') is not None:
+                age_val = profile_data.get('age')
+                logger.info(f"🔍 DEBUG: Found age in profile_data: {age_val}")
+            elif extracted_info.get('age') is not None:
+                age_val = extracted_info.get('age')
+                logger.info(f"🔍 DEBUG: Found age in extracted_info: {age_val}")
+            
+            if age_val is not None:
                 try:
-                    age_val = int(extracted_info['age'])
+                    age_val = int(age_val)
                     # Calculate approximate date of birth (use current year - age, January 1st)
                     from datetime import date
                     current_year = date.today().year
@@ -753,12 +781,20 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                     updated_fields.append('date_of_birth')
                     logger.info(f"Updating date_of_birth to {calculated_dob} (age {age_val})")
                 except (ValueError, TypeError):
-                    logger.warning(f"Invalid age value: {extracted_info['age']}")
+                    logger.warning(f"Invalid age value: {age_val}")
             
-            # Update grade_level in Student model if provided
-            if 'grade' in extracted_info and extracted_info['grade'] is not None:
+            # Update grade_level in Student model if provided - handle nested structure
+            grade_val = None
+            if profile_data and profile_data.get('grade') is not None:
+                grade_val = profile_data.get('grade')
+                logger.info(f"🔍 DEBUG: Found grade in profile_data: {grade_val}")
+            elif extracted_info.get('grade') is not None:
+                grade_val = extracted_info.get('grade')
+                logger.info(f"🔍 DEBUG: Found grade in extracted_info: {grade_val}")
+            
+            if grade_val is not None:
                 try:
-                    grade_val = int(extracted_info['grade'])
+                    grade_val = int(grade_val)
                     # Validate grade range
                     if 1 <= grade_val <= 12:
                         student.grade_level = grade_val
@@ -767,17 +803,25 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                     else:
                         logger.warning(f"Grade value out of range: {grade_val}")
                 except (ValueError, TypeError):
-                    logger.warning(f"Invalid grade value: {extracted_info['grade']}")
+                    logger.warning(f"Invalid grade value: {grade_val}")
             
             # Initialize learning_preferences if None for interests
             if profile.learning_preferences is None:
                 profile.learning_preferences = []
             
-            # Handle interests
-            if 'interests' in extracted_info and extracted_info['interests']:
+            # Handle interests - check nested structure first
+            interests_to_add = []
+            if profile_data and profile_data.get('interests'):
+                interests_to_add = profile_data.get('interests', [])
+                logger.info(f"🔍 DEBUG: Found interests in profile_data: {interests_to_add}")
+            elif extracted_info.get('interests'):
+                interests_to_add = extracted_info.get('interests', [])
+                logger.info(f"🔍 DEBUG: Found interests in extracted_info: {interests_to_add}")
+            
+            if interests_to_add:
                 current_interests = profile.interests or []
                 new_interests = []
-                for interest in extracted_info['interests']:
+                for interest in interests_to_add:
                     if interest and interest not in current_interests:
                         new_interests.append(interest)
                         current_interests.append(interest)
@@ -787,11 +831,19 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                     updated_fields.append('interests')
                     logger.info(f"Added new interests: {new_interests}")
             
-            # Handle learning preferences
-            if 'learning_preferences' in extracted_info and extracted_info['learning_preferences']:
+            # Handle learning preferences - check nested structure first
+            learning_prefs_to_add = []
+            if profile_data and profile_data.get('learning_preferences'):
+                learning_prefs_to_add = profile_data.get('learning_preferences', [])
+                logger.info(f"🔍 DEBUG: Found learning_preferences in profile_data: {learning_prefs_to_add}")
+            elif extracted_info.get('learning_preferences'):
+                learning_prefs_to_add = extracted_info.get('learning_preferences', [])
+                logger.info(f"🔍 DEBUG: Found learning_preferences in extracted_info: {learning_prefs_to_add}")
+            
+            if learning_prefs_to_add:
                 current_prefs = profile.learning_preferences or []
                 new_prefs = []
-                for pref in extracted_info['learning_preferences']:
+                for pref in learning_prefs_to_add:
                     if pref and pref not in current_prefs:
                         new_prefs.append(pref)
                         current_prefs.append(pref)
