@@ -14,6 +14,137 @@ app.use(express.json());
 // JWT Secret - should match the one used in the Flask app
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-here';
 
+// MCP Logging Configuration
+const MCP_LOGGING_ENABLED = process.env.MCP_LOGGING_ENABLED !== 'false';
+const FLASK_API_URL = process.env.FLASK_API_URL || 'http://localhost:5000';
+const MCP_LOGGING_TOKEN = process.env.MCP_LOGGING_TOKEN || null;
+
+// MCP Logging Functions
+async function logMCPRequest(endpoint: string, requestData: any, sessionId?: string): Promise<string | null> {
+  if (!MCP_LOGGING_ENABLED) {
+    return null;
+  }
+
+  try {
+    const logData = {
+      endpoint,
+      request_data: requestData,
+      session_id: sessionId,
+      token_id: undefined // Could be extracted from auth header
+    };
+
+    const headers: any = {
+      'Content-Type': 'application/json'
+    };
+
+    if (MCP_LOGGING_TOKEN) {
+      headers['Authorization'] = `Bearer ${MCP_LOGGING_TOKEN}`;
+    }
+
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(`${FLASK_API_URL}/api/v1/admin/api/mcp/log-request`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(logData)
+    } as any);
+
+    if (response.ok) {
+      const result: any = await response.json();
+      return result.request_id;
+    } else {
+      console.warn(`Failed to log MCP request: ${response.status} ${response.statusText}`);
+      return null;
+    }
+  } catch (error) {
+    console.warn(`Error logging MCP request:`, error);
+    return null;
+  }
+}
+
+async function logMCPResponse(requestId: string, responseData: any, statusCode: number = 200): Promise<void> {
+  if (!MCP_LOGGING_ENABLED || !requestId) {
+    return;
+  }
+
+  try {
+    const logData = {
+      request_id: requestId,
+      response_data: responseData,
+      http_status_code: statusCode
+    };
+
+    const headers: any = {
+      'Content-Type': 'application/json'
+    };
+
+    if (MCP_LOGGING_TOKEN) {
+      headers['Authorization'] = `Bearer ${MCP_LOGGING_TOKEN}`;
+    }
+
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(`${FLASK_API_URL}/api/v1/admin/api/mcp/log-response`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(logData)
+    } as any);
+
+    if (!response.ok) {
+      console.warn(`Failed to log MCP response: ${response.status} ${response.statusText}`);
+    }
+  } catch (error) {
+    console.warn(`Error logging MCP response:`, error);
+  }
+}
+
+function createLoggedEndpoint(endpoint: string, handler: (req: express.Request, res: express.Response) => Promise<void>) {
+  return async (req: express.Request, res: express.Response) => {
+    const startTime = Date.now();
+    let requestId: string | null = null;
+    let statusCode = 200;
+    let responseData: any = null;
+
+    try {
+      // Log the incoming request
+      requestId = await logMCPRequest(endpoint, req.body, req.body?.session_id);
+
+      // Intercept the response to capture data and status
+      const originalJson = res.json.bind(res);
+      const originalStatus = res.status.bind(res);
+
+      res.status = function(code: number) {
+        statusCode = code;
+        return originalStatus(code);
+      };
+
+      res.json = function(data: any) {
+        responseData = data;
+        return originalJson(data);
+      };
+
+      // Call the original handler
+      await handler(req, res);
+
+    } catch (error) {
+      statusCode = 500;
+      responseData = { error: error instanceof Error ? error.message : 'Unknown error' };
+      
+      if (!res.headersSent) {
+        res.status(500).json(responseData);
+      }
+      
+      console.error(`Error in ${endpoint}:`, error);
+    } finally {
+      // Log the response
+      if (requestId && responseData) {
+        await logMCPResponse(requestId, responseData, statusCode);
+      }
+
+      const duration = Date.now() - startTime;
+      console.log(`[${new Date().toISOString()}] MCP: ${endpoint} completed in ${duration}ms (status: ${statusCode})`);
+    }
+  };
+}
+
 // Token validation middleware
 const validateToken = (requiredScope: string) => {
   return (req: express.Request, res: express.Response, next: express.NextFunction) => {

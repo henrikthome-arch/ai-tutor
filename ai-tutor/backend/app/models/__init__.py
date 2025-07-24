@@ -11,6 +11,7 @@ from .profile import Profile
 from .system_log import SystemLog
 from .analytics import SessionMetrics, DailyStats, StudentProgress, Analytics
 from .token import Token
+from .mcp_interaction import MCPInteraction
 
 __all__ = [
     'Student',
@@ -24,5 +25,6 @@ __all__ = [
     'DailyStats',
     'StudentProgress',
     'Analytics',
-    'Token'
+    'Token',
+    'MCPInteraction'
 ]

@@ -1,0 +1,421 @@
+{% extends "base.html" %}
+
+{% block title %}MCP Interactions - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>MCP Interactions</h1>
+                <div class="btn-group">
+                    <a href="{{ url_for('main.search_mcp_interactions') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-search"></i> Advanced Search
+                    </a>
+                    <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#cleanupModal">
+                        <i class="fas fa-trash"></i> Cleanup Old Data
+                    </button>
+                    <button type="button" class="btn btn-outline-info" onclick="copyAsMarkdown()">
+                        <i class="fas fa-copy"></i> Copy as Markdown
+                    </button>
+                </div>
+            </div>
+
+            <!-- Health Metrics -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body">
+                            <h5 class="card-title">Total Interactions</h5>
+                            <h3>{{ health_metrics.total_interactions }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-success text-white">
+                        <div class="card-body">
+                            <h5 class="card-title">Last 24h</h5>
+                            <h3>{{ summary_stats.total_interactions }}</h3>
+                            <small>{{ '%.1f'|format(summary_stats.completion_rate) }}% completion rate</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-info text-white">
+                        <div class="card-body">
+                            <h5 class="card-title">Avg Duration</h5>
+                            <h3>
+                                {% if summary_stats.average_duration_ms %}
+                                    {{ summary_stats.average_duration_ms }}ms
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card {% if health_metrics.stuck_interactions > 10 %}bg-warning{% elif health_metrics.stuck_interactions > 0 %}bg-secondary{% else %}bg-success{% endif %} text-white">
+                        <div class="card-body">
+                            <h5 class="card-title">Stuck Requests</h5>
+                            <h3>{{ health_metrics.stuck_interactions }}</h3>
+                            <small>Status: {{ health_metrics.health_status }}</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Filters</h5>
+                    <form method="GET" action="{{ url_for('main.admin_mcp_interactions') }}" class="row g-3">
+                        <div class="col-md-3">
+                            <label for="session_id" class="form-label">Session ID</label>
+                            <input type="text" class="form-control" id="session_id" name="session_id" 
+                                   value="{{ current_filters.session_id or '' }}" placeholder="Filter by session">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="token_id" class="form-label">Token</label>
+                            <select class="form-select" id="token_id" name="token_id">
+                                <option value="">All tokens</option>
+                                {% for token in active_tokens %}
+                                <option value="{{ token.id }}" {% if current_filters.token_id == token.id %}selected{% endif %}>
+                                    {{ token.name }} ({{ token.id }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="per_page" class="form-label">Per Page</label>
+                            <select class="form-select" id="per_page" name="per_page">
+                                <option value="25" {% if current_filters.per_page == 25 %}selected{% endif %}>25</option>
+                                <option value="50" {% if current_filters.per_page == 50 %}selected{% endif %}>50</option>
+                                <option value="100" {% if current_filters.per_page == 100 %}selected{% endif %}>100</option>
+                                <option value="200" {% if current_filters.per_page == 200 %}selected{% endif %}>200</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label>&nbsp;</label>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary">Apply Filters</button>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <label>&nbsp;</label>
+                            <div class="d-grid">
+                                <a href="{{ url_for('main.admin_mcp_interactions') }}" class="btn btn-outline-secondary">Clear</a>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Endpoint Statistics -->
+            {% if endpoint_stats %}
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Endpoint Statistics (Last 24h)</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Endpoint</th>
+                                    <th>Total Calls</th>
+                                    <th>Completed</th>
+                                    <th>Completion Rate</th>
+                                    <th>Avg Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stat in endpoint_stats %}
+                                <tr>
+                                    <td><code>{{ stat.endpoint }}</code></td>
+                                    <td>{{ stat.total_calls }}</td>
+                                    <td>{{ stat.completed_calls }}</td>
+                                    <td>
+                                        <span class="badge {% if stat.completion_rate >= 95 %}bg-success{% elif stat.completion_rate >= 80 %}bg-warning{% else %}bg-danger{% endif %}">
+                                            {{ '%.1f'|format(stat.completion_rate) }}%
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if stat.avg_duration_ms %}
+                                            {{ stat.avg_duration_ms }}ms
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Interactions Table -->
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        Interactions 
+                        <small class="text-muted">
+                            ({{ interactions.total }} total, showing {{ interactions.interactions|length }})
+                        </small>
+                    </h5>
+
+                    {% if interactions.interactions %}
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="interactionsTable">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Endpoint</th>
+                                    <th>Request Time</th>
+                                    <th>Duration</th>
+                                    <th>Status</th>
+                                    <th>Session</th>
+                                    <th>Token</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for interaction in interactions.interactions %}
+                                <tr>
+                                    <td>
+                                        <a href="{{ url_for('main.mcp_interaction_detail', interaction_id=interaction.id) }}" 
+                                           class="text-decoration-none">
+                                            {{ interaction.id }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <code>{{ interaction.request_payload.endpoint if interaction.request_payload else 'unknown' }}</code>
+                                    </td>
+                                    <td>
+                                        <small>{{ interaction.request_timestamp }}</small>
+                                    </td>
+                                    <td>
+                                        {% if interaction.duration_ms %}
+                                            <span class="badge {% if interaction.duration_ms < 1000 %}bg-success{% elif interaction.duration_ms < 5000 %}bg-warning{% else %}bg-danger{% endif %}">
+                                                {{ interaction.duration_ms }}ms
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if interaction.is_completed %}
+                                            {% if interaction.http_status_code %}
+                                                <span class="badge {% if 200 <= interaction.http_status_code < 300 %}bg-success{% elif 400 <= interaction.http_status_code < 500 %}bg-warning{% else %}bg-danger{% endif %}">
+                                                    {{ interaction.http_status_code }}
+                                                </span>
+                                            {% else %}
+                                                <span class="badge bg-success">Completed</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="badge bg-secondary">Pending</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if interaction.session_id %}
+                                            <small><code>{{ interaction.session_id[:8] }}...</code></small>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if interaction.token_id %}
+                                            <small>{{ interaction.token_id }}</small>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('main.mcp_interaction_detail', interaction_id=interaction.id) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    {% if interactions.pages > 1 %}
+                    <nav aria-label="Interactions pagination">
+                        <ul class="pagination justify-content-center">
+                            {% if interactions.has_prev %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('main.admin_mcp_interactions', page=current_filters.page-1, per_page=current_filters.per_page, session_id=current_filters.session_id, token_id=current_filters.token_id) }}">
+                                        Previous
+                                    </a>
+                                </li>
+                            {% endif %}
+                            
+                            {% for page_num in range(1, interactions.pages + 1) %}
+                                {% if page_num == current_filters.page %}
+                                    <li class="page-item active">
+                                        <span class="page-link">{{ page_num }}</span>
+                                    </li>
+                                {% elif page_num <= current_filters.page + 2 and page_num >= current_filters.page - 2 %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('main.admin_mcp_interactions', page=page_num, per_page=current_filters.per_page, session_id=current_filters.session_id, token_id=current_filters.token_id) }}">
+                                            {{ page_num }}
+                                        </a>
+                                    </li>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if interactions.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('main.admin_mcp_interactions', page=current_filters.page+1, per_page=current_filters.per_page, session_id=current_filters.session_id, token_id=current_filters.token_id) }}">
+                                        Next
+                                    </a>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        No MCP interactions found. Interactions will appear here when the MCP server logs requests and responses.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Cleanup Modal -->
+<div class="modal fade" id="cleanupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Cleanup Old MCP Interactions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="cleanupForm">
+                    <div class="mb-3">
+                        <label for="days" class="form-label">Delete interactions older than:</label>
+                        <select class="form-select" id="days" name="days" required>
+                            <option value="7">7 days</option>
+                            <option value="30" selected>30 days</option>
+                            <option value="60">60 days</option>
+                            <option value="90">90 days</option>
+                        </select>
+                    </div>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        This action cannot be undone. Old interaction records will be permanently deleted.
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" onclick="performCleanup()">
+                    <i class="fas fa-trash"></i> Cleanup
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function performCleanup() {
+    const days = document.getElementById('days').value;
+    
+    if (!confirm(`Are you sure you want to delete all MCP interactions older than ${days} days?`)) {
+        return;
+    }
+    
+    fetch('{{ url_for("main.cleanup_mcp_interactions") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `days=${days}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Cleanup completed: ' + data.message, 'success');
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            showToast('Cleanup failed: ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('Cleanup failed: ' + error.message, 'error');
+    });
+    
+    // Close modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('cleanupModal'));
+    modal.hide();
+}
+
+function copyAsMarkdown() {
+    const table = document.getElementById('interactionsTable');
+    if (!table) {
+        showToast('No table found to copy', 'error');
+        return;
+    }
+    
+    let markdown = '# MCP Interactions\n\n';
+    markdown += `Generated: ${new Date().toISOString()}\n\n`;
+    
+    // Add headers
+    markdown += '| ID | Endpoint | Request Time | Duration | Status | Session | Token |\n';
+    markdown += '|---|---|---|---|---|---|---|\n';
+    
+    // Add rows
+    const rows = table.querySelectorAll('tbody tr');
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 7) {
+            const id = cells[0].textContent.trim();
+            const endpoint = cells[1].textContent.trim();
+            const time = cells[2].textContent.trim();
+            const duration = cells[3].textContent.trim();
+            const status = cells[4].textContent.trim();
+            const session = cells[5].textContent.trim();
+            const token = cells[6].textContent.trim();
+            
+            markdown += `| ${id} | \`${endpoint}\` | ${time} | ${duration} | ${status} | ${session} | ${token} |\n`;
+        }
+    });
+    
+    navigator.clipboard.writeText(markdown).then(() => {
+        showToast('MCP interactions copied as Markdown!', 'success');
+    }).catch(err => {
+        showToast('Failed to copy: ' + err.message, 'error');
+    });
+}
+
+function showToast(message, type) {
+    // Create a simple toast notification
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'success' ? 'success' : 'danger'} position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
+    toast.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+        ${message}
+        <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.remove();
+        }
+    }, 3000);
+}
+</script>
+{% endblock %}

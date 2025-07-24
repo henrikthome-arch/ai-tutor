@@ -30,6 +30,7 @@ except ImportError as e:
 from backend.app.services.student_service import StudentService
 from backend.app.services.session_service import SessionService
 from backend.app.services.analytics_service import AnalyticsService
+from app.services.mcp_interaction_service import MCPInteractionService
 
 # Create blueprint
 main = Blueprint('main', __name__)
@@ -39,6 +40,7 @@ student_service = StudentService()
 session_service = SessionService()
 analytics_service = AnalyticsService(None)  # Will be initialized with db session in each request
 token_service = TokenService()
+mcp_interaction_service = MCPInteractionService()
 
 # Authentication helper
 def check_auth():
@@ -1347,3 +1349,163 @@ def curriculum_details(curriculum_id):
                          curriculum=curriculum,
                          details_by_grade=details_by_grade,
                          total_details=len(details))
+
+# MCP Interactions Management Routes
+@main.route('/admin/mcp-interactions')
+def admin_mcp_interactions():
+    """MCP interactions monitoring and management"""
+    if not check_auth():
+        return redirect(url_for('main.admin_login'))
+    
+    # Get query parameters for filtering and pagination
+    page = int(request.args.get('page', 1))
+    per_page = min(int(request.args.get('per_page', 50)), 200)  # Max 200 per page
+    session_id = request.args.get('session_id')
+    token_id = request.args.get('token_id', type=int)
+    
+    # Get interactions with pagination
+    interactions_data = mcp_interaction_service.get_interactions(
+        page=page,
+        per_page=per_page,
+        session_id=session_id,
+        token_id=token_id
+    )
+    
+    # Get summary statistics
+    summary_stats = mcp_interaction_service.get_summary_statistics(hours=24)
+    
+    # Get health metrics
+    health_metrics = mcp_interaction_service.get_system_health_metrics()
+    
+    # Get endpoint statistics
+    endpoint_stats = mcp_interaction_service.get_endpoint_statistics(hours=24)
+    
+    # Get active tokens for filtering
+    active_tokens = token_service.get_active_tokens()
+    
+    log_admin_action('view_mcp_interactions', session.get('admin_username', 'unknown'),
+                    page=page,
+                    per_page=per_page,
+                    session_filter=session_id,
+                    token_filter=token_id,
+                    total_interactions=interactions_data.get('total', 0))
+    
+    return render_template('mcp_interactions.html',
+                         interactions=interactions_data,
+                         summary_stats=summary_stats,
+                         health_metrics=health_metrics,
+                         endpoint_stats=endpoint_stats,
+                         active_tokens=active_tokens,
+                         current_filters={
+                             'session_id': session_id,
+                             'token_id': token_id,
+                             'page': page,
+                             'per_page': per_page
+                         })
+
+@main.route('/admin/mcp-interactions/<int:interaction_id>')
+def mcp_interaction_detail(interaction_id):
+    """View detailed information about a specific MCP interaction"""
+    if not check_auth():
+        return redirect(url_for('main.admin_login'))
+    
+    # Get interaction details
+    interaction = mcp_interaction_service.get_interaction_details(
+        interaction_id=interaction_id,
+        include_payloads=True
+    )
+    
+    if not interaction:
+        flash('MCP interaction not found', 'error')
+        return redirect(url_for('main.admin_mcp_interactions'))
+    
+    log_admin_action('view_mcp_interaction_detail', session.get('admin_username', 'unknown'),
+                    interaction_id=interaction_id)
+    
+    return render_template('mcp_interaction_detail.html',
+                         interaction=interaction)
+
+@main.route('/admin/mcp-interactions/cleanup', methods=['POST'])
+def cleanup_mcp_interactions():
+    """Clean up old MCP interaction records"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Get days parameter
+    days = int(request.form.get('days', 30))
+    
+    if days < 1:
+        return jsonify({'error': 'Days must be at least 1'}), 400
+    
+    try:
+        # Clean up old interactions
+        deleted_count = mcp_interaction_service.cleanup_old_interactions(days)
+        
+        log_admin_action('cleanup_mcp_interactions', session.get('admin_username', 'unknown'),
+                        days=days,
+                        deleted_count=deleted_count)
+        
+        flash(f'Cleaned up {deleted_count} old MCP interactions', 'success')
+        return jsonify({
+            'success': True,
+            'message': f'Cleaned up {deleted_count} old interactions',
+            'deleted_count': deleted_count
+        })
+        
+    except Exception as e:
+        log_error('ADMIN', f'Error cleaning up MCP interactions: {str(e)}', e,
+                 days=days,
+                 admin_user=session.get('admin_username', 'unknown'))
+        return jsonify({'error': f'Cleanup failed: {str(e)}'}), 500
+
+@main.route('/admin/mcp-interactions/search')
+def search_mcp_interactions():
+    """Search MCP interactions with advanced filters"""
+    if not check_auth():
+        return redirect(url_for('main.admin_login'))
+    
+    # Get search parameters
+    endpoint = request.args.get('endpoint')
+    status_code = request.args.get('status_code', type=int)
+    start_date_str = request.args.get('start_date')
+    end_date_str = request.args.get('end_date')
+    limit = min(int(request.args.get('limit', 100)), 1000)  # Max 1000 results
+    
+    # Parse dates if provided
+    start_date = None
+    end_date = None
+    try:
+        if start_date_str:
+            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+        if end_date_str:
+            end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+    except ValueError as e:
+        flash(f'Invalid date format: {str(e)}', 'error')
+        return redirect(url_for('main.admin_mcp_interactions'))
+    
+    # Search interactions
+    interactions = mcp_interaction_service.search_interactions(
+        endpoint=endpoint,
+        status_code=status_code,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit
+    )
+    
+    log_admin_action('search_mcp_interactions', session.get('admin_username', 'unknown'),
+                    endpoint=endpoint,
+                    status_code=status_code,
+                    start_date=start_date_str,
+                    end_date=end_date_str,
+                    result_count=len(interactions))
+    
+    return render_template('mcp_interactions_search.html',
+                         interactions=interactions,
+                         search_filters={
+                             'endpoint': endpoint,
+                             'status_code': status_code,
+                             'start_date': start_date_str,
+                             'end_date': end_date_str,
+                             'limit': limit
+                         },
+                         result_count=len(interactions))

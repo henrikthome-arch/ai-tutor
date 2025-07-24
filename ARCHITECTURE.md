@@ -212,6 +212,20 @@ erDiagram
         bool is_active
     }
 
+    %% MCP Server Monitoring
+    mcp_interactions {
+        int id PK
+        int token_id FK "Authentication token used for the request"
+        string interaction_type "request|response|error for tracking interaction phases"
+        string method "MCP method name (e.g., resources/list, tools/call)"
+        jsonb request_payload "Complete request data in JSONB format"
+        jsonb response_payload "Response data or error details in JSONB format"
+        int duration_ms "Response time in milliseconds (null for requests)"
+        string status "pending|completed|failed for tracking request lifecycle"
+        timestamp created_at "Request initiation timestamp"
+        timestamp completed_at "Response completion timestamp (null for pending)"
+    }
+
     %% Analytics & Metrics
     session_metrics {
         int id PK
@@ -244,6 +258,7 @@ erDiagram
     curriculum_details ||--o{ school_default_subjects : "template includes"
     
     sessions ||--o| session_metrics : "measured by"
+    tokens ||--o{ mcp_interactions : "authenticates"
 ```
 
 ### 3.2. System Data Architecture Overview
@@ -264,6 +279,7 @@ The database schema supports four primary functional areas:
 #### 3.2.3. System Operations & Security
 -   **Authentication Framework**: Secure token-based access control with scope-based permissions
 -   **Audit & Logging**: Comprehensive system event logging with categorized retention and real-time monitoring
+-   **MCP Interaction Monitoring**: Complete request/response logging for MCP server debugging and performance analysis
 -   **Analytics Infrastructure**: Daily statistics, usage patterns, and system performance tracking
 
 #### 3.2.4. AI Integration Architecture
@@ -303,6 +319,7 @@ Repository classes include:
 - `SessionRepository`: Session management and transcript handling
 - `TokenRepository`: Authentication token management and validation
 - `SystemLogRepository`: Event logging and retrieval
+- `MCPInteractionRepository`: MCP server request/response logging and analytics
 - `SchoolRepository`: School and curriculum management
 - `CurriculumRepository`: Curriculum definition and subject mapping
 - `AssessmentRepository`: Student assessment and progress tracking
@@ -364,6 +381,12 @@ GET  /api/v1/sessions/{id}     # Get session details
 
 POST /api/v1/vapi/webhook      # VAPI webhook endpoint
 GET  /api/v1/logs              # System logs (with filtering)
+
+POST /admin/api/mcp/log-request   # Log MCP request
+POST /admin/api/mcp/log-response  # Log MCP response
+GET  /admin/api/mcp/interactions  # List MCP interactions (with filtering)
+GET  /admin/api/mcp/stats         # MCP interaction statistics
+POST /admin/api/mcp/cleanup       # Clean up old interactions
 ```
 
 ### 5.3. MCP Server API
@@ -371,6 +394,7 @@ GET  /api/v1/logs              # System logs (with filtering)
 - **Authentication**: Token-based with scope validation
 - **Resources**: Student data, session transcripts, system logs
 - **Tools**: Data query and analysis capabilities
+- **Logging**: Complete request/response interaction logging for debugging and performance monitoring
 
 ## 6. Data Flow Architecture
 
@@ -404,9 +428,21 @@ GET  /api/v1/logs              # System logs (with filtering)
 8. Database storage → Results saved to PostgreSQL
 ```
 
-### 6.4. Conditional Prompt System Architecture
+### 6.4. MCP Interaction Logging Flow
+```
+1. AI Assistant connects → MCP server authentication
+2. Request received → Log request to mcp_interactions table (status: pending)
+3. Request processing → MCP server business logic execution
+4. Response generation → Complete response payload creation
+5. Response logging → Update interaction record (status: completed, add response data)
+6. Performance tracking → Record duration_ms and completion timestamp
+7. Error handling → Log error details and mark status as failed
+8. Admin monitoring → Real-time interaction tracking via dashboard
+```
 
-#### 6.4.1. Call Type Detection Logic
+### 6.5. Conditional Prompt System Architecture
+
+#### 6.5.1. Call Type Detection Logic
 ```
 1. VAPI webhook receives call data with phone number
 2. Student lookup in PostgreSQL database:
@@ -417,7 +453,7 @@ GET  /api/v1/logs              # System logs (with filtering)
 4. Prompt selection based on call type
 ```
 
-#### 6.4.2. Prompt Template Organization
+#### 6.5.2. Prompt Template Organization
 ```
 ai-tutor/backend/ai_poc/prompts/
 ├── introductory_analysis.md     # New student profile creation
@@ -428,7 +464,7 @@ ai-tutor/backend/ai_poc/prompts/
 └── progress_tracking.md         # Learning progress evaluation
 ```
 
-#### 6.4.3. JSON Response Format
+#### 6.5.3. JSON Response Format
 All prompts generate structured JSON responses with standardized fields:
 ```json
 {
@@ -456,7 +492,7 @@ All prompts generate structured JSON responses with standardized fields:
 }
 ```
 
-### 6.2. Admin Dashboard Flow
+### 6.6. Admin Dashboard Flow
 ```
 1. Admin login → Session authentication
 2. Dashboard queries → Repository layer
@@ -465,7 +501,7 @@ All prompts generate structured JSON responses with standardized fields:
 5. Admin actions → API calls → Database updates
 ```
 
-### 6.3. Token Authentication Flow
+### 6.7. Token Authentication Flow
 ```
 1. Admin generates token via Flask admin interface → Token stored in PostgreSQL (hashed)
 2. Client/AI assistant → API request with token
@@ -506,10 +542,11 @@ All prompts generate structured JSON responses with standardized fields:
 
 ### 8.1. System Logging
 - **Storage**: PostgreSQL-based log storage
-- **Categories**: VAPI, Database, Authentication, System, Error
+- **Categories**: VAPI, Database, Authentication, System, Error, MCP
 - **Retention**: Automatic 30-day log cleanup
 - **Filtering**: Advanced log search and filtering
 - **Real-time**: Live system event monitoring
+- **MCP Interaction Tracking**: Complete request/response logging with performance metrics
 
 ### 8.2. Performance Monitoring
 - **Database Performance**: Query optimization and indexing

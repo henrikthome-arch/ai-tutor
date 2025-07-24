@@ -33,6 +33,7 @@ except ImportError as e:
 from backend.app.services.student_service import StudentService
 from backend.app.services.session_service import SessionService
 from backend.app.services.ai_service import AIService
+from app.services.mcp_interaction_service import MCPInteractionService
 
 # Import the blueprint from parent module
 from app.api import bp as api
@@ -41,6 +42,7 @@ from app.api import bp as api
 student_service = StudentService()
 session_service = SessionService()
 ai_service = AIService()
+mcp_interaction_service = MCPInteractionService()
 
 # Authentication helper (kept for backward compatibility)
 def check_auth():
@@ -743,4 +745,298 @@ def test_transcript_analysis():
         return jsonify({
             'status': 'error',
             'message': f"Analysis failed: {str(e)}"
+        }), 500
+
+# MCP Interaction Logging API Endpoints
+@api.route('/admin/api/mcp/log-request', methods=['POST'])
+@token_or_session_auth(required_scope='mcp:access')
+def log_mcp_request():
+    """Log an incoming MCP request"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'message': 'No JSON data provided'
+            }), 400
+        
+        endpoint = data.get('endpoint')
+        request_data = data.get('request_data', {})
+        session_id = data.get('session_id')
+        token_id = data.get('token_id')
+        
+        if not endpoint:
+            return jsonify({
+                'status': 'error',
+                'message': 'Endpoint is required'
+            }), 400
+        
+        # Log the request
+        request_id = mcp_interaction_service.log_request(
+            endpoint=endpoint,
+            request_data=request_data,
+            session_id=session_id,
+            token_id=token_id
+        )
+        
+        return jsonify({
+            'status': 'success',
+            'request_id': request_id,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        log_error('API', f"Error logging MCP request: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Failed to log request: {str(e)}"
+        }), 500
+
+@api.route('/admin/api/mcp/log-response', methods=['POST'])
+@token_or_session_auth(required_scope='mcp:access')
+def log_mcp_response():
+    """Log an MCP response"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'message': 'No JSON data provided'
+            }), 400
+        
+        request_id = data.get('request_id')
+        response_data = data.get('response_data', {})
+        http_status_code = data.get('http_status_code', 200)
+        
+        if not request_id:
+            return jsonify({
+                'status': 'error',
+                'message': 'Request ID is required'
+            }), 400
+        
+        # Log the response
+        success = mcp_interaction_service.log_response(
+            request_id=request_id,
+            response_data=response_data,
+            http_status_code=http_status_code
+        )
+        
+        if success:
+            return jsonify({
+                'status': 'success',
+                'message': 'Response logged successfully',
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Request ID not found'
+            }), 404
+        
+    except Exception as e:
+        log_error('API', f"Error logging MCP response: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Failed to log response: {str(e)}"
+        }), 500
+
+@api.route('/admin/api/mcp/interactions')
+@token_or_session_auth(required_scope='admin:read')
+def get_mcp_interactions():
+    """Get MCP interactions with pagination and filtering"""
+    try:
+        # Get query parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = min(request.args.get('per_page', 50, type=int), 200)  # Max 200 per page
+        session_id = request.args.get('session_id')
+        token_id = request.args.get('token_id', type=int)
+        
+        # Get interactions
+        result = mcp_interaction_service.get_interactions(
+            page=page,
+            per_page=per_page,
+            session_id=session_id,
+            token_id=token_id
+        )
+        
+        return jsonify({
+            'status': 'success',
+            'data': result
+        })
+        
+    except Exception as e:
+        log_error('API', f"Error retrieving MCP interactions: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Failed to retrieve interactions: {str(e)}"
+        }), 500
+
+@api.route('/admin/api/mcp/interactions/<int:interaction_id>')
+@token_or_session_auth(required_scope='admin:read')
+def get_mcp_interaction_details(interaction_id):
+    """Get detailed information about a specific MCP interaction"""
+    try:
+        include_payloads = request.args.get('include_payloads', 'true').lower() == 'true'
+        
+        interaction = mcp_interaction_service.get_interaction_details(
+            interaction_id=interaction_id,
+            include_payloads=include_payloads
+        )
+        
+        if interaction:
+            return jsonify({
+                'status': 'success',
+                'data': interaction
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Interaction not found'
+            }), 404
+        
+    except Exception as e:
+        log_error('API', f"Error retrieving MCP interaction {interaction_id}: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Failed to retrieve interaction: {str(e)}"
+        }), 500
+
+@api.route('/admin/api/mcp/statistics')
+@token_or_session_auth(required_scope='admin:read')
+def get_mcp_statistics():
+    """Get MCP interaction statistics"""
+    try:
+        hours = request.args.get('hours', 24, type=int)
+        
+        # Get summary statistics
+        summary = mcp_interaction_service.get_summary_statistics(hours)
+        
+        # Get endpoint statistics
+        endpoint_stats = mcp_interaction_service.get_endpoint_statistics(hours)
+        
+        # Get health metrics
+        health_metrics = mcp_interaction_service.get_system_health_metrics()
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'summary': summary,
+                'endpoint_statistics': endpoint_stats,
+                'health_metrics': health_metrics,
+                'time_window_hours': hours
+            }
+        })
+        
+    except Exception as e:
+        log_error('API', f"Error retrieving MCP statistics: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Failed to retrieve statistics: {str(e)}"
+        }), 500
+
+@api.route('/admin/api/mcp/interactions/search')
+@token_or_session_auth(required_scope='admin:read')
+def search_mcp_interactions():
+    """Search MCP interactions with filters"""
+    try:
+        endpoint = request.args.get('endpoint')
+        status_code = request.args.get('status_code', type=int)
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        limit = min(request.args.get('limit', 100, type=int), 1000)  # Max 1000 results
+        
+        # Parse dates if provided
+        start_date = None
+        end_date = None
+        if start_date_str:
+            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+        if end_date_str:
+            end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+        
+        # Search interactions
+        interactions = mcp_interaction_service.search_interactions(
+            endpoint=endpoint,
+            status_code=status_code,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit
+        )
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'interactions': interactions,
+                'count': len(interactions),
+                'filters': {
+                    'endpoint': endpoint,
+                    'status_code': status_code,
+                    'start_date': start_date_str,
+                    'end_date': end_date_str,
+                    'limit': limit
+                }
+            }
+        })
+        
+    except Exception as e:
+        log_error('API', f"Error searching MCP interactions: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Failed to search interactions: {str(e)}"
+        }), 500
+
+@api.route('/admin/api/mcp/interactions/incomplete')
+@token_or_session_auth(required_scope='admin:read')
+def get_incomplete_mcp_interactions():
+    """Get incomplete MCP interactions (stuck requests)"""
+    try:
+        older_than_minutes = request.args.get('older_than_minutes', 30, type=int)
+        
+        interactions = mcp_interaction_service.get_incomplete_interactions(
+            older_than_minutes=older_than_minutes
+        )
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'interactions': interactions,
+                'count': len(interactions),
+                'older_than_minutes': older_than_minutes
+            }
+        })
+        
+    except Exception as e:
+        log_error('API', f"Error retrieving incomplete MCP interactions: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Failed to retrieve incomplete interactions: {str(e)}"
+        }), 500
+
+@api.route('/admin/api/mcp/interactions/cleanup', methods=['POST'])
+@token_or_session_auth(required_scope='admin:write')
+def cleanup_old_mcp_interactions():
+    """Clean up old MCP interaction records"""
+    try:
+        data = request.get_json() or {}
+        days = data.get('days', 30)
+        
+        if days < 1:
+            return jsonify({
+                'status': 'error',
+                'message': 'Days must be at least 1'
+            }), 400
+        
+        deleted_count = mcp_interaction_service.cleanup_old_interactions(days)
+        
+        return jsonify({
+            'status': 'success',
+            'message': f'Cleaned up {deleted_count} old interactions',
+            'deleted_count': deleted_count,
+            'days': days
+        })
+        
+    except Exception as e:
+        log_error('API', f"Error cleaning up MCP interactions: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Failed to cleanup interactions: {str(e)}"
         }), 500

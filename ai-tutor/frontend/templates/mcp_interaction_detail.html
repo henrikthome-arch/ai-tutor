@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+
+{% block title %}MCP Interaction {{ interaction.id }} - AI Tutor Admin{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>MCP Interaction #{{ interaction.id }}</h1>
+                <div class="btn-group">
+                    <a href="{{ url_for('main.admin_mcp_interactions') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to List
+                    </a>
+                    <button type="button" class="btn btn-outline-info" onclick="copyInteractionAsMarkdown()">
+                        <i class="fas fa-copy"></i> Copy as Markdown
+                    </button>
+                </div>
+            </div>
+
+            <!-- Interaction Overview -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Request Information</h5>
+                        </div>
+                        <div class="card-body">
+                            <dl class="row">
+                                <dt class="col-sm-4">Request ID:</dt>
+                                <dd class="col-sm-8"><code>{{ interaction.request_id }}</code></dd>
+                                
+                                <dt class="col-sm-4">Endpoint:</dt>
+                                <dd class="col-sm-8">
+                                    <code>{{ interaction.request_payload.endpoint if interaction.request_payload else 'Unknown' }}</code>
+                                </dd>
+                                
+                                <dt class="col-sm-4">Request Time:</dt>
+                                <dd class="col-sm-8">{{ interaction.request_timestamp }}</dd>
+                                
+                                <dt class="col-sm-4">Session ID:</dt>
+                                <dd class="col-sm-8">
+                                    {% if interaction.session_id %}
+                                        <code>{{ interaction.session_id }}</code>
+                                    {% else %}
+                                        <span class="text-muted">None</span>
+                                    {% endif %}
+                                </dd>
+                                
+                                <dt class="col-sm-4">Token ID:</dt>
+                                <dd class="col-sm-8">
+                                    {% if interaction.token_id %}
+                                        {{ interaction.token_id }}
+                                    {% else %}
+                                        <span class="text-muted">None</span>
+                                    {% endif %}
+                                </dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Response Information</h5>
+                        </div>
+                        <div class="card-body">
+                            <dl class="row">
+                                <dt class="col-sm-4">Status:</dt>
+                                <dd class="col-sm-8">
+                                    {% if interaction.is_completed %}
+                                        <span class="badge bg-success">Completed</span>
+                                    {% else %}
+                                        <span class="badge bg-warning">Pending</span>
+                                    {% endif %}
+                                </dd>
+                                
+                                <dt class="col-sm-4">Response Time:</dt>
+                                <dd class="col-sm-8">
+                                    {% if interaction.response_timestamp %}
+                                        {{ interaction.response_timestamp }}
+                                    {% else %}
+                                        <span class="text-muted">Not yet received</span>
+                                    {% endif %}
+                                </dd>
+                                
+                                <dt class="col-sm-4">HTTP Status:</dt>
+                                <dd class="col-sm-8">
+                                    {% if interaction.http_status_code %}
+                                        <span class="badge {% if 200 <= interaction.http_status_code < 300 %}bg-success{% elif 400 <= interaction.http_status_code < 500 %}bg-warning{% else %}bg-danger{% endif %}">
+                                            {{ interaction.http_status_code }}
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">N/A</span>
+                                    {% endif %}
+                                </dd>
+                                
+                                <dt class="col-sm-4">Duration:</dt>
+                                <dd class="col-sm-8">
+                                    {% if interaction.duration_ms %}
+                                        <span class="badge {% if interaction.duration_ms < 1000 %}bg-success{% elif interaction.duration_ms < 5000 %}bg-warning{% else %}bg-danger{% endif %}">
+                                            {{ interaction.duration_ms }}ms
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">N/A</span>
+                                    {% endif %}
+                                </dd>
+                                
+                                <dt class="col-sm-4">Created:</dt>
+                                <dd class="col-sm-8">{{ interaction.created_at }}</dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Request Payload -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Request Payload</h5>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard('requestPayload')">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+                <div class="card-body">
+                    {% if interaction.request_payload %}
+                        <pre id="requestPayload" class="bg-light p-3 rounded"><code>{{ interaction.request_payload | tojson(indent=2) }}</code></pre>
+                    {% else %}
+                        <div class="alert alert-info">No request payload available</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Response Payload -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Response Payload</h5>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard('responsePayload')" 
+                            {% if not interaction.response_payload %}disabled{% endif %}>
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+                <div class="card-body">
+                    {% if interaction.response_payload %}
+                        <pre id="responsePayload" class="bg-light p-3 rounded"><code>{{ interaction.response_payload | tojson(indent=2) }}</code></pre>
+                    {% elif interaction.is_completed %}
+                        <div class="alert alert-warning">Response completed but no payload recorded</div>
+                    {% else %}
+                        <div class="alert alert-info">Response not yet received</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Timeline -->
+            {% if interaction.request_timestamp and interaction.response_timestamp %}
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Timeline</h5>
+                </div>
+                <div class="card-body">
+                    <div class="timeline">
+                        <div class="timeline-item">
+                            <div class="timeline-marker bg-primary"></div>
+                            <div class="timeline-content">
+                                <h6>Request Received</h6>
+                                <p class="text-muted">{{ interaction.request_timestamp }}</p>
+                                <small>
+                                    Endpoint: <code>{{ interaction.request_payload.endpoint if interaction.request_payload else 'Unknown' }}</code>
+                                </small>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <div class="timeline-marker bg-success"></div>
+                            <div class="timeline-content">
+                                <h6>Response Sent</h6>
+                                <p class="text-muted">{{ interaction.response_timestamp }}</p>
+                                <small>
+                                    Status: {{ interaction.http_status_code or 'Unknown' }} | 
+                                    Duration: {{ interaction.duration_ms or 'Unknown' }}ms
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #dee2e6;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 30px;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -23px;
+    top: 0;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 2px #dee2e6;
+}
+
+.timeline-content h6 {
+    margin-bottom: 5px;
+    font-weight: 600;
+}
+
+.timeline-content p {
+    margin-bottom: 5px;
+    font-size: 0.9em;
+}
+</style>
+
+<script>
+function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    if (!element) {
+        showToast('Element not found', 'error');
+        return;
+    }
+    
+    const text = element.textContent || element.innerText;
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Copied to clipboard!', 'success');
+    }).catch(err => {
+        showToast('Failed to copy: ' + err.message, 'error');
+    });
+}
+
+function copyInteractionAsMarkdown() {
+    // Create markdown from the visible page content
+    let markdown = '# MCP Interaction #{{ interaction.id }}\n\n';
+    markdown += '**Request ID:** `{{ interaction.request_id }}`\n\n';
+    markdown += '**Endpoint:** `{{ interaction.request_payload.endpoint if interaction.request_payload else "Unknown" }}`\n\n';
+    markdown += '**Status:** {{ "Completed" if interaction.is_completed else "Pending" }}\n\n';
+    
+    markdown += '## Request Information\n\n';
+    markdown += '- **Request Time:** {{ interaction.request_timestamp }}\n';
+    markdown += '- **Session ID:** `{{ interaction.session_id or "N/A" }}`\n';
+    markdown += '- **Token ID:** {{ interaction.token_id or "N/A" }}\n\n';
+    
+    markdown += '## Response Information\n\n';
+    markdown += '- **Response Time:** {{ interaction.response_timestamp or "N/A" }}\n';
+    markdown += '- **HTTP Status:** {{ interaction.http_status_code or "N/A" }}\n';
+    markdown += '- **Duration:** {{ interaction.duration_ms or "N/A" }}ms\n\n';
+    
+    // Get the request payload from the page
+    const requestElement = document.getElementById('requestPayload');
+    if (requestElement) {
+        markdown += '## Request Payload\n\n```json\n' + requestElement.textContent + '\n```\n\n';
+    }
+    
+    // Get the response payload from the page
+    const responseElement = document.getElementById('responsePayload');
+    if (responseElement) {
+        markdown += '## Response Payload\n\n```json\n' + responseElement.textContent + '\n```\n\n';
+    }
+    
+    markdown += '---\n*Generated: ' + new Date().toISOString() + '*\n';
+    
+    navigator.clipboard.writeText(markdown).then(() => {
+        showToast('Interaction copied as Markdown!', 'success');
+    }).catch(err => {
+        showToast('Failed to copy: ' + err.message, 'error');
+    });
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'success' ? 'success' : 'danger'} position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
+    toast.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+        ${message}
+        <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.remove();
+        }
+    }, 3000);
+}
+</script>
+{% endblock %}

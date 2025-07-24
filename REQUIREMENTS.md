@@ -23,6 +23,7 @@ This document outlines the detailed requirements for the AI Tutor system, coveri
 -   **Phone Number Management**: Robust phone number normalization, mapping, and international format handling for student identification.
 -   **Admin Dashboard**: A secure, web-based admin dashboard for system management with database browser functionality.
 -   **API Layer**: A dedicated API layer (MCP Server) to serve data to all user interfaces.
+-   **MCP Interaction Logging**: Comprehensive logging system for all MCP server communications, tracking request/response pairs, performance metrics, and system health indicators for debugging and monitoring purposes.
 -   **Production Testing Tools**: Built-in testing infrastructure for VAPI integration and system health monitoring.
 -   **Log Management**: Comprehensive PostgreSQL-based logging system with automatic 30-day retention and categorized event tracking.
 
@@ -71,6 +72,43 @@ This document outlines the detailed requirements for the AI Tutor system, coveri
 - **Secure Hashing**: Raw tokens are hashed using SHA-256 before database storage for security
 - **Transaction Safety**: Token operations must be wrapped in database transactions with proper error handling
 - **Browser Integration**: Admin dashboard must support automatic token validation for seamless browser-based access
+
+### 1.4. MCP Interaction Logging Requirements
+
+The system must implement comprehensive logging of all Model Context Protocol (MCP) server interactions to support debugging, monitoring, and performance analysis.
+
+#### 1.4.1. Core Logging Requirements
+- **Complete Request/Response Tracking**: Log all incoming requests and outgoing responses for every MCP endpoint
+- **Unique Request Identification**: Each request must receive a unique identifier for correlation between request and response
+- **Performance Metrics**: Track request duration, response times, and success/failure rates for all endpoints
+- **Session Correlation**: Link MCP interactions to user sessions when available for enhanced debugging
+- **Token Association**: Associate logged interactions with authentication tokens for security auditing
+
+#### 1.4.2. Data Storage Requirements
+- **PostgreSQL Storage**: All MCP interaction logs stored in dedicated `mcp_interactions` table
+- **JSON Payload Storage**: Store complete request and response payloads as JSONB for flexible querying
+- **Indexing Strategy**: Implement appropriate database indexes for efficient querying by timestamp, endpoint, session, and status
+- **Data Retention**: Configurable retention period with automatic cleanup of old interaction logs
+- **Storage Optimization**: Balance detailed logging with storage efficiency through selective payload inclusion
+
+#### 1.4.3. Monitoring and Analytics
+- **Real-time Health Metrics**: Track system health indicators including stuck requests, completion rates, and average response times
+- **Endpoint Statistics**: Generate per-endpoint analytics showing call frequency, success rates, and performance trends
+- **Error Pattern Detection**: Identify and alert on patterns of failed requests or performance degradation
+- **Usage Analytics**: Analyze MCP usage patterns to optimize system performance and identify bottlenecks
+
+#### 1.4.4. Administrative Interface
+- **Admin Dashboard Integration**: Dedicated admin interface for browsing and analyzing MCP interaction logs
+- **Advanced Search Capabilities**: Filter interactions by endpoint, time range, status code, session, and token
+- **Detailed Interaction Views**: Individual interaction detail pages showing complete request/response data with formatted JSON display
+- **Export Functionality**: Markdown export capabilities for sharing interaction details with development teams
+- **Cleanup Controls**: Admin interface for managing log retention and triggering manual cleanup operations
+
+#### 1.4.5. Performance and Reliability
+- **Asynchronous Logging**: MCP logging must not impact primary request/response performance
+- **Fault Tolerance**: Logging failures must not affect MCP server functionality
+- **Configurable Logging**: System administrators must be able to enable/disable logging and configure detail levels
+- **Graceful Degradation**: System must continue operating normally even if logging infrastructure is unavailable
 
 ## 2. Core Data Entities & Functions
 
