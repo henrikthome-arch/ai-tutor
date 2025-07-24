@@ -139,6 +139,46 @@
             </div>
             
             <div>
+                <label style="font-weight: 600; color: #666;">Student Type</label>
+                <p style="margin: 5px 0 15px 0;">
+                    {% if profile.student_type %}
+                        {% if profile.student_type == 'local' %}
+                            <span style="background: #e8f5e8; color: #2d5a3d; padding: 6px 12px; border-radius: 12px;">
+                                {{ profile.student_type|title }}
+                            </span>
+                        {% else %}
+                            <span style="background: #fff3cd; color: #856404; padding: 6px 12px; border-radius: 12px;">
+                                {{ profile.student_type|title }}
+                            </span>
+                        {% endif %}
+                    {% else %}
+                        <span style="color: #6c757d;">Not specified</span>
+                    {% endif %}
+                </p>
+            </div>
+            
+            <div>
+                <label style="font-weight: 600; color: #666;">First Name</label>
+                <p style="margin: 5px 0 15px 0;">{{ profile.first_name or 'Not provided' }}</p>
+            </div>
+            
+            <div>
+                <label style="font-weight: 600; color: #666;">Last Name</label>
+                <p style="margin: 5px 0 15px 0;">{{ profile.last_name or 'Not provided' }}</p>
+            </div>
+            
+            <div>
+                <label style="font-weight: 600; color: #666;">Date of Birth</label>
+                <p style="margin: 5px 0 15px 0;">
+                    {% if profile.date_of_birth %}
+                        📅 {{ profile.date_of_birth }}
+                    {% else %}
+                        <span style="color: #6c757d;">Not provided</span>
+                    {% endif %}
+                </p>
+            </div>
+            
+            <div>
                 <label style="font-weight: 600; color: #666;">Grade Level</label>
                 <p style="margin: 5px 0 15px 0;">
                     <span style="background: #e8f5e8; color: #2d5a3d; padding: 6px 12px; border-radius: 12px;">
@@ -182,6 +222,31 @@
                             {{ preference }}
                         </span>
                     {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Timestamps Section -->
+            <div style="grid-column: 1 / -1; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e9ecef;">
+                <label style="font-weight: 600; color: #666; margin-bottom: 0.5rem; display: block;">📅 Record Timestamps</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.9rem; color: #666;">
+                    <div>
+                        <strong>Created:</strong>
+                        {% if profile.created_at %}
+                            {{ profile.created_at.split('T')[0] if 'T' in profile.created_at else profile.created_at.split(' ')[0] }}
+                            <span style="color: #999;">{{ profile.created_at.split('T')[1][:8] if 'T' in profile.created_at else (profile.created_at.split(' ')[1][:8] if ' ' in profile.created_at else '') }}</span>
+                        {% else %}
+                            <span style="color: #6c757d;">Unknown</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <strong>Last Updated:</strong>
+                        {% if profile.updated_at %}
+                            {{ profile.updated_at.split('T')[0] if 'T' in profile.updated_at else profile.updated_at.split(' ')[0] }}
+                            <span style="color: #999;">{{ profile.updated_at.split('T')[1][:8] if 'T' in profile.updated_at else (profile.updated_at.split(' ')[1][:8] if ' ' in profile.updated_at else '') }}</span>
+                        {% else %}
+                            <span style="color: #6c757d;">Unknown</span>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
