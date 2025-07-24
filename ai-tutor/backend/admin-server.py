@@ -2036,11 +2036,14 @@ def admin_student_detail(student_id):
         print(f"📋 Recent sessions processed: {len(recent_sessions)} sessions")
         
         # Apply grade filtering after profile data is available
+        # DEFAULT BEHAVIOR: Show grade-relevant subjects only
+        # OVERRIDE: Show all subjects when show_all=true or grade_filter=false
         try:
-            # Check for grade filter URL parameter
-            grade_filter_requested = request.args.get('grade_filter') == 'true'
+            # Check for show all subjects URL parameter (reverse logic)
+            show_all_requested = request.args.get('show_all') == 'true' or request.args.get('grade_filter') == 'false'
             
-            if grade_filter_requested and progress.get('student_subjects_detailed'):
+            if not show_all_requested and progress.get('student_subjects_detailed'):
+                # DEFAULT: Apply grade filtering
                 # Get student grade from profile data (now available)
                 student_grade = profile.get('grade_level') or profile.get('grade', 'Unknown')
                 try:
@@ -2055,13 +2058,13 @@ def admin_student_detail(student_id):
                         print(f"📊 DEBUG: Student grade '{student_grade}' is not numeric, showing all subjects")
                     
                     if student_grade_int is not None:
-                        # Filter subjects to show only those matching the student's grade level
+                        # Filter subjects to show only those matching the student's grade level (DEFAULT)
                         all_subjects = progress['student_subjects_detailed']
                         grade_relevant_subjects = [
                             subject for subject in all_subjects
                             if subject.get('grade_level') == student_grade_int
                         ]
-                        print(f"📚 DEBUG: Grade filter applied - filtered to {len(grade_relevant_subjects)} grade-relevant subjects (Grade {student_grade_int}) from {len(all_subjects)} total subjects")
+                        print(f"📚 DEBUG: DEFAULT grade filter applied - filtered to {len(grade_relevant_subjects)} grade-relevant subjects (Grade {student_grade_int}) from {len(all_subjects)} total subjects")
                         
                         # Update progress data with filtered subjects
                         progress['student_subjects_detailed'] = grade_relevant_subjects
@@ -2073,7 +2076,7 @@ def admin_student_detail(student_id):
                         progress['grade_filter_applied'] = False
                         progress['student_grade'] = student_grade
                         progress['subjects_filtered_count'] = 0
-                        print(f"📊 DEBUG: Grade filter requested but student grade '{student_grade}' is invalid, showing all subjects")
+                        print(f"📊 DEBUG: Student grade '{student_grade}' is invalid, showing all subjects")
                         
                 except Exception as filter_error:
                     print(f"❌ DEBUG: Error filtering subjects by grade: {filter_error}")
@@ -2082,9 +2085,11 @@ def admin_student_detail(student_id):
                     progress['grade_filter_applied'] = False
                     progress['subjects_filtered_count'] = 0
             else:
-                # No grade filter requested or no subjects available
-                if grade_filter_requested:
-                    print(f"📊 DEBUG: Grade filter requested but no subjects available")
+                # Show all subjects when explicitly requested
+                if show_all_requested:
+                    print(f"📊 DEBUG: Show all subjects requested - displaying all {len(progress.get('student_subjects_detailed', []))} subjects")
+                else:
+                    print(f"📊 DEBUG: No subjects available for filtering")
                 progress['grade_filter_applied'] = False
                 progress['subjects_filtered_count'] = 0
                 
