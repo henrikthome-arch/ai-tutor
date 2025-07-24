@@ -642,9 +642,17 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             
             # Update student name if extracted from transcript
             name_updated = False
+            extracted_name = None
+            
+            # Check for name in multiple possible fields
             if 'name' in extracted_info and extracted_info['name'] and extracted_info['name'] != 'Unknown':
+                extracted_name = extracted_info['name']
+            elif 'preferred_name' in extracted_info and extracted_info['preferred_name']:
+                extracted_name = extracted_info['preferred_name']
+            
+            if extracted_name:
                 try:
-                    full_name = str(extracted_info['name']).strip()
+                    full_name = str(extracted_name).strip()
                     if full_name and full_name.lower() not in ['unknown', 'student', 'not specified']:
                         # Parse full name into first and last name
                         name_parts = full_name.split()
@@ -670,49 +678,58 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                                 student.last_name = new_last_name
                                 updated_fields.append('name')
                                 name_updated = True
-                                logger.info(f"Updated student name from '{current_full}' to '{full_name}'")
+                                logger.info(f"Updated student name from '{current_full}' to '{full_name}' (source: {extracted_name})")
                             else:
                                 logger.info(f"Keeping existing name '{current_full}', extracted '{full_name}' (not a default name)")
                 except (ValueError, TypeError, AttributeError) as e:
-                    logger.warning(f"Invalid name value: {extracted_info.get('name')}: {e}")
+                    logger.warning(f"Invalid name value: {extracted_name}: {e}")
             
             # Handle conditional prompt response format (student_profile wrapper)
             profile_data = extracted_info
             if 'student_profile' in extracted_info:
                 profile_data = extracted_info['student_profile']
                 
-                # Also try to extract name from student_profile
-                if not name_updated and 'name' in profile_data and profile_data['name']:
-                    try:
-                        full_name = str(profile_data['name']).strip()
-                        if full_name and full_name.lower() not in ['unknown', 'student', 'not specified']:
-                            # Parse full name into first and last name
-                            name_parts = full_name.split()
-                            if len(name_parts) >= 1:
-                                new_first_name = name_parts[0]
-                                new_last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
-                                
-                                # Only update if the current name looks like a default name
-                                current_first = student.first_name or ''
-                                current_last = student.last_name or ''
-                                current_full = f"{current_first} {current_last}".strip()
-                                
-                                # Check if current name is a default/generated name pattern
-                                is_default_name = (
-                                    current_first == 'Student' or
-                                    current_full.startswith('Student ') or
-                                    'Unknown_' in current_full or
-                                    len(current_full) <= 10  # Very short names are likely defaults
-                                )
-                                
-                                if is_default_name:
-                                    student.first_name = new_first_name
-                                    student.last_name = new_last_name
-                                    updated_fields.append('name')
-                                    name_updated = True
-                                    logger.info(f"Updated student name from conditional prompt: '{current_full}' to '{full_name}'")
-                    except (ValueError, TypeError, AttributeError) as e:
-                        logger.warning(f"Invalid conditional prompt name value: {profile_data.get('name')}: {e}")
+                # Also try to extract name from student_profile with multiple field checks
+                if not name_updated:
+                    profile_extracted_name = None
+                    
+                    # Check for name in multiple possible fields within student_profile
+                    if 'name' in profile_data and profile_data['name'] and profile_data['name'] != 'Unknown':
+                        profile_extracted_name = profile_data['name']
+                    elif 'preferred_name' in profile_data and profile_data['preferred_name']:
+                        profile_extracted_name = profile_data['preferred_name']
+                    
+                    if profile_extracted_name:
+                        try:
+                            full_name = str(profile_extracted_name).strip()
+                            if full_name and full_name.lower() not in ['unknown', 'student', 'not specified']:
+                                # Parse full name into first and last name
+                                name_parts = full_name.split()
+                                if len(name_parts) >= 1:
+                                    new_first_name = name_parts[0]
+                                    new_last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+                                    
+                                    # Only update if the current name looks like a default name
+                                    current_first = student.first_name or ''
+                                    current_last = student.last_name or ''
+                                    current_full = f"{current_first} {current_last}".strip()
+                                    
+                                    # Check if current name is a default/generated name pattern
+                                    is_default_name = (
+                                        current_first == 'Student' or
+                                        current_full.startswith('Student ') or
+                                        'Unknown_' in current_full or
+                                        len(current_full) <= 10  # Very short names are likely defaults
+                                    )
+                                    
+                                    if is_default_name:
+                                        student.first_name = new_first_name
+                                        student.last_name = new_last_name
+                                        updated_fields.append('name')
+                                        name_updated = True
+                                        logger.info(f"Updated student name from conditional prompt: '{current_full}' to '{full_name}' (source: {profile_extracted_name})")
+                        except (ValueError, TypeError, AttributeError) as e:
+                            logger.warning(f"Invalid conditional prompt name value: {profile_extracted_name}: {e}")
             
             # Update age by calculating date_of_birth if provided
             if 'age' in extracted_info and extracted_info['age'] is not None:
