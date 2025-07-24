@@ -486,7 +486,7 @@ def get_student_progress_summary(student_id) -> Dict[str, Any]:
             'total_time_hours': round(total_time_hours, 2),
             'mastery_distribution': mastery_counts,
             'subjects': [ss.to_dict() for ss in active_subjects],
-            'last_updated': max(ss.updated_at for ss in active_subjects if ss.updated_at) if active_subjects else None
+            'last_updated': max(ss.updated_at for ss in active_subjects if ss.updated_at).isoformat() if active_subjects and any(ss.updated_at for ss in active_subjects) else None
         }
     except (ValueError, TypeError):
         return {'error': 'Invalid student_id'}
