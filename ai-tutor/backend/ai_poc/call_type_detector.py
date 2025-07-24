@@ -170,10 +170,20 @@ class CallTypeDetector:
             
             logger.info(f"Database lookup for phone: {normalized_phone}")
             
-            # Ensure we have an app context
+            # Create app context if we don't have one
+            app_context_created = False
             if not flask.has_app_context():
-                logger.warning("No Flask app context - cannot perform database lookup")
-                return None
+                logger.info("No Flask app context - creating one for database lookup")
+                try:
+                    # Import the app instance
+                    from admin_server import app
+                    app_context = app.app_context()
+                    app_context.push()
+                    app_context_created = True
+                    logger.info("Successfully created Flask app context for database lookup")
+                except Exception as context_error:
+                    logger.error(f"Failed to create Flask app context: {context_error}")
+                    return None
             
             # Query students by phone number
             try:
@@ -217,6 +227,15 @@ class CallTypeDetector:
             except Exception as db_error:
                 logger.error(f"Database query error: {db_error}")
                 return None
+            
+            finally:
+                # Clean up app context if we created it
+                if app_context_created:
+                    try:
+                        app_context.pop()
+                        logger.info("Cleaned up Flask app context after database lookup")
+                    except Exception as cleanup_error:
+                        logger.error(f"Error cleaning up app context: {cleanup_error}")
             
         except Exception as e:
             logger.error(f"Database lookup failed: {e}")

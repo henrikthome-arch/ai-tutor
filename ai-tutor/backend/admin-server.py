@@ -24,7 +24,6 @@ from app.models.profile import Profile
 from app.models.school import School
 from app.models.curriculum import Curriculum, Subject, CurriculumDetail
 from app.models.session import Session
-from app.models.assessment import Assessment
 from app.models.token import Token
 from app.repositories import student_repository, session_repository, token_repository, assessment_repository
 from sqlalchemy import inspect
@@ -1312,15 +1311,8 @@ def get_student_data(student_id):
             log_error('DATABASE', f'Error getting assessments for student: {str(assessment_error)}', assessment_error, student_id=student_id)
             print(f"❌ Error getting assessments: {assessment_error}")
             
-            # Fallback to legacy Assessment model for backward compatibility
-            try:
-                legacy_assessments = Assessment.query.filter_by(student_id=student_id).all()
-                assessments_data = [assessment.to_dict() for assessment in legacy_assessments]
-                print(f"📊 Fallback: Retrieved {len(assessments_data)} legacy assessments for student {student_id}")
-            except Exception as legacy_error:
-                log_error('DATABASE', f'Error getting legacy assessments: {str(legacy_error)}', legacy_error, student_id=student_id)
-                print(f"❌ Error getting legacy assessments: {legacy_error}")
-                assessments_data = []  # Continue with empty assessments list
+            # No fallback needed - legacy Assessment model has been removed
+            assessments_data = []  # Continue with empty assessments list
         
         # Create student data object with safe field access
         try:
@@ -5717,9 +5709,24 @@ def trigger_ai_analysis_async(student_id, transcript, call_id, phone_number=None
         # Ensure student_id is a string
         student_id_str = str(student_id)
         
-        # Run async analysis in background using conditional prompts
+        # Run async analysis in background using conditional prompts with Flask app context
         def run_conditional_analysis():
+            # Create Flask app context for the background thread
+            app_context_created = False
             try:
+                # Check if we have Flask app context
+                import flask
+                if not flask.has_app_context():
+                    print(f"🔄 Creating Flask app context for background AI analysis")
+                    log_ai_analysis("Creating Flask app context for background AI analysis",
+                                   call_id=call_id,
+                                   student_id=student_id)
+                    
+                    # Create app context for database operations
+                    app_context = app.app_context()
+                    app_context.push()
+                    app_context_created = True
+                
                 log_ai_analysis("Running conditional prompt AI analysis in background thread",
                                call_id=call_id,
                                student_id=student_id,
@@ -5785,6 +5792,20 @@ def trigger_ai_analysis_async(student_id, transcript, call_id, phone_number=None
                 # Print stack trace for debugging
                 import traceback
                 print(f"🔍 Error stack trace: {traceback.format_exc()}")
+            finally:
+                # Clean up Flask app context if we created it
+                if app_context_created:
+                    try:
+                        app_context.pop()
+                        print(f"🔄 Cleaned up Flask app context after background AI analysis")
+                        log_ai_analysis("Cleaned up Flask app context after background AI analysis",
+                                       call_id=call_id,
+                                       student_id=student_id)
+                    except Exception as cleanup_error:
+                        log_error('AI_ANALYSIS', f"Error cleaning up Flask app context", cleanup_error,
+                                 call_id=call_id,
+                                 student_id=student_id)
+                        print(f"❌ Error cleaning up Flask app context: {cleanup_error}")
         
         # Run in background thread to not block webhook response
         import threading
