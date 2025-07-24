@@ -15,7 +15,7 @@ class MCPInteraction(db.Model):
     id = db.Column(db.Integer, primary_key=True)  # SERIAL primary key
     request_id = db.Column(db.String(36), nullable=False, unique=True, index=True)  # UUID as string
     session_id = db.Column(db.String(100), nullable=True, index=True)  # Optional session identifier
-    token_id = db.Column(db.Integer, db.ForeignKey('tokens.id'), nullable=True, index=True)  # FK to tokens
+    token_id = db.Column(db.String(36), db.ForeignKey('tokens.id'), nullable=True, index=True)  # FK to tokens (UUID)
     request_timestamp = db.Column(db.DateTime, nullable=False, default=func.now(), index=True)
     request_payload = db.Column(JSONB, nullable=False)  # Full request JSON
     response_timestamp = db.Column(db.DateTime, nullable=True, index=True)
