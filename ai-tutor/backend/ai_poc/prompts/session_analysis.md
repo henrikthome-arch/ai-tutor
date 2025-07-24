@@ -48,7 +48,8 @@ You must respond with ONLY valid JSON in exactly this structure:
 ```json
 {
   "student_profile": {
-    "name": "string - student's name",
+    "first_name": "string - student's first name",
+    "last_name": "string - student's last name",
     "session_engagement": "string - high/medium/low with reasoning",
     "learning_style_confirmation": "string - whether session confirmed known learning style",
     "motivation_level": "string - observed motivation during session",

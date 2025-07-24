@@ -41,8 +41,8 @@ You must respond with ONLY valid JSON in exactly this structure:
 ```json
 {{
   "student_profile": {{
-    "name": "string - student's full name or 'Unknown' if not provided",
-    "preferred_name": "string - what they like to be called",
+    "first_name": "string - student's first name or 'Unknown' if not provided",
+    "last_name": "string - student's last name or empty string if not provided",
     "age": "number - exact age as integer (e.g., 12) or null if unknown",
     "grade": "number - exact grade as integer (e.g., 4) or null if unknown",
     "school_name": "string - school name if mentioned or 'Not specified'",

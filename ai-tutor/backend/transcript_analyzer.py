@@ -656,79 +656,68 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             name_updated = False
             extracted_name = None
             
-            # Simple name extraction: check 'name' field first, then 'preferred_name'
-            if extracted_info.get('name') and extracted_info['name'] != 'Unknown':
-                extracted_name = extracted_info['name']
-                logger.info(f"Using name field: '{extracted_name}'")
-            elif extracted_info.get('preferred_name'):
-                extracted_name = extracted_info['preferred_name']
-                logger.info(f"Using preferred_name field: '{extracted_name}'")
+            # Direct name extraction: AI provides first_name and last_name fields directly
+            new_first_name = None
+            new_last_name = None
             
-            if extracted_name:
-                logger.info(f"🔍 DEBUG: Processing extracted name: '{extracted_name}'")
-                try:
-                    full_name = str(extracted_name).strip()
-                    logger.info(f"🔍 DEBUG: Cleaned full name: '{full_name}'")
+            if extracted_info.get('first_name') and extracted_info['first_name'] not in ['Unknown', 'unknown', '']:
+                new_first_name = str(extracted_info['first_name']).strip()
+                logger.info(f"🔍 DEBUG: Extracted first_name: '{new_first_name}'")
+            
+            if extracted_info.get('last_name') and extracted_info['last_name'] not in ['Unknown', 'unknown', '']:
+                new_last_name = str(extracted_info['last_name']).strip()
+                logger.info(f"🔍 DEBUG: Extracted last_name: '{new_last_name}'")
+            
+            if new_first_name or new_last_name:
+                logger.info(f"🔍 DEBUG: Processing extracted names - first: '{new_first_name}', last: '{new_last_name}'")
+                
+                # Get current student name state
+                current_first = student.first_name or ''
+                current_last = student.last_name or ''
+                current_full = f"{current_first} {current_last}".strip()
+                
+                logger.info(f"🔍 DEBUG: Current student state - first: '{current_first}', last: '{current_last}', full: '{current_full}'")
+                
+                # Check if current name is a default/generated name pattern
+                import re
+                is_default_name_checks = {
+                    'first_equals_Student': current_first == 'Student',
+                    'full_starts_with_Student_space': current_full.startswith('Student '),
+                    'contains_Unknown_': 'Unknown_' in current_full,
+                    'matches_Student_digits': bool(re.match(r'^Student\s*\d+$', current_full)),
+                    'first_is_just_Student': bool(re.match(r'^Student$', current_first)),
+                    'matches_generated_pattern': bool(re.match(r'^(Student|Unknown).*\d+$', current_full))
+                }
+                
+                is_default_name = any(is_default_name_checks.values())
+                
+                logger.info(f"🔍 DEBUG: Default name checks for '{current_full}': {json.dumps(is_default_name_checks, indent=2)}")
+                logger.info(f"🔍 DEBUG: Is default name: {is_default_name}")
+                
+                if is_default_name:
+                    # Prepare new names with proper fallbacks
+                    final_first = new_first_name if new_first_name else current_first
+                    final_last = new_last_name if new_last_name else current_last
                     
-                    if full_name and full_name.lower() not in ['unknown', 'student', 'not specified']:
-                        logger.info(f"🔍 DEBUG: Full name is valid, proceeding with parsing")
-                        
-                        # Parse full name into first and last name
-                        name_parts = full_name.split()
-                        if len(name_parts) >= 1:
-                            new_first_name = name_parts[0]
-                            new_last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
-                            logger.info(f"🔍 DEBUG: Parsed name - first: '{new_first_name}', last: '{new_last_name}'")
-                            
-                            # Only update if the current name looks like a default name
-                            current_first = student.first_name or ''
-                            current_last = student.last_name or ''
-                            current_full = f"{current_first} {current_last}".strip()
-                            
-                            logger.info(f"🔍 DEBUG: Current student state - first: '{current_first}', last: '{current_last}', full: '{current_full}'")
-                            
-                            # Check if current name is a default/generated name pattern
-                            import re
-                            is_default_name_checks = {
-                                'first_equals_Student': current_first == 'Student',
-                                'full_starts_with_Student_space': current_full.startswith('Student '),
-                                'contains_Unknown_': 'Unknown_' in current_full,
-                                'matches_Student_digits': bool(re.match(r'^Student\s*\d+$', current_full)),
-                                'first_is_just_Student': bool(re.match(r'^Student$', current_first)),
-                                'matches_generated_pattern': bool(re.match(r'^(Student|Unknown).*\d+$', current_full))
-                            }
-                            
-                            is_default_name = any(is_default_name_checks.values())
-                            
-                            logger.info(f"🔍 DEBUG: Default name checks for '{current_full}': {json.dumps(is_default_name_checks, indent=2)}")
-                            logger.info(f"🔍 DEBUG: Is default name: {is_default_name}")
-                            
-                            if is_default_name:
-                                logger.info(f"🔍 DEBUG: Updating name from '{current_full}' to '{new_first_name} {new_last_name}'")
-                                
-                                # Store old values for logging
-                                old_first = student.first_name
-                                old_last = student.last_name
-                                
-                                # Update the student object
-                                student.first_name = new_first_name
-                                student.last_name = new_last_name
-                                updated_fields.append('name')
-                                name_updated = True
-                                
-                                logger.info(f"🔍 DEBUG: Name update applied - OLD: first='{old_first}', last='{old_last}' -> NEW: first='{student.first_name}', last='{student.last_name}'")
-                                logger.info(f"Updated student name from '{current_full}' to '{full_name}' (source: {extracted_name})")
-                            else:
-                                logger.info(f"🔍 DEBUG: NOT updating name - current '{current_full}' is not detected as default, extracted was '{full_name}'")
-                                logger.info(f"Keeping existing name '{current_full}', extracted '{full_name}' (not a default name)")
-                        else:
-                            logger.info(f"🔍 DEBUG: No name parts found after splitting '{full_name}'")
-                    else:
-                        logger.info(f"🔍 DEBUG: Full name '{full_name}' is invalid or in exclusion list")
-                except (ValueError, TypeError, AttributeError) as e:
-                    logger.warning(f"🔍 DEBUG: Invalid name value: {extracted_name}: {e}")
+                    logger.info(f"🔍 DEBUG: Updating name from '{current_full}' to '{final_first} {final_last}'")
+                    
+                    # Store old values for logging
+                    old_first = student.first_name
+                    old_last = student.last_name
+                    
+                    # Update the student object
+                    student.first_name = final_first
+                    student.last_name = final_last
+                    updated_fields.append('name')
+                    name_updated = True
+                    
+                    logger.info(f"🔍 DEBUG: Name update applied - OLD: first='{old_first}', last='{old_last}' -> NEW: first='{student.first_name}', last='{student.last_name}'")
+                    logger.info(f"Updated student name using direct extraction: first_name='{new_first_name}', last_name='{new_last_name}'")
+                else:
+                    logger.info(f"🔍 DEBUG: NOT updating name - current '{current_full}' is not detected as default")
+                    logger.info(f"Keeping existing name '{current_full}', extracted first='{new_first_name}', last='{new_last_name}' (not a default name)")
             else:
-                logger.info(f"🔍 DEBUG: No extracted_name to process")
+                logger.info(f"🔍 DEBUG: No valid names extracted from AI response")
             
             # Use extracted_info directly for profile data (simplified approach)
             profile_data = extracted_info

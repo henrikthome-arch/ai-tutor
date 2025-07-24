@@ -963,14 +963,15 @@ def get_all_students():
                 student['last_session'] = None
             
             try:
-                # Create display name for templates
+                # Create display name from first_name and last_name directly
                 first_name = student.get('first_name', '')
                 last_name = student.get('last_name', '')
-                student['display_name'] = f"{first_name} {last_name}".strip() or 'Unknown'
+                full_name = f"{first_name} {last_name}".strip()
+                student['display_name'] = full_name or 'Unknown'
                 
-                # Create template-compatible fields while keeping as dictionary
+                # Set name field for template compatibility
                 student['name'] = student['display_name']
-                student['grade'] = student.get('grade_level', student.get('grade', 'Unknown'))  # Use grade_level from new model
+                student['grade'] = student.get('grade_level', student.get('grade', 'Unknown'))
                 
                 # Get real progress data from assessment repository
                 progress_percentage = 75  # Default fallback
@@ -1794,7 +1795,7 @@ def admin_dashboard():
             # Create students_info with proper field access - handle dictionaries
             students_info = {}
             for student in all_students:
-                # Create proper name from first_name and last_name - use .get() for dictionaries
+                # Create proper name from first_name and last_name directly
                 first_name = student.get('first_name', '')
                 last_name = student.get('last_name', '')
                 full_name = f"{first_name} {last_name}".strip() or 'Unknown'
@@ -1921,10 +1922,10 @@ def admin_student_detail(student_id):
             print(f"📈 Progress data: {json.dumps(progress, indent=2)}")
             print(f"📚 Sessions count: {len(sessions)}")
             
-            # Create proper name from first_name and last_name
+            # Create proper name from first_name and last_name directly
             first_name = profile.get('first_name', '')
             last_name = profile.get('last_name', '')
-            full_name = f"{first_name} {last_name}".strip() or profile.get('name', 'Unknown')
+            full_name = f"{first_name} {last_name}".strip() or 'Unknown'
             
             # Create student object for template with safe field access
             student = {
@@ -3309,10 +3310,12 @@ def add_student():
     
     if request.method == 'POST':
         try:
-            # Get form data
-            name_parts = request.form.get('name', '').split()
+            # Get form data - simplified name handling
+            name_input = request.form.get('name', '').strip()
+            name_parts = name_input.split(maxsplit=1)  # Split only on first space
             first_name = name_parts[0] if name_parts else ''
-            last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+            last_name = name_parts[1] if len(name_parts) > 1 else ''
+            
             age = request.form.get('age')
             grade = request.form.get('grade')
             phone = request.form.get('phone')
@@ -3321,7 +3324,7 @@ def add_student():
             interests = [i.strip() for i in interests if i.strip()]
             
             if not first_name or not age or not grade:
-                flash('Name, age, and grade are required', 'error')
+                flash('First name, age, and grade are required', 'error')
                 return render_template('add_student.html', schools=schools)
             
             # Create student data
@@ -3376,10 +3379,12 @@ def edit_student(student_id):
     
     if request.method == 'POST':
         try:
-            # Get form data
-            name_parts = request.form.get('name', '').split()
+            # Get form data - simplified name handling
+            name_input = request.form.get('name', '').strip()
+            name_parts = name_input.split(maxsplit=1)  # Split only on first space
             first_name = name_parts[0] if name_parts else ''
-            last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+            last_name = name_parts[1] if len(name_parts) > 1 else ''
+            
             age = request.form.get('age')
             grade = request.form.get('grade')
             phone = request.form.get('phone')
@@ -3388,7 +3393,7 @@ def edit_student(student_id):
             interests = [i.strip() for i in interests if i.strip()]
             
             if not first_name or not age or not grade:
-                flash('Name, age, and grade are required', 'error')
+                flash('First name, age, and grade are required', 'error')
                 return render_template('edit_student.html', student=student, student_id=student_id, phone=phone, schools=schools)
             
             # Update student data
@@ -3768,8 +3773,8 @@ def admin_all_sessions():
             
             full_name = f"{first_name} {last_name}".strip() or 'Unknown'
             
-            # Safely assign student name
-            session['student_name'] = full_name if full_name else 'Unknown'
+            # Assign student name
+            session['student_name'] = full_name
             session['student_grade'] = grade
             
             # Ensure session ID is set
@@ -5285,17 +5290,17 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
                         # Simple extraction: check for student_profile wrapper first, then use the result directly
                         if 'student_profile' in analysis_result:
                             extracted_info = analysis_result.get('student_profile', {})
-                            print(f"📊 Using student_profile wrapper for name extraction")
+                            print(f"📊 Using student_profile wrapper for profile extraction")
                         else:
                             # Use the analysis result directly - it should contain the profile fields
                             extracted_info = analysis_result
-                            print(f"📊 Using direct analysis result for name extraction")
+                            print(f"📊 Using direct analysis result for profile extraction")
                         
-                        # Log what we extracted for debugging
+                        # Log extracted name fields for debugging
                         if extracted_info:
-                            name_field = extracted_info.get('name')
-                            preferred_name_field = extracted_info.get('preferred_name')
-                            print(f"📊 Extracted fields - name: '{name_field}', preferred_name: '{preferred_name_field}'")
+                            first_name = extracted_info.get('first_name')
+                            last_name = extracted_info.get('last_name')
+                            print(f"📊 Extracted name fields - first_name: '{first_name}', last_name: '{last_name}'")
                 else:
                     print(f"🔍 Calling standard analyzer.analyze_transcript() (no phone number)")
                     extracted_info = analyzer.analyze_transcript(transcript, student_id)
