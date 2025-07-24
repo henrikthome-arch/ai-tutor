@@ -1873,12 +1873,24 @@ def admin_student_detail(student_id):
         return redirect(url_for('admin_login'))
     
     try:
+        print(f"🚀 ROUTE DEBUG: admin_student_detail called for student {student_id}")
+        log_system(f"🚀 ROUTE DEBUG: admin_student_detail called for student {student_id}", level="INFO")
+        
         print(f"🔍 Loading student detail for student ID: {student_id}")
+        
+        print(f"🔍 ROUTE DEBUG: About to call get_student_data({student_id})")
+        log_system(f"🔍 ROUTE DEBUG: About to call get_student_data({student_id})", level="INFO")
         
         # Get student data with comprehensive error handling
         student_data = get_student_data(student_id)
+        
+        print(f"🔍 ROUTE DEBUG: get_student_data returned: {type(student_data)}")
+        log_system(f"🔍 ROUTE DEBUG: get_student_data returned: {type(student_data)}", level="INFO")
+        
         if not student_data:
             print(f"❌ Student {student_id} not found in database")
+            print(f"🔍 ROUTE DEBUG: student_data is None or empty")
+            log_system(f"🔍 ROUTE DEBUG: student_data is None or empty", level="WARNING")
             flash(f'Student {student_id} not found', 'error')
             return redirect(url_for('admin_students'))
         
