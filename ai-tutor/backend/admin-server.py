@@ -5282,15 +5282,20 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
                     # Extract profile information from the analysis result
                     extracted_info = None
                     if analysis_result and isinstance(analysis_result, dict):
-                        # Check if this is a JSON response from conditional prompts
+                        # Simple extraction: check for student_profile wrapper first, then use the result directly
                         if 'student_profile' in analysis_result:
                             extracted_info = analysis_result.get('student_profile', {})
-                        elif 'analysis_type' in analysis_result:
-                            # This is metadata about the analysis, extract any profile info
-                            extracted_info = analysis_result.get('extracted_profile_info', {})
+                            print(f"📊 Using student_profile wrapper for name extraction")
                         else:
-                            # Fallback - treat the whole result as extracted info
+                            # Use the analysis result directly - it should contain the profile fields
                             extracted_info = analysis_result
+                            print(f"📊 Using direct analysis result for name extraction")
+                        
+                        # Log what we extracted for debugging
+                        if extracted_info:
+                            name_field = extracted_info.get('name')
+                            preferred_name_field = extracted_info.get('preferred_name')
+                            print(f"📊 Extracted fields - name: '{name_field}', preferred_name: '{preferred_name_field}'")
                 else:
                     print(f"🔍 Calling standard analyzer.analyze_transcript() (no phone number)")
                     extracted_info = analyzer.analyze_transcript(transcript, student_id)

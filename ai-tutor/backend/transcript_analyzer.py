@@ -652,23 +652,17 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             # Track changes
             updated_fields = []
             
-            # Update student name if extracted from transcript
+            # Update student name if extracted from transcript - simplified logic
             name_updated = False
             extracted_name = None
             
-            # Check for name in multiple possible fields with detailed logging
-            logger.info(f"🔍 DEBUG: Checking for name fields in extracted_info")
-            logger.info(f"🔍 DEBUG: 'name' field: {extracted_info.get('name', 'NOT_PRESENT')}")
-            logger.info(f"🔍 DEBUG: 'preferred_name' field: {extracted_info.get('preferred_name', 'NOT_PRESENT')}")
-            
-            if 'name' in extracted_info and extracted_info['name'] and extracted_info['name'] != 'Unknown':
+            # Simple name extraction: check 'name' field first, then 'preferred_name'
+            if extracted_info.get('name') and extracted_info['name'] != 'Unknown':
                 extracted_name = extracted_info['name']
-                logger.info(f"🔍 DEBUG: Using 'name' field: '{extracted_name}'")
-            elif 'preferred_name' in extracted_info and extracted_info['preferred_name']:
+                logger.info(f"Using name field: '{extracted_name}'")
+            elif extracted_info.get('preferred_name'):
                 extracted_name = extracted_info['preferred_name']
-                logger.info(f"🔍 DEBUG: Using 'preferred_name' field: '{extracted_name}'")
-            else:
-                logger.info(f"🔍 DEBUG: No valid name found in main fields")
+                logger.info(f"Using preferred_name field: '{extracted_name}'")
             
             if extracted_name:
                 logger.info(f"🔍 DEBUG: Processing extracted name: '{extracted_name}'")
@@ -736,98 +730,8 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             else:
                 logger.info(f"🔍 DEBUG: No extracted_name to process")
             
-            # Handle conditional prompt response format (student_profile wrapper)
+            # Use extracted_info directly for profile data (simplified approach)
             profile_data = extracted_info
-            if 'student_profile' in extracted_info:
-                profile_data = extracted_info['student_profile']
-                logger.info(f"🔍 DEBUG: Found student_profile wrapper, using nested data")
-                
-                # Also try to extract name from student_profile with multiple field checks
-                if not name_updated:
-                    logger.info(f"🔍 DEBUG: Name not yet updated, checking student_profile for name fields")
-                    logger.info(f"🔍 DEBUG: student_profile 'name' field: {profile_data.get('name', 'NOT_PRESENT')}")
-                    logger.info(f"🔍 DEBUG: student_profile 'preferred_name' field: {profile_data.get('preferred_name', 'NOT_PRESENT')}")
-                    
-                    profile_extracted_name = None
-                    
-                    # Check for name in multiple possible fields within student_profile
-                    if 'name' in profile_data and profile_data['name'] and profile_data['name'] != 'Unknown':
-                        profile_extracted_name = profile_data['name']
-                        logger.info(f"🔍 DEBUG: Using student_profile 'name' field: '{profile_extracted_name}'")
-                    elif 'preferred_name' in profile_data and profile_data['preferred_name']:
-                        profile_extracted_name = profile_data['preferred_name']
-                        logger.info(f"🔍 DEBUG: Using student_profile 'preferred_name' field: '{profile_extracted_name}'")
-                    else:
-                        logger.info(f"🔍 DEBUG: No valid name found in student_profile fields")
-                    
-                    if profile_extracted_name:
-                        logger.info(f"🔍 DEBUG: Processing student_profile extracted name: '{profile_extracted_name}'")
-                        try:
-                            full_name = str(profile_extracted_name).strip()
-                            logger.info(f"🔍 DEBUG: Cleaned student_profile full name: '{full_name}'")
-                            
-                            if full_name and full_name.lower() not in ['unknown', 'student', 'not specified']:
-                                logger.info(f"🔍 DEBUG: student_profile full name is valid, proceeding with parsing")
-                                
-                                # Parse full name into first and last name
-                                name_parts = full_name.split()
-                                if len(name_parts) >= 1:
-                                    new_first_name = name_parts[0]
-                                    new_last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
-                                    logger.info(f"🔍 DEBUG: Parsed student_profile name - first: '{new_first_name}', last: '{new_last_name}'")
-                                    
-                                    # Get current state again (might have changed)
-                                    current_first = student.first_name or ''
-                                    current_last = student.last_name or ''
-                                    current_full = f"{current_first} {current_last}".strip()
-                                    
-                                    logger.info(f"🔍 DEBUG: Current student state for student_profile check - first: '{current_first}', last: '{current_last}', full: '{current_full}'")
-                                    
-                                    # Check if current name is a default/generated name pattern
-                                    import re
-                                    is_default_name_checks_sp = {
-                                        'first_equals_Student': current_first == 'Student',
-                                        'full_starts_with_Student_space': current_full.startswith('Student '),
-                                        'contains_Unknown_': 'Unknown_' in current_full,
-                                        'matches_Student_digits': bool(re.match(r'^Student\s*\d+$', current_full)),
-                                        'first_is_just_Student': bool(re.match(r'^Student$', current_first)),
-                                        'matches_generated_pattern': bool(re.match(r'^(Student|Unknown).*\d+$', current_full))
-                                    }
-                                    
-                                    is_default_name = any(is_default_name_checks_sp.values())
-                                    
-                                    logger.info(f"🔍 DEBUG: student_profile default name checks for '{current_full}': {json.dumps(is_default_name_checks_sp, indent=2)}")
-                                    logger.info(f"🔍 DEBUG: student_profile is default name: {is_default_name}")
-                                    
-                                    if is_default_name:
-                                        logger.info(f"🔍 DEBUG: student_profile updating name from '{current_full}' to '{new_first_name} {new_last_name}'")
-                                        
-                                        # Store old values for logging
-                                        old_first = student.first_name
-                                        old_last = student.last_name
-                                        
-                                        # Update the student object
-                                        student.first_name = new_first_name
-                                        student.last_name = new_last_name
-                                        updated_fields.append('name')
-                                        name_updated = True
-                                        
-                                        logger.info(f"🔍 DEBUG: student_profile name update applied - OLD: first='{old_first}', last='{old_last}' -> NEW: first='{student.first_name}', last='{student.last_name}'")
-                                        logger.info(f"Updated student name from conditional prompt: '{current_full}' to '{full_name}' (source: {profile_extracted_name})")
-                                    else:
-                                        logger.info(f"🔍 DEBUG: student_profile NOT updating name - current '{current_full}' is not detected as default, extracted was '{full_name}'")
-                                else:
-                                    logger.info(f"🔍 DEBUG: No name parts found after splitting student_profile name '{full_name}'")
-                            else:
-                                logger.info(f"🔍 DEBUG: student_profile full name '{full_name}' is invalid or in exclusion list")
-                        except (ValueError, TypeError, AttributeError) as e:
-                            logger.warning(f"🔍 DEBUG: Invalid student_profile name value: {profile_extracted_name}: {e}")
-                    else:
-                        logger.info(f"🔍 DEBUG: No profile_extracted_name to process from student_profile")
-                else:
-                    logger.info(f"🔍 DEBUG: Name already updated, skipping student_profile name check")
-            else:
-                logger.info(f"🔍 DEBUG: No student_profile wrapper found in extracted_info")
             
             # Update age by calculating date_of_birth if provided
             if 'age' in extracted_info and extracted_info['age'] is not None:
