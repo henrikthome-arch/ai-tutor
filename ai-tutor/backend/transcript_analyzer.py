@@ -706,12 +706,12 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             if profile_data:
                 logger.info(f"🔍 DEBUG: Found nested student_profile data: {json.dumps(profile_data, indent=2)}")
                 print(f"🔍 DEBUG: Found nested student_profile data: {profile_data}")
-                if profile_data.get('first_name') and profile_data['first_name'] not in ['Unknown', 'unknown', '', None]:
+                if profile_data.get('first_name') and str(profile_data['first_name']).strip() not in ['Unknown', 'unknown', '', 'None']:
                     new_first_name = str(profile_data['first_name']).strip()
                     logger.info(f"🔍 DEBUG: Extracted first_name from profile: '{new_first_name}'")
                     print(f"🔍 DEBUG: Extracted first_name from profile: '{new_first_name}'")
                 
-                if profile_data.get('last_name') and profile_data['last_name'] not in ['Unknown', 'unknown', '', None]:
+                if profile_data.get('last_name') and str(profile_data['last_name']).strip() not in ['Unknown', 'unknown', '', 'None']:
                     new_last_name = str(profile_data['last_name']).strip()
                     logger.info(f"🔍 DEBUG: Extracted last_name from profile: '{new_last_name}'")
                     print(f"🔍 DEBUG: Extracted last_name from profile: '{new_last_name}'")
@@ -720,15 +720,32 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                 print(f"🔍 DEBUG: No nested student_profile data found")
             
             # Fallback to direct fields (from legacy analysis)
-            if not new_first_name and extracted_info.get('first_name') and extracted_info['first_name'] not in ['Unknown', 'unknown', '', None]:
+            if not new_first_name and extracted_info.get('first_name') and str(extracted_info['first_name']).strip() not in ['Unknown', 'unknown', '', 'None']:
                 new_first_name = str(extracted_info['first_name']).strip()
                 logger.info(f"🔍 DEBUG: Extracted first_name directly: '{new_first_name}'")
                 print(f"🔍 DEBUG: Extracted first_name directly: '{new_first_name}'")
             
-            if not new_last_name and extracted_info.get('last_name') and extracted_info['last_name'] not in ['Unknown', 'unknown', '', None]:
+            if not new_last_name and extracted_info.get('last_name') and str(extracted_info['last_name']).strip() not in ['Unknown', 'unknown', '', 'None']:
                 new_last_name = str(extracted_info['last_name']).strip()
                 logger.info(f"🔍 DEBUG: Extracted last_name directly: '{new_last_name}'")
                 print(f"🔍 DEBUG: Extracted last_name directly: '{new_last_name}'")
+            
+            # Additional fallback: check for "name" field that might contain full name
+            if not new_first_name and not new_last_name:
+                name_field = None
+                if profile_data and profile_data.get('name'):
+                    name_field = profile_data.get('name')
+                elif extracted_info.get('name'):
+                    name_field = extracted_info.get('name')
+                
+                if name_field and str(name_field).strip() not in ['Unknown', 'unknown', '', 'None']:
+                    name_parts = str(name_field).strip().split()
+                    if len(name_parts) >= 1:
+                        new_first_name = name_parts[0]
+                        if len(name_parts) >= 2:
+                            new_last_name = ' '.join(name_parts[1:])
+                        logger.info(f"🔍 DEBUG: Extracted from 'name' field: first='{new_first_name}', last='{new_last_name}'")
+                        print(f"🔍 DEBUG: Extracted from 'name' field: first='{new_first_name}', last='{new_last_name}'")
             
             if new_first_name or new_last_name:
                 logger.info(f"🔍 DEBUG: Processing extracted names - first: '{new_first_name}', last: '{new_last_name}'")
@@ -748,7 +765,9 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                     'contains_Unknown_': 'Unknown_' in current_full,
                     'matches_Student_digits': bool(re.match(r'^Student\s*\d+$', current_full)),
                     'first_is_just_Student': bool(re.match(r'^Student$', current_first)),
-                    'matches_generated_pattern': bool(re.match(r'^(Student|Unknown).*\d+$', current_full))
+                    'matches_generated_pattern': bool(re.match(r'^(Student|Unknown).*\d+$', current_full)),
+                    'last_is_digits_only': bool(re.match(r'^\d+$', current_last)) if current_last else False,
+                    'first_Student_last_digits': current_first == 'Student' and bool(re.match(r'^\d+$', current_last)) if current_last else False
                 }
                 
                 is_default_name = any(is_default_name_checks.values())

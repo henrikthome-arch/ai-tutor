@@ -5268,20 +5268,26 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
             try:
                 from transcript_analyzer import TranscriptAnalyzer
                 analyzer = TranscriptAnalyzer()
+                
+                # Ensure we have a valid session_id
+                session_id_for_analysis = new_session.get('id') if new_session else None
+                print(f"🔍 DEBUG: Session ID for analysis: {session_id_for_analysis}")
+                
                 log_webhook('conditional-transcript-analysis-start', f"Starting conditional prompt transcript analysis for profile extraction",
                              call_id=call_id, student_id=student_id,
-                             transcript_length=len(transcript), phone_number=phone)
+                             transcript_length=len(transcript), phone_number=phone,
+                             session_id=session_id_for_analysis)
                 print(f"🔍 Analyzing transcript for student {student_id} using conditional prompts...")
                 print(f"📄 Transcript preview: {transcript[:200]}...")
                 
                 # Use conditional prompt analysis with phone number for call type detection
                 if phone:
-                    print(f"🔍 Calling analyzer.analyze_transcript_with_conditional_prompts_sync() with phone {phone} and session_id {new_session.get('id')}")
+                    print(f"🔍 Calling analyzer.analyze_transcript_with_conditional_prompts_sync() with phone {phone} and session_id {session_id_for_analysis}")
                     analysis_result = analyzer.analyze_transcript_with_conditional_prompts_sync(
                         transcript=transcript,
                         student_id=student_id,
                         phone_number=phone,
-                        additional_context={'session_id': new_session.get('id')}
+                        additional_context={'session_id': session_id_for_analysis} if session_id_for_analysis else {}
                     )
                     print(f"📊 Conditional analysis result: {json.dumps(analysis_result, indent=2)[:500] if analysis_result else 'None'}...")
                     
