@@ -1085,11 +1085,15 @@ def get_student_data(student_id):
             'last_updated': datetime.now().isoformat()
         }
         
+        print(f"🔍 DEBUG: Starting assessment section for student {student_id}")
+        
         try:
             # Import assessment repository functions
+            print(f"🔍 DEBUG: Importing assessment repository")
             from app.repositories import assessment_repository
             
             # Get comprehensive progress summary using new repository
+            print(f"🔍 DEBUG: Getting progress summary for student {student_id}")
             progress_summary = assessment_repository.get_student_progress_summary(student_id)
             print(f"📊 Progress summary retrieved: {json.dumps(progress_summary, indent=2)}")
             
@@ -1129,7 +1133,9 @@ def get_student_data(student_id):
             print(f"📊 Retrieved {len(assessments_data)} subject assessments for student {student_id}")
             
             # Get detailed student subjects with curriculum information
+            print(f"🔍 DEBUG: About to start detailed subject query section for student {student_id}")
             try:
+                print(f"🔍 DEBUG: Importing models for detailed subject query")
                 from app.models.assessment import StudentSubject
                 from app.models.curriculum import CurriculumDetail, Subject, Curriculum
                 
