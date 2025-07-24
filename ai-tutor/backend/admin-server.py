@@ -1022,21 +1022,35 @@ def get_all_students():
 def get_student_data(student_id):
     """Get detailed student data from database with comprehensive error handling"""
     try:
+        print(f"🚀 DEBUG: ENTRY POINT - get_student_data called for student {student_id}")
+        log_system(f"🚀 DEBUG: ENTRY POINT - get_student_data called for student {student_id}", level="INFO")
+        
         print(f"🔍 Getting student data for ID: {student_id}")
         
         # Get student from repository with error handling
         student = None
         try:
+            print(f"🔍 DEBUG: About to call student_repository.get_by_id({student_id})")
+            log_system(f"🔍 DEBUG: About to call student_repository.get_by_id({student_id})", level="INFO")
             student = student_repository.get_by_id(student_id)
             print(f"📊 Student repository returned: {json.dumps(student, indent=2) if student else 'None'}")
+            print(f"🔍 DEBUG: student_repository.get_by_id completed successfully")
+            log_system(f"🔍 DEBUG: student_repository.get_by_id completed successfully", level="INFO")
         except Exception as repo_error:
             log_error('DATABASE', f'Error getting student from repository: {str(repo_error)}', repo_error, student_id=student_id)
             print(f"❌ Error getting student from repository: {repo_error}")
+            print(f"🔍 DEBUG: student_repository.get_by_id failed with error: {repo_error}")
+            log_system(f"🔍 DEBUG: student_repository.get_by_id failed with error: {repo_error}", level="ERROR")
             return None
         
         if not student:
             print(f"❌ Student {student_id} not found in repository")
+            print(f"🔍 DEBUG: student_repository.get_by_id returned None")
+            log_system(f"🔍 DEBUG: student_repository.get_by_id returned None", level="WARNING")
             return None
+            
+        print(f"🔍 DEBUG: Starting profile data section")
+        log_system(f"🔍 DEBUG: Starting profile data section", level="INFO")
         
         # Get student's profile data from database to include interests
         profile_data = {}
