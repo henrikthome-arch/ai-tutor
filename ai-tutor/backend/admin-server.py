@@ -1788,6 +1788,7 @@ def admin_student_detail(student_id):
         
         # Extract data for template with safe field access
         try:
+            # Since all profile fields are now in the student table, use student data as profile
             profile = student_data.get('profile', {})
             progress = student_data.get('progress', {})
             assessment = student_data.get('assessment', {})
@@ -1915,6 +1916,7 @@ def admin_student_detail(student_id):
         try:
             return render_template('student_detail.html',
                                  student=student,
+                                 profile=profile,
                                  phone=phone,
                                  progress=progress,
                                  recent_sessions=recent_sessions,
