@@ -15,32 +15,72 @@
         <div class="card-body">
             <form action="{{ url_for('add_school') }}" method="post">
                 <div class="form-group">
-                    <label for="school_id">School ID</label>
-                    <input type="text" class="form-control" id="school_id" name="school_id" required>
-                </div>
-                <div class="form-group">
-                    <label for="name">School Name</label>
+                    <label for="name">School Name <span class="text-danger">*</span></label>
                     <input type="text" class="form-control" id="name" name="name" required>
+                    <small class="form-text text-muted">Enter the full name of the school</small>
                 </div>
-                <div class="form-group">
-                    <label for="location">Location</label>
-                    <input type="text" class="form-control" id="location" name="location" required>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="country">Country</label>
+                            <input type="text" class="form-control" id="country" name="country" placeholder="e.g., Greece">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="city">City</label>
+                            <input type="text" class="form-control" id="city" name="city" placeholder="e.g., Athens">
+                        </div>
+                    </div>
                 </div>
+                
                 <div class="form-group">
-                    <label for="background">Background</label>
-                    <textarea class="form-control" id="background" name="background" rows="3"></textarea>
+                    <label for="description">Description</label>
+                    <textarea class="form-control" id="description" name="description" rows="3" placeholder="Brief description of the school..."></textarea>
+                    <small class="form-text text-muted">Optional background information about the school</small>
                 </div>
+                
                 <div class="form-group">
-                    <label for="curriculum_type">Curriculum Type</label>
-                    <select class="form-control" id="curriculum_type" name="curriculum_type">
-                        <option value="international">International</option>
-                        <option value="local">Local</option>
+                    <label for="core_values">Core Values</label>
+                    <textarea class="form-control" id="core_values" name="core_values" rows="2" placeholder="Enter the school's core values (optional)"></textarea>
+                    <small class="form-text text-muted">Optional: The fundamental principles and beliefs of the school</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="default_curriculum_id">Default Curriculum</label>
+                    <select class="form-control" id="default_curriculum_id" name="default_curriculum_id">
+                        <option value="">-- No default curriculum --</option>
+                        {% if curriculums %}
+                            {% for curriculum in curriculums %}
+                                <option value="{{ curriculum.id }}" {% if curriculum.is_default %}selected{% endif %}>
+                                    {{ curriculum.name }}
+                                    {% if curriculum.is_default %} (Default){% endif %}
+                                    {% if curriculum.curriculum_type %} - {{ curriculum.curriculum_type }}{% endif %}
+                                </option>
+                            {% endfor %}
+                        {% endif %}
                     </select>
+                    <small class="form-text text-muted">Optional: Select a curriculum to be used as default for new students at this school</small>
                 </div>
-                <button type="submit" class="btn btn-primary">Add School</button>
-                <a href="{{ url_for('admin_schools') }}" class="btn btn-secondary">Cancel</a>
+                
+                <div class="form-group mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add School
+                    </button>
+                    <a href="{{ url_for('admin_schools') }}" class="btn btn-secondary ml-2">
+                        <i class="fas fa-times"></i> Cancel
+                    </a>
+                </div>
             </form>
         </div>
     </div>
+    
+    {% if not curriculums %}
+    <div class="alert alert-warning" role="alert">
+        <i class="fas fa-exclamation-triangle"></i>
+        <strong>Note:</strong> No curriculums are available for selection. You can create curriculums in the <a href="{{ url_for('admin_curriculum') }}" class="alert-link">Curriculum Management</a> section.
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
