@@ -666,12 +666,17 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                             current_full = f"{current_first} {current_last}".strip()
                             
                             # Check if current name is a default/generated name pattern
+                            import re
                             is_default_name = (
                                 current_first == 'Student' or
                                 current_full.startswith('Student ') or
                                 'Unknown_' in current_full or
-                                len(current_full) <= 10  # Very short names are likely defaults
+                                len(current_full) <= 10 or  # Very short names are likely defaults
+                                re.match(r'^Student\s*\d+$', current_full) or  # Matches "Student 6010", "Student1234", etc.
+                                re.match(r'^Student$', current_first)  # Matches just "Student" as first name
                             )
+                            
+                            logger.info(f"Default name check for '{current_full}': current_first='{current_first}', current_last='{current_last}', is_default={is_default_name}")
                             
                             if is_default_name:
                                 student.first_name = new_first_name
@@ -715,12 +720,17 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                                     current_full = f"{current_first} {current_last}".strip()
                                     
                                     # Check if current name is a default/generated name pattern
+                                    import re
                                     is_default_name = (
                                         current_first == 'Student' or
                                         current_full.startswith('Student ') or
                                         'Unknown_' in current_full or
-                                        len(current_full) <= 10  # Very short names are likely defaults
+                                        len(current_full) <= 10 or  # Very short names are likely defaults
+                                        re.match(r'^Student\s*\d+$', current_full) or  # Matches "Student 6010", "Student1234", etc.
+                                        re.match(r'^Student$', current_first)  # Matches just "Student" as first name
                                     )
+                                    
+                                    logger.info(f"Conditional prompt default name check for '{current_full}': current_first='{current_first}', current_last='{current_last}', is_default={is_default_name}")
                                     
                                     if is_default_name:
                                         student.first_name = new_first_name
