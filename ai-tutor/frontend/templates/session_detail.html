@@ -82,6 +82,12 @@
         <div class="card">
             <h3 style="margin-bottom: 1rem;">📋 Quick Actions</h3>
             <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                {% if session_data.summary %}
+                <button class="btn" onclick="scrollToSummary()" style="background: #16a085;">
+                    📋 View Summary
+                </button>
+                {% endif %}
+                
                 {% if transcript %}
                 <button class="btn" onclick="scrollToTranscript()" style="background: #3498db;">
                     📄 View Transcript
@@ -110,6 +116,12 @@
                     </strong>
                 </div>
                 <div style="display: flex; justify-content: space-between;">
+                    <span>Summary:</span>
+                    <strong style="color: {% if session_data.summary %}#27ae60{% else %}#e74c3c{% endif %};">
+                        {% if session_data.summary %}✅ Available{% else %}❌ Missing{% endif %}
+                    </strong>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
                     <span>AI Analysis:</span>
                     <strong style="color: {% if session_data.has_analysis_display %}#27ae60{% else %}#e74c3c{% endif %};">
                         {% if session_data.has_analysis_display %}✅ Complete{% else %}❌ Missing{% endif %}
@@ -125,6 +137,20 @@
         </div>
     </div>
 </div>
+
+{% if session_data.summary %}
+<div class="card" id="summary-section">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2>📋 Summary</h2>
+        <button class="btn" onclick="copySummary()" style="background: #16a085;">
+            📋 Copy Summary
+        </button>
+    </div>
+    <div style="background: #f0f9f6; padding: 1.5rem; border-radius: 4px; border-left: 4px solid #16a085;">
+        <pre id="summary-content" style="white-space: pre-wrap; margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #2c3e50;">{{ session_data.summary }}</pre>
+    </div>
+</div>
+{% endif %}
 
 {% if transcript %}
 <div class="card" id="transcript-section">
@@ -200,12 +226,23 @@
 </div>
 
 <script>
+function scrollToSummary() {
+    document.getElementById('summary-section').scrollIntoView({ behavior: 'smooth' });
+}
+
 function scrollToTranscript() {
     document.getElementById('transcript-section').scrollIntoView({ behavior: 'smooth' });
 }
 
 function scrollToAnalysis() {
     document.getElementById('analysis-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+function copySummary() {
+    const content = document.getElementById('summary-content').textContent;
+    navigator.clipboard.writeText(content).then(() => {
+        alert('Summary copied to clipboard!');
+    });
 }
 
 function copyTranscript() {
