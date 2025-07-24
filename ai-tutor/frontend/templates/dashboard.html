@@ -41,31 +41,6 @@
     </div>
 </div>
 
-<div class="card" style="margin-bottom: 2rem;">
-    <h2>🎯 Quick Actions</h2>
-    <div style="display: grid; gap: 1rem;">
-        <a href="{{ url_for('admin_students') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
-            👥 Manage Students
-        </a>
-        
-        <a href="{{ url_for('admin_curriculum') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
-            📚 Manage Curriculum
-        </a>
-        
-        <a href="{{ url_for('admin_database') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
-            🗄️ Browse Database
-        </a>
-        
-        <a href="{{ url_for('admin_system') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
-            ⚙️ System Settings
-        </a>
-        
-        <a href="{{ url_for('admin_all_sessions') }}" class="btn" style="display: flex; align-items: center; gap: 10px;">
-            📊 View Sessions
-        </a>
-    </div>
-</div>
-
 <!-- Phone numbers are now managed directly through student profiles in the database-first architecture -->
 
 {% if stats.default_curriculum %}
