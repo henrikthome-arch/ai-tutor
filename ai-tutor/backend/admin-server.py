@@ -1133,68 +1133,155 @@ def get_student_data(student_id):
                 from app.models.assessment import StudentSubject
                 from app.models.curriculum import CurriculumDetail, Subject, Curriculum
                 
-                # Query comprehensive student subject data with joins
+                print(f"🔍 DEBUG: Starting detailed subject query for student {student_id}")
+                
+                # First, check if any StudentSubject records exist for this student
+                basic_student_subjects = StudentSubject.query.filter_by(student_id=student_id).all()
+                print(f"📊 DEBUG: Found {len(basic_student_subjects)} basic StudentSubject records for student {student_id}")
+                
+                if basic_student_subjects:
+                    # Log details about the first few records
+                    for i, ss in enumerate(basic_student_subjects[:3]):
+                        print(f"📋 DEBUG: StudentSubject {i+1}: ID={ss.id}, curriculum_detail_id={ss.curriculum_detail_id}")
+                        
+                        # Check if the curriculum detail exists
+                        cd = CurriculumDetail.query.get(ss.curriculum_detail_id)
+                        if cd:
+                            print(f"📚 DEBUG: CurriculumDetail found: ID={cd.id}, subject_id={cd.subject_id}, curriculum_id={cd.curriculum_id}")
+                            
+                            # Check if subject exists
+                            subj = Subject.query.get(cd.subject_id)
+                            if subj:
+                                print(f"📖 DEBUG: Subject found: ID={subj.id}, name={subj.name}")
+                            else:
+                                print(f"❌ DEBUG: Subject NOT found for ID={cd.subject_id}")
+                                
+                            # Check if curriculum exists
+                            curr = Curriculum.query.get(cd.curriculum_id)
+                            if curr:
+                                print(f"🎓 DEBUG: Curriculum found: ID={curr.id}, name={curr.name}")
+                            else:
+                                print(f"❌ DEBUG: Curriculum NOT found for ID={cd.curriculum_id}")
+                        else:
+                            print(f"❌ DEBUG: CurriculumDetail NOT found for ID={ss.curriculum_detail_id}")
+                
+                # Query comprehensive student subject data with joins - using LEFT JOINs to handle missing data
+                print(f"🔍 DEBUG: Executing join query for student {student_id}")
+                
+                # First, let's check what curriculum_detail_ids exist for this student
+                student_subject_details = db.session.query(StudentSubject.curriculum_detail_id)\
+                    .filter(StudentSubject.student_id == student_id)\
+                    .all()
+                curriculum_detail_ids = [x[0] for x in student_subject_details]
+                print(f"📊 DEBUG: Student {student_id} has curriculum_detail_ids: {curriculum_detail_ids[:5]}... (showing first 5)")
+                
+                # Check if these curriculum details exist
+                existing_curriculum_details = db.session.query(CurriculumDetail.id)\
+                    .filter(CurriculumDetail.id.in_(curriculum_detail_ids))\
+                    .all()
+                existing_ids = [x[0] for x in existing_curriculum_details]
+                print(f"📊 DEBUG: Found {len(existing_ids)} existing CurriculumDetail records out of {len(curriculum_detail_ids)}")
+                
+                if len(existing_ids) != len(curriculum_detail_ids):
+                    missing_ids = set(curriculum_detail_ids) - set(existing_ids)
+                    print(f"❌ DEBUG: Missing CurriculumDetail IDs: {list(missing_ids)[:5]}... (showing first 5)")
+                
+                # Use LEFT JOINs to get data even if some relationships are broken
                 comprehensive_subjects = db.session.query(StudentSubject, CurriculumDetail, Subject, Curriculum)\
-                    .join(CurriculumDetail, StudentSubject.curriculum_detail_id == CurriculumDetail.id)\
-                    .join(Subject, CurriculumDetail.subject_id == Subject.id)\
-                    .join(Curriculum, CurriculumDetail.curriculum_id == Curriculum.id)\
+                    .outerjoin(CurriculumDetail, StudentSubject.curriculum_detail_id == CurriculumDetail.id)\
+                    .outerjoin(Subject, CurriculumDetail.subject_id == Subject.id)\
+                    .outerjoin(Curriculum, CurriculumDetail.curriculum_id == Curriculum.id)\
                     .filter(StudentSubject.student_id == student_id)\
                     .all()
                 
-                # Format comprehensive subject data for template
+                print(f"📊 DEBUG: LEFT JOIN query returned {len(comprehensive_subjects)} results for student {student_id}")
+                
+                # Format comprehensive subject data for template - handle None values from LEFT JOINs
                 student_subjects_detailed = []
-                for student_subject, curriculum_detail, subject, curriculum in comprehensive_subjects:
-                    subject_data = {
-                        # StudentSubject fields (progress, comments, etc.)
-                        'id': student_subject.id,
-                        'is_active_for_tutoring': student_subject.is_active_for_tutoring,
-                        'is_in_use': student_subject.is_in_use,
-                        'teacher_notes': student_subject.teacher_notes,
-                        'ai_tutor_notes': student_subject.ai_tutor_notes,
-                        'progress_percentage': student_subject.progress_percentage,
-                        'ai_assessment': student_subject.ai_assessment,
-                        'weaknesses': student_subject.weaknesses,
-                        'mastery_level': student_subject.mastery_level,
-                        'comments_tutor': student_subject.comments_tutor,
-                        'comments_teacher': student_subject.comments_teacher,
-                        'completion_percentage': student_subject.completion_percentage,
-                        'grade_score': student_subject.grade_score,
-                        'grade_motivation': student_subject.grade_motivation,
-                        'created_at': student_subject.created_at.isoformat() if student_subject.created_at else None,
-                        'updated_at': student_subject.updated_at.isoformat() if student_subject.updated_at else None,
+                for i, (student_subject, curriculum_detail, subject, curriculum) in enumerate(comprehensive_subjects):
+                    try:
+                        # Handle cases where joins returned None due to missing data
+                        if not student_subject:
+                            print(f"⚠️ DEBUG: Skipping record {i+1} - no StudentSubject data")
+                            continue
+                            
+                        # Create subject data with safe access to potentially None objects
+                        subject_data = {
+                            # StudentSubject fields (always available)
+                            'id': student_subject.id,
+                            'is_active_for_tutoring': student_subject.is_active_for_tutoring,
+                            'is_in_use': student_subject.is_in_use,
+                            'teacher_notes': student_subject.teacher_notes,
+                            'ai_tutor_notes': student_subject.ai_tutor_notes,
+                            'progress_percentage': student_subject.progress_percentage,
+                            'ai_assessment': student_subject.ai_assessment,
+                            'weaknesses': student_subject.weaknesses,
+                            'mastery_level': student_subject.mastery_level,
+                            'comments_tutor': student_subject.comments_tutor,
+                            'comments_teacher': student_subject.comments_teacher,
+                            'completion_percentage': student_subject.completion_percentage,
+                            'grade_score': student_subject.grade_score,
+                            'grade_motivation': student_subject.grade_motivation,
+                            'created_at': student_subject.created_at.isoformat() if student_subject.created_at else None,
+                            'updated_at': student_subject.updated_at.isoformat() if student_subject.updated_at else None,
+                            
+                            # Subject information (may be None from LEFT JOIN)
+                            'subject_name': subject.name if subject else f'Subject {student_subject.curriculum_detail_id}',
+                            'subject_description': subject.description if subject else 'Description not available',
+                            'subject_category': subject.category if subject else 'General',
+                            'is_core_subject': subject.is_core if subject else False,
+                            
+                            # Curriculum detail information (may be None from LEFT JOIN)
+                            'grade_level': curriculum_detail.grade_level if curriculum_detail else 'Unknown',
+                            'is_mandatory': curriculum_detail.is_mandatory if curriculum_detail else False,
+                            'learning_objectives': curriculum_detail.learning_objectives if curriculum_detail else ['Objectives not available'],
+                            'assessment_criteria': curriculum_detail.assessment_criteria if curriculum_detail else ['Assessment criteria not available'],
+                            'recommended_hours_per_week': curriculum_detail.recommended_hours_per_week if curriculum_detail else 4,
+                            'prerequisites': curriculum_detail.prerequisites if curriculum_detail else [],
+                            'resources': curriculum_detail.resources if curriculum_detail else ['Resources not available'],
+                            'goals_description': curriculum_detail.goals_description if curriculum_detail else 'Goals not available',
+                            
+                            # Curriculum information (may be None from LEFT JOIN)
+                            'curriculum_name': curriculum.name if curriculum else 'Curriculum not available',
+                            'curriculum_type': curriculum.curriculum_type if curriculum else 'Unknown',
+                            'curriculum_is_default': curriculum.is_default if curriculum else False
+                        }
+                        student_subjects_detailed.append(subject_data)
                         
-                        # Subject information
-                        'subject_name': subject.name,
-                        'subject_description': subject.description,
-                        'subject_category': subject.category,
-                        'is_core_subject': subject.is_core,
-                        
-                        # Curriculum detail information (goals, objectives, etc.)
-                        'grade_level': curriculum_detail.grade_level,
-                        'is_mandatory': curriculum_detail.is_mandatory,
-                        'learning_objectives': curriculum_detail.learning_objectives,
-                        'assessment_criteria': curriculum_detail.assessment_criteria,
-                        'recommended_hours_per_week': curriculum_detail.recommended_hours_per_week,
-                        'prerequisites': curriculum_detail.prerequisites,
-                        'resources': curriculum_detail.resources,
-                        'goals_description': curriculum_detail.goals_description,
-                        
-                        # Curriculum information
-                        'curriculum_name': curriculum.name,
-                        'curriculum_type': curriculum.curriculum_type,
-                        'curriculum_is_default': curriculum.is_default
-                    }
-                    student_subjects_detailed.append(subject_data)
+                        if i < 3:  # Log first 3 subjects for debugging
+                            subject_name = subject.name if subject else f'Subject {student_subject.curriculum_detail_id}'
+                            grade_level = curriculum_detail.grade_level if curriculum_detail else 'Unknown'
+                            print(f"📚 DEBUG: Formatted subject {i+1}: {subject_name} (Grade {grade_level})")
+                            
+                        # Log any missing relationships
+                        if not curriculum_detail:
+                            print(f"⚠️ DEBUG: Subject {i+1} missing CurriculumDetail (ID: {student_subject.curriculum_detail_id})")
+                        if not subject:
+                            print(f"⚠️ DEBUG: Subject {i+1} missing Subject data")
+                        if not curriculum:
+                            print(f"⚠️ DEBUG: Subject {i+1} missing Curriculum data")
+                            
+                    except Exception as format_error:
+                        print(f"❌ DEBUG: Error formatting subject {i+1}: {format_error}")
+                        log_error('DATABASE', f'Error formatting subject data for student {student_id}', format_error, student_id=student_id, subject_index=i)
+                        # Continue processing other subjects even if one fails
+                        continue
                 
                 print(f"📚 Retrieved {len(student_subjects_detailed)} detailed subjects for student {student_id}")
+                print(f"📊 DEBUG: student_subjects_detailed length = {len(student_subjects_detailed)}")
                 
                 # Add to progress data
                 progress['student_subjects_detailed'] = student_subjects_detailed
+                print(f"📊 DEBUG: Set progress['student_subjects_detailed'] with {len(student_subjects_detailed)} items")
                 
             except Exception as subjects_error:
                 log_error('DATABASE', f'Error getting detailed student subjects: {str(subjects_error)}', subjects_error, student_id=student_id)
                 print(f"❌ Error getting detailed student subjects: {subjects_error}")
+                print(f"🔍 DEBUG: Full error traceback:")
+                import traceback
+                print(traceback.format_exc())
                 progress['student_subjects_detailed'] = []
+                print(f"📊 DEBUG: Set progress['student_subjects_detailed'] to empty list due to error")
             
         except Exception as assessment_error:
             log_error('DATABASE', f'Error getting assessments for student: {str(assessment_error)}', assessment_error, student_id=student_id)
