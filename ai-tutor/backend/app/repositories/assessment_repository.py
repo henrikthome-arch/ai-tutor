@@ -246,11 +246,12 @@ def update_progress(student_id, subject_id, progress_data: Dict[str, Any]) -> Op
         if 'areas_for_improvement' in progress_data:
             student_subject.areas_for_improvement = progress_data['areas_for_improvement']
         
-        if 'session_count' in progress_data:
-            student_subject.session_count = progress_data['session_count']
-        
-        if 'total_time_minutes' in progress_data:
-            student_subject.total_time_minutes = progress_data['total_time_minutes']
+        # Note: session_count and total_time_minutes fields don't exist in StudentSubject model
+        # These would need to be added to the model if session tracking is required
+        # if 'session_count' in progress_data:
+        #     student_subject.session_count = progress_data['session_count']
+        # if 'total_time_minutes' in progress_data:
+        #     student_subject.total_time_minutes = progress_data['total_time_minutes']
         
         # Always update last assessment date when progress is updated
         student_subject.last_assessment_date = datetime.utcnow()
@@ -375,9 +376,8 @@ def enroll_student_in_subject(student_id, subject_id, grade_level: int,
             'completed_topics': [],
             'learning_goals': [],
             'strengths': [],
-            'areas_for_improvement': [],
-            'session_count': 0,
-            'total_time_minutes': 0
+            'areas_for_improvement': []
+            # Note: session_count and total_time_minutes not available in current model
         }
         
         # Apply any initial data
@@ -454,8 +454,9 @@ def get_student_progress_summary(student_id) -> Dict[str, Any]:
         
         # Calculate summary statistics
         total_subjects = len(active_subjects)
-        total_sessions = sum(ss.session_count for ss in active_subjects)
-        total_time_minutes = sum(ss.total_time_minutes for ss in active_subjects)
+        # Note: session_count and total_time_minutes not available in current model
+        total_sessions = 0  # Default to 0 since session tracking not implemented
+        total_time_minutes = 0  # Default to 0 since time tracking not implemented
         total_time_hours = total_time_minutes / 60.0
         
         # Calculate average performance (excluding 0 scores)
@@ -532,8 +533,8 @@ def get_subject_performance_stats(subject_id) -> Dict[str, Any]:
             'average_performance': round(average_performance, 2),
             'mastery_distribution': mastery_counts,
             'grade_distribution': grade_counts,
-            'total_sessions': sum(e.session_count for e in enrollments),
-            'total_time_hours': round(sum(e.total_time_minutes for e in enrollments) / 60.0, 2)
+            'total_sessions': 0,  # Session tracking not implemented in current model
+            'total_time_hours': 0.0  # Time tracking not implemented in current model
         }
     except (ValueError, TypeError):
         return {'error': 'Invalid subject_id'}
@@ -582,8 +583,8 @@ def get_class_analytics(grade_level: int = None, subject_id = None) -> Dict[str,
             'total_enrollments': len(enrollments),
             'unique_students': unique_students,
             'average_performance': round(average_performance, 2),
-            'total_sessions': sum(e.session_count for e in enrollments),
-            'total_time_hours': round(sum(e.total_time_minutes for e in enrollments) / 60.0, 2),
+            'total_sessions': 0,  # Session tracking not implemented in current model
+            'total_time_hours': 0.0,  # Time tracking not implemented in current model
             'filters': {
                 'grade_level': grade_level,
                 'subject_id': subject_id
