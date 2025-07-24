@@ -380,7 +380,18 @@
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
         <h2 style="color: #2c3e50; margin: 0;">📚 Student Subjects & Curriculum</h2>
-        <div style="display: flex; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            {% if progress.grade_filter_applied and progress.subjects_filtered_count > 0 %}
+            <button
+                id="gradeFilterToggle"
+                class="btn"
+                style="background: #28a745; color: white; font-size: 0.8rem; padding: 6px 12px;"
+                onclick="toggleGradeFilter()"
+                title="Currently showing Grade {{ progress.student_grade }} subjects only. Click to show all {{ progress.subjects_filtered_count + progress.student_subjects_detailed|length }} subjects."
+            >
+                📚 Grade {{ progress.student_grade }} ({{ progress.student_subjects_detailed|length }})
+            </button>
+            {% endif %}
             <button
                 class="btn"
                 style="background: #17a2b8; color: white; font-size: 0.8rem; padding: 6px 12px;"
@@ -402,9 +413,38 @@
     
     {% if progress.student_subjects_detailed %}
         <div style="margin-bottom: 1rem;">
-            <p style="color: #7f8c8d; margin: 0;">
-                Showing {{ progress.student_subjects_detailed|length }} subjects assigned to this student with curriculum goals and progress details.
-            </p>
+            {% if progress.grade_filter_applied and progress.subjects_filtered_count > 0 %}
+            <div id="filterInfo" style="background: #e8f5e8; border-left: 4px solid #28a745; padding: 0.75rem; margin-bottom: 1rem; border-radius: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong style="color: #155724;">📚 Grade-Relevant Filter Active</strong>
+                        <p style="color: #155724; margin: 0.25rem 0 0 0; font-size: 0.9rem;">
+                            Showing {{ progress.student_subjects_detailed|length }} subjects for Grade {{ progress.student_grade }}
+                            ({{ progress.subjects_filtered_count }} other subjects hidden)
+                        </p>
+                    </div>
+                    <button
+                        onclick="toggleGradeFilter()"
+                        style="background: #fff; border: 1px solid #28a745; color: #28a745; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; cursor: pointer;">
+                        Show All {{ progress.all_student_subjects_detailed|length }}
+                    </button>
+                </div>
+            </div>
+            {% else %}
+            <div style="background: #f8f9fa; border-left: 4px solid #6c757d; padding: 0.75rem; margin-bottom: 1rem; border-radius: 4px;">
+                <p style="color: #495057; margin: 0; font-size: 0.9rem;">
+                    <strong>📚 All Subjects Displayed</strong> -
+                    Showing all {{ progress.student_subjects_detailed|length }} subjects assigned to this student with curriculum goals and progress details.
+                    {% if progress.grade_filter_applied == false and progress.student_grade and progress.student_grade != 'Unknown' %}
+                    <button
+                        onclick="toggleGradeFilter()"
+                        style="background: #28a745; border: none; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; margin-left: 0.5rem;">
+                        Show Grade {{ progress.student_grade }} Only
+                    </button>
+                    {% endif %}
+                </p>
+            </div>
+            {% endif %}
         </div>
         
         {% for subject in progress.student_subjects_detailed %}
@@ -899,6 +939,24 @@ function deleteAndReassignCurriculum(studentId, studentName) {
         resetBtn.textContent = originalText;
         resetBtn.disabled = false;
     });
+}
+
+// Simple toggle function for grade filtering
+function toggleGradeFilter() {
+    // Simple page reload approach - more reliable than complex DOM manipulation
+    const currentUrl = new URL(window.location);
+    const isCurrentlyFiltered = currentUrl.searchParams.get('grade_filter') === 'true';
+    
+    if (isCurrentlyFiltered) {
+        // Remove filter - show all subjects
+        currentUrl.searchParams.delete('grade_filter');
+    } else {
+        // Add filter - show grade-relevant subjects only
+        currentUrl.searchParams.set('grade_filter', 'true');
+    }
+    
+    // Reload page with new filter state
+    window.location.href = currentUrl.toString();
 }
 </script>
 {% endblock %}
