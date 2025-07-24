@@ -112,7 +112,8 @@ Do not include any explanatory text in your response, ONLY the JSON object.
         transcript: str,
         phone_number: Optional[str] = None,
         subject_hint: Optional[str] = None,
-        additional_context: Optional[Dict[str, Any]] = None
+        additional_context: Optional[Dict[str, Any]] = None,
+        session_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Analyze transcript using conditional prompt selection based on call type
@@ -201,6 +202,21 @@ Do not include any explanatory text in your response, ONLY the JSON object.
             # Get AI analysis
             analysis = await provider.analyze_session(transcript, analysis_context)
             logger.info(f"Received analysis response from provider")
+            
+            # Store AI processing debug information if session_id provided
+            if session_id:
+                self._store_ai_processing_step(
+                    session_id=session_id,
+                    step_number=1,
+                    prompt=formatted_prompt['user_prompt'],
+                    response=analysis.raw_response,
+                    metadata={
+                        'prompt_type': selected_prompt,
+                        'call_type': call_type_result.call_type.value if call_type_result else "unknown",
+                        'provider': self.provider_manager.current_provider,
+                        'timestamp': analysis.timestamp.isoformat()
+                    }
+                )
             
             # Extract and process the JSON response
             try:
@@ -842,4 +858,55 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             from system_logger import log_error
             log_error('TRANSCRIPT_ANALYSIS', f"Error updating student profile in database", e,
                      student_id=student_id)
+            return False
+    
+    def _store_ai_processing_step(self, session_id: int, step_number: int, prompt: str, response: str, metadata: dict = None):
+        """Store AI processing step for debugging purposes"""
+        try:
+            from app.models.session import Session
+            from app import db
+            import flask
+            
+            # Ensure we have app context
+            if not flask.has_app_context():
+                logger.error("No Flask app context for storing AI processing step")
+                return False
+            
+            # Get session from database
+            session = Session.query.get(session_id)
+            if not session:
+                logger.warning(f"Session {session_id} not found for storing AI processing step")
+                return False
+            
+            # Store prompt and response in appropriate fields
+            if step_number == 1:
+                session.ai_prompt_1 = prompt
+                session.ai_response_1 = response
+            elif step_number == 2:
+                session.ai_prompt_2 = prompt
+                session.ai_response_2 = response
+            elif step_number == 3:
+                session.ai_prompt_3 = prompt
+                session.ai_response_3 = response
+            else:
+                logger.warning(f"Invalid step number {step_number} for AI processing step")
+                return False
+            
+            # Store or update processing metadata
+            if metadata:
+                current_metadata = session.processing_metadata or {}
+                current_metadata[f'step_{step_number}'] = metadata
+                session.processing_metadata = current_metadata
+            
+            # Save changes
+            db.session.commit()
+            logger.info(f"Stored AI processing step {step_number} for session {session_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error storing AI processing step {step_number} for session {session_id}: {e}")
+            try:
+                db.session.rollback()
+            except:
+                pass
             return False

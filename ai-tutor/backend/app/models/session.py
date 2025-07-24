@@ -22,6 +22,15 @@ class Session(db.Model):
     topics_covered = db.Column(db.JSON, nullable=True)  # Store topics as JSON array
     engagement_score = db.Column(db.Integer, nullable=True)  # Store engagement score
     
+    # AI Processing Debug Fields - Store prompts and responses for each processing step
+    ai_prompt_1 = db.Column(db.Text, nullable=True)  # First AI processing step prompt
+    ai_response_1 = db.Column(db.Text, nullable=True)  # First AI processing step response
+    ai_prompt_2 = db.Column(db.Text, nullable=True)  # Second AI processing step prompt
+    ai_response_2 = db.Column(db.Text, nullable=True)  # Second AI processing step response
+    ai_prompt_3 = db.Column(db.Text, nullable=True)  # Third AI processing step prompt
+    ai_response_3 = db.Column(db.Text, nullable=True)  # Third AI processing step response
+    processing_metadata = db.Column(db.JSON, nullable=True)  # Store processing metadata (provider, timestamps, etc.)
+    
     # Relationships
     student = db.relationship('Student', back_populates='sessions')
     metrics = db.relationship('SessionMetrics', back_populates='session', uselist=False)
@@ -57,6 +66,41 @@ class Session(db.Model):
         result = self.to_dict()
         result.update({
             'transcript': self.transcript,
-            'summary': self.summary
+            'summary': self.summary,
+            'ai_processing_steps': self.get_ai_processing_steps(),
+            'processing_metadata': self.processing_metadata
         })
         return result
+    
+    def get_ai_processing_steps(self):
+        """Get AI processing steps in order"""
+        steps = []
+        
+        if self.ai_prompt_1 or self.ai_response_1:
+            steps.append({
+                'step': 1,
+                'prompt': self.ai_prompt_1,
+                'response': self.ai_response_1,
+                'has_prompt': bool(self.ai_prompt_1),
+                'has_response': bool(self.ai_response_1)
+            })
+        
+        if self.ai_prompt_2 or self.ai_response_2:
+            steps.append({
+                'step': 2,
+                'prompt': self.ai_prompt_2,
+                'response': self.ai_response_2,
+                'has_prompt': bool(self.ai_prompt_2),
+                'has_response': bool(self.ai_response_2)
+            })
+        
+        if self.ai_prompt_3 or self.ai_response_3:
+            steps.append({
+                'step': 3,
+                'prompt': self.ai_prompt_3,
+                'response': self.ai_response_3,
+                'has_prompt': bool(self.ai_prompt_3),
+                'has_response': bool(self.ai_response_3)
+            })
+        
+        return steps

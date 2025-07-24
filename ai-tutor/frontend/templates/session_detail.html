@@ -13,9 +13,14 @@
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
     <h1 style="color: #2c3e50;">Session Details</h1>
-    <a href="{{ url_for('view_student_sessions', student_id=student_id) }}" class="btn" style="background: #95a5a6;">
-        ← Back to Sessions
-    </a>
+    <div style="display: flex; gap: 1rem;">
+        <button class="btn" onclick="copyAllSessionData()" style="background: #e74c3c; color: white;">
+            📋 Copy All Data
+        </button>
+        <a href="{{ url_for('view_student_sessions', student_id=student_id) }}" class="btn" style="background: #95a5a6;">
+            ← Back to Sessions
+        </a>
+    </div>
 </div>
 
 <div style="display: grid; grid-template-columns: 1fr 300px; gap: 2rem; margin-bottom: 2rem;">
@@ -97,6 +102,12 @@
                 {% if analysis %}
                 <button class="btn" onclick="scrollToAnalysis()" style="background: #e67e22;">
                     🤖 View AI Analysis
+                </button>
+                {% endif %}
+                
+                {% if session_data.ai_processing_steps %}
+                <button class="btn" onclick="scrollToAiProcessing()" style="background: #9c27b0;">
+                    🧠 View AI Processing
                 </button>
                 {% endif %}
                 
@@ -213,6 +224,51 @@
 </div>
 {% endif %}
 
+{% if session_data.ai_processing_steps %}
+<div class="card" id="ai-processing-section">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2>🧠 AI Processing Steps</h2>
+        <button class="btn" onclick="copyAiProcessing()" style="background: #9c27b0;">
+            📋 Copy AI Processing
+        </button>
+    </div>
+    
+    {% for step in session_data.ai_processing_steps %}
+    <div style="margin-bottom: 2rem; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+        <div style="background: #f5f5f5; padding: 1rem; border-bottom: 1px solid #e0e0e0;">
+            <h3 style="margin: 0; color: #2c3e50;">Step {{ step.step }}: AI Processing</h3>
+            {% if session_data.processing_metadata and session_data.processing_metadata['step_' + step.step|string] %}
+            <div style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">
+                {% set metadata = session_data.processing_metadata['step_' + step.step|string] %}
+                <span>Provider: <strong>{{ metadata.provider }}</strong></span> |
+                <span>Type: <strong>{{ metadata.prompt_type }}</strong></span> |
+                <span>Call Type: <strong>{{ metadata.call_type }}</strong></span>
+            </div>
+            {% endif %}
+        </div>
+        
+        {% if step.has_prompt %}
+        <div style="padding: 1rem; border-bottom: 1px solid #f0f0f0;">
+            <h4 style="margin: 0 0 0.5rem 0; color: #e67e22;">📤 Prompt Sent to AI:</h4>
+            <div style="background: #fff3e0; padding: 1rem; border-radius: 4px; border-left: 4px solid #e67e22;">
+                <pre style="white-space: pre-wrap; margin: 0; font-family: 'Courier New', monospace; font-size: 0.9rem; line-height: 1.4; max-height: 300px; overflow-y: auto;">{{ step.prompt }}</pre>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if step.has_response %}
+        <div style="padding: 1rem;">
+            <h4 style="margin: 0 0 0.5rem 0; color: #27ae60;">📥 AI Response:</h4>
+            <div style="background: #e8f5e8; padding: 1rem; border-radius: 4px; border-left: 4px solid #27ae60;">
+                <pre style="white-space: pre-wrap; margin: 0; font-family: 'Courier New', monospace; font-size: 0.9rem; line-height: 1.4; max-height: 300px; overflow-y: auto;">{{ step.response }}</pre>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
 <div class="card">
     <h2>🔧 Raw Session Data</h2>
     <details style="margin-top: 1rem;">
@@ -226,6 +282,9 @@
 </div>
 
 <script>
+// Create session data for JavaScript use
+const sessionDataForJS = {{ session_data | tojson | safe }};
+
 function scrollToSummary() {
     document.getElementById('summary-section').scrollIntoView({ behavior: 'smooth' });
 }
@@ -236,6 +295,65 @@ function scrollToTranscript() {
 
 function scrollToAnalysis() {
     document.getElementById('analysis-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+function scrollToAiProcessing() {
+    document.getElementById('ai-processing-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+function copyAiProcessing() {
+    const aiProcessingSection = document.getElementById('ai-processing-section');
+    const content = aiProcessingSection.textContent;
+    navigator.clipboard.writeText(content).then(() => {
+        alert('AI Processing steps copied to clipboard!');
+    });
+}
+
+function copyAllSessionData() {
+    // Collect all visible content from the page
+    let allData = '';
+    
+    // Get session info
+    const sessionInfo = document.querySelector('.card h2').textContent.includes('Session Information') ?
+        document.querySelector('.card').textContent.trim() : '';
+    if (sessionInfo) {
+        allData += '=== SESSION DETAILS ===\n' + sessionInfo + '\n\n';
+    }
+    
+    // Get summary
+    const summaryElement = document.getElementById('summary-content');
+    if (summaryElement) {
+        allData += '=== SUMMARY ===\n' + summaryElement.textContent + '\n\n';
+    }
+    
+    // Get transcript
+    const transcriptElement = document.getElementById('transcript-content');
+    if (transcriptElement) {
+        allData += '=== TRANSCRIPT ===\n' + transcriptElement.textContent + '\n\n';
+    }
+    
+    // Get analysis
+    const analysisElement = document.getElementById('analysis-section');
+    if (analysisElement) {
+        allData += '=== AI ANALYSIS ===\n' + analysisElement.textContent + '\n\n';
+    }
+    
+    // Get AI processing steps
+    const aiProcessingElement = document.getElementById('ai-processing-section');
+    if (aiProcessingElement) {
+        allData += '=== AI PROCESSING STEPS ===\n' + aiProcessingElement.textContent + '\n\n';
+    }
+    
+    // Get raw data
+    allData += '=== RAW SESSION DATA ===\n' + JSON.stringify(sessionDataForJS, null, 2);
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(allData).then(() => {
+        alert('All session data copied to clipboard!');
+    }).catch(err => {
+        console.error('Failed to copy data: ', err);
+        alert('Failed to copy data to clipboard');
+    });
 }
 
 function copySummary() {
@@ -261,8 +379,7 @@ function copyAnalysis() {
 }
 
 function downloadSessionData() {
-    const data = {{ session_data | tojson }};
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(sessionDataForJS, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

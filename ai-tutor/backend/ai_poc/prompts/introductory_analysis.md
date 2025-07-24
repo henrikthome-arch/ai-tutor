@@ -24,6 +24,14 @@ You are an expert educational analyst specializing in initial student assessment
 - Use age-appropriate language assessments
 - Provide specific examples from the conversation to support your analysis
 
+**NAME EXTRACTION CRITICAL RULES:**
+- When a student says "My name is Henrik" extract ONLY "Henrik" as first_name
+- When a student says "I'm Emma" extract ONLY "Emma" as first_name
+- When a student says "Hi, I'm John Smith" extract "John" as first_name and "Smith" as last_name
+- Do NOT use words like "Student", "Unknown_", or any placeholder text for actual names
+- If the student clearly states their name, extract the actual name they provide
+- Leave last_name as empty string "" if not provided, do not make up placeholder names
+
 ## User Prompt Template
 
 Analyze this introductory call transcript from a new student and create a comprehensive student profile. Extract all available student information and provide initial learning assessment.
@@ -41,8 +49,8 @@ You must respond with ONLY valid JSON in exactly this structure:
 ```json
 {{
   "student_profile": {{
-    "first_name": "string - student's first name or 'Unknown' if not provided",
-    "last_name": "string - student's last name or empty string if not provided",
+    "first_name": "string - ONLY the student's actual first name (e.g., 'Henrik' from 'My name is Henrik') or 'Unknown' if not provided",
+    "last_name": "string - ONLY the student's actual last name or empty string if not provided",
     "age": "number - exact age as integer (e.g., 12) or null if unknown",
     "grade": "number - exact grade as integer (e.g., 4) or null if unknown",
     "school_name": "string - school name if mentioned or 'Not specified'",
