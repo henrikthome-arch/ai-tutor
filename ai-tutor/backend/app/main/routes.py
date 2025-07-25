@@ -1229,9 +1229,33 @@ def reset_database():
         log_admin_action('database_reset_start', session.get('admin_username', 'unknown'))
         
         # Drop all tables with CASCADE to handle foreign key constraints
-        print("🗑️ Dropping all tables...")
-        db.drop_all()
-        print("✅ All tables dropped successfully")
+        print("🗑️ Dropping all tables with CASCADE...")
+        
+        # Use raw SQL to drop all tables with CASCADE to handle orphaned constraints
+        from sqlalchemy import text
+        try:
+            # Get all table names first
+            inspector = inspect(db.engine)
+            all_table_names = inspector.get_table_names()
+            print(f"📋 Found {len(all_table_names)} tables to drop: {all_table_names}")
+            
+            # Drop each table individually with CASCADE to handle foreign key constraints
+            for table_name in all_table_names:
+                try:
+                    print(f"🗑️ Dropping table: {table_name}")
+                    db.session.execute(text(f'DROP TABLE IF EXISTS "{table_name}" CASCADE'))
+                    db.session.commit()
+                except Exception as table_error:
+                    print(f"⚠️ Error dropping table {table_name}: {table_error}")
+                    db.session.rollback()
+            
+            print("✅ All tables dropped successfully with CASCADE")
+            
+        except Exception as drop_error:
+            print(f"⚠️ Error in CASCADE drop, trying db.drop_all(): {drop_error}")
+            # Fallback to standard drop_all
+            db.drop_all()
+            print("✅ Tables dropped with db.drop_all()")
         
         # Create all tables fresh
         print("🏗️ Creating fresh database schema...")
