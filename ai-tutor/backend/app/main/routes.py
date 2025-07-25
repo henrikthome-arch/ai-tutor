@@ -1217,7 +1217,6 @@ def reset_database():
         from app.models.assessment import StudentSubject
         from app.models.session import Session
         from app.models.analytics import SessionMetrics, DailyStats
-        from app.models.profile import Profile
         from app.models.school import School
         from app.models.system_log import SystemLog
         from app.models.token import Token

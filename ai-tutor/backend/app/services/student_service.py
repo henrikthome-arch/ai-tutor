@@ -10,7 +10,6 @@ from types import SimpleNamespace
 
 from app.repositories import student_repository
 from app.models.student import Student
-from app.models.profile import Profile
 from app.models.school import School
 from app import db
 
@@ -205,12 +204,12 @@ class StudentService:
             for student in students:
                 student_dict = student.to_dict()
                 
-                # Use Student table fields directly (Profile is legacy)
+                # Use Student table fields directly
                 student_dict.update({
-                    'interests': [],  # Legacy field, not stored in Student table
-                    'learning_preferences': [],  # Legacy field, not stored in Student table
+                    'interests': student.interests or [],
+                    'learning_preferences': student.learning_preferences or [],
                     'grade': student.get_grade() or 'Unknown',
-                    'curriculum': 'Unknown'  # Legacy field, not stored in Student table
+                    'curriculum': 'Unknown'  # Not stored in Student table
                 })
                 
                 # Format for template compatibility - ensure all required fields
@@ -268,16 +267,16 @@ class StudentService:
             # Base student data
             student_data = student.to_dict()
             
-            # Profile data from Student table (Profile is legacy)
+            # Profile data from Student table
             profile_data = {
                 'name': student.full_name,
                 'age': student.age,
                 'grade': student.get_grade() or 'Unknown',
-                'curriculum': 'Unknown',  # Legacy field, not in Student table
-                'interests': [],  # Legacy field, not in Student table
-                'learning_preferences': [],  # Legacy field, not in Student table
-                'learning_style': 'Unknown',  # Legacy field, not in Student table
-                'motivational_triggers': []  # Legacy field, not in Student table
+                'curriculum': 'Unknown',  # Not stored in Student table
+                'interests': student.interests or [],
+                'learning_preferences': student.learning_preferences or [],
+                'learning_style': 'Unknown',  # Not stored in Student table
+                'motivational_triggers': student.motivational_triggers or []
             }
             
             # Sessions data

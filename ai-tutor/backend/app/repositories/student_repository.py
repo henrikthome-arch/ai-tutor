@@ -6,7 +6,6 @@ from typing import Dict, List, Optional, Any
 
 from app import db
 from app.models.student import Student
-from app.models.profile import Profile
 
 def get_all() -> List[Dict[str, Any]]:
     """
@@ -135,22 +134,12 @@ def create(student_data: Dict[str, Any]) -> Dict[str, Any]:
         The created student
     """
     try:
-        # Extract profile data
-        profile_data = {
-            'interests': student_data.pop('interests', []),
-            'learning_preferences': student_data.pop('learning_preferences', [])
-        }
-        
-        # Create student
+        # Create student with profile fields directly included
         student = Student(**student_data)
         db.session.add(student)
         db.session.flush()  # Get the ID without committing
         
-        # Create profile
-        profile = Profile(student_id=student.id, **profile_data)
-        db.session.add(profile)
-        
-        # Commit student and profile first
+        # Commit student first
         db.session.commit()
         
         # Automatically assign default curriculum to ALL new students
@@ -165,14 +154,8 @@ def create(student_data: Dict[str, Any]) -> Dict[str, Any]:
             print(f"⚠️ Error auto-assigning default curriculum to student {student.id}: {curriculum_error}")
             # Don't fail student creation if curriculum assignment fails
         
-        # Return combined data
-        result = student.to_dict()
-        result.update({
-            'interests': profile.interests,
-            'learning_preferences': profile.learning_preferences
-        })
-        
-        return result
+        # Return student data (includes profile fields)
+        return student.to_dict()
     except Exception as e:
         # Rollback transaction on any error
         db.session.rollback()
@@ -197,40 +180,15 @@ def update(student_id, student_data: Dict[str, Any]) -> Optional[Dict[str, Any]]
         if not student:
             return None
         
-        # Extract profile data
-        profile_data = {}
-        if 'interests' in student_data:
-            profile_data['interests'] = student_data.pop('interests')
-        if 'learning_preferences' in student_data:
-            profile_data['learning_preferences'] = student_data.pop('learning_preferences')
-        
-        # Update student
+        # Update student (profile fields are now direct Student fields)
         for key, value in student_data.items():
             if hasattr(student, key):
                 setattr(student, key, value)
         
-        # Update profile if needed
-        if profile_data:
-            profile = Profile.query.filter_by(student_id=student_id_int).first()
-            if profile:
-                for key, value in profile_data.items():
-                    setattr(profile, key, value)
-            else:
-                profile = Profile(student_id=student_id_int, **profile_data)
-                db.session.add(profile)
-        
         db.session.commit()
         
-        # Return combined data
-        result = student.to_dict()
-        profile = Profile.query.filter_by(student_id=student_id_int).first()
-        if profile:
-            result.update({
-                'interests': profile.interests,
-                'learning_preferences': profile.learning_preferences
-            })
-        
-        return result
+        # Return student data
+        return student.to_dict()
     except (ValueError, TypeError):
         return None
     except Exception as e:
@@ -284,16 +242,7 @@ def delete(student_id) -> bool:
             # Continue with deletion even if sessions fail
         
         # Legacy Assessment model has been removed - no cleanup needed
-        
-        # Delete profile (foreign key constraint)
-        try:
-            profile = Profile.query.filter_by(student_id=student_id_int).first()
-            if profile:
-                db.session.delete(profile)
-                print(f"✅ Deleted profile record")
-        except Exception as profile_error:
-            print(f"⚠️ Error deleting profile: {profile_error}")
-            # Continue with deletion even if profile fails
+        # Profile model has been removed - no cleanup needed (data is in Student table)
         
         # Delete the student record itself
         db.session.delete(student)
@@ -341,7 +290,6 @@ def delete_gdpr_compliant(student_id) -> Dict[str, Any]:
                 'assessments': 0,
                 'sessions': 0,
                 'legacy_assessments': 0,
-                'profile': 0,
                 'student': 1
             },
             'errors': []
@@ -366,14 +314,7 @@ def delete_gdpr_compliant(student_id) -> Dict[str, Any]:
         # Legacy Assessment model has been removed - no cleanup needed
         deletion_results['deleted_records']['legacy_assessments'] = 0
         
-        # Delete profile
-        try:
-            profile = Profile.query.filter_by(student_id=student_id_int).first()
-            if profile:
-                db.session.delete(profile)
-                deletion_results['deleted_records']['profile'] = 1
-        except Exception as e:
-            deletion_results['errors'].append(f"Profile deletion error: {str(e)}")
+        # Profile model has been removed - no cleanup needed (data is in Student table)
         
         # Delete student
         db.session.delete(student)
