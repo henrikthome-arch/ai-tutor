@@ -25,7 +25,6 @@ class Student(db.Model):
     school = db.relationship('School', back_populates='students')
     profile = db.relationship('Profile', back_populates='student', uselist=False, cascade='all, delete-orphan')
     sessions = db.relationship('Session', back_populates='student', lazy='dynamic', cascade='all, delete-orphan')
-    assessments = db.relationship('Assessment', back_populates='student', lazy='dynamic', cascade='all, delete-orphan')
     student_subjects = db.relationship('StudentSubject', back_populates='student', lazy='dynamic', cascade='all, delete-orphan')
     
     def __repr__(self):

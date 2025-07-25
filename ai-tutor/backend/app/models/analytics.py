@@ -59,27 +59,6 @@ class DailyStats(db.Model):
         return f"<DailyStats(date={self.date}, total_sessions={self.total_sessions})>"
 
 
-class StudentProgress(db.Model):
-    """
-    Tracking student progress over time.
-    """
-    __tablename__ = 'student_progress'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('students.id'), nullable=False)
-    date = db.Column(db.DateTime, nullable=False)
-    subject = db.Column(db.String(100), nullable=False)
-    proficiency_level = db.Column(db.Float, nullable=False, default=0)  # 0-100 scale
-    sessions_count = db.Column(db.Integer, nullable=False, default=0)
-    total_time_spent = db.Column(db.Integer, nullable=False, default=0)  # seconds
-    created_at = db.Column(db.DateTime, server_default=func.now())
-    updated_at = db.Column(db.DateTime, server_default=func.now(), onupdate=func.now())
-    
-    # Relationships
-    # student = db.relationship("Student", back_populates="progress_records")
-    
-    def __repr__(self):
-        return f"<StudentProgress(student_id={self.student_id}, subject={self.subject}, level={self.proficiency_level})>"
 
 
 # Backward compatibility alias

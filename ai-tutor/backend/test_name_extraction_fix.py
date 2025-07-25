@@ -1,223 +1,315 @@
 #!/usr/bin/env python3
 """
-Test script to verify name extraction and AI processing debug functionality
+Unit test for the student name extraction fix.
+Tests the refactored update_student_profile method to ensure it properly
+replaces placeholder names with AI-extracted names.
 """
 
-import os
-import sys
 import json
-from datetime import datetime
+import unittest
+from unittest.mock import patch, MagicMock
+import sys
+import os
 
-# Add the backend directory to the Python path
+# Add the backend directory to the path so we can import our modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-def test_name_extraction_with_nested_structure():
-    """Test that name extraction works with nested student_profile structure"""
-    from transcript_analyzer import TranscriptAnalyzer
+class TestNameExtractionFix(unittest.TestCase):
+    """Test cases for the fixed student name extraction logic"""
     
-    print("🧪 Testing name extraction with nested structure...")
+    def setUp(self):
+        """Set up test fixtures"""
+        self.analyzer = None
+        
+    def create_mock_student(self, student_id, first_name, last_name=None):
+        """Create a mock student object"""
+        mock_student = MagicMock()
+        mock_student.id = student_id
+        mock_student.first_name = first_name
+        mock_student.last_name = last_name or ''
+        mock_student.date_of_birth = None
+        mock_student.grade_level = None
+        
+        # Create mock profile
+        mock_profile = MagicMock()
+        mock_profile.interests = []
+        mock_profile.learning_preferences = []
+        mock_student.profile = mock_profile
+        
+        return mock_student, mock_profile
     
-    # Mock extracted info from conditional prompts (nested structure)
-    mock_extracted_info = {
-        "student_profile": {
-            "first_name": "Henrik",
-            "last_name": "Test",
-            "age": 12,
-            "grade": 4,
-            "interests": ["soccer", "reading"]
-        },
-        "metadata": {
-            "call_type": "introductory",
-            "confidence": 0.95
+    @patch('transcript_analyzer.flask.has_app_context')
+    @patch('transcript_analyzer.Student')
+    @patch('transcript_analyzer.Profile')
+    @patch('transcript_analyzer.db')
+    def test_placeholder_name_replacement_nested_structure(self, mock_db, mock_profile_class, mock_student_class, mock_has_app_context):
+        """Test that placeholder names are replaced when AI response has nested structure"""
+        from transcript_analyzer import TranscriptAnalyzer
+        
+        # Setup mocks
+        mock_has_app_context.return_value = True
+        
+        # Create mock student with placeholder name
+        mock_student, mock_profile = self.create_mock_student(123, "Student", "6010")
+        mock_student_class.query.get.return_value = mock_student
+        
+        # Create analyzer
+        analyzer = TranscriptAnalyzer()
+        
+        # Create AI response with nested student_profile structure (conditional prompts)
+        extracted_info = {
+            "student_profile": {
+                "first_name": "Emma",
+                "last_name": "Johnson",
+                "age": 8,
+                "grade": 3
+            },
+            "_analysis_metadata": {
+                "prompt_used": "introductory_analysis",
+                "call_type": "new_student"
+            }
         }
-    }
-    
-    analyzer = TranscriptAnalyzer()
-    
-    # Test the extraction logic
-    profile_data = mock_extracted_info.get('student_profile', {})
-    
-    new_first_name = None
-    new_last_name = None
-    
-    if profile_data:
-        print(f"✅ Found nested student_profile data")
-        if profile_data.get('first_name') and profile_data['first_name'] not in ['Unknown', 'unknown', '']:
-            new_first_name = str(profile_data['first_name']).strip()
-            print(f"✅ Extracted first_name from profile: '{new_first_name}'")
         
-        if profile_data.get('last_name') and profile_data['last_name'] not in ['Unknown', 'unknown', '']:
-            new_last_name = str(profile_data['last_name']).strip()
-            print(f"✅ Extracted last_name from profile: '{new_last_name}'")
+        # Call the method
+        result = analyzer.update_student_profile(123, extracted_info)
+        
+        # Verify the result
+        self.assertTrue(result, "update_student_profile should return True on success")
+        
+        # Verify that the student name was updated
+        self.assertEqual(mock_student.first_name, "Emma")
+        self.assertEqual(mock_student.last_name, "Johnson")
+        
+        # Verify database commit was called
+        mock_db.session.commit.assert_called_once()
     
-    # Test fallback to direct fields
-    if not new_first_name and mock_extracted_info.get('first_name'):
-        new_first_name = str(mock_extracted_info['first_name']).strip()
-        print(f"✅ Extracted first_name directly: '{new_first_name}'")
+    @patch('transcript_analyzer.flask.has_app_context')
+    @patch('transcript_analyzer.Student')
+    @patch('transcript_analyzer.Profile')
+    @patch('transcript_analyzer.db')
+    def test_placeholder_name_replacement_direct_structure(self, mock_db, mock_profile_class, mock_student_class, mock_has_app_context):
+        """Test that placeholder names are replaced when AI response has direct structure"""
+        from transcript_analyzer import TranscriptAnalyzer
+        
+        # Setup mocks
+        mock_has_app_context.return_value = True
+        
+        # Create mock student with placeholder name
+        mock_student, mock_profile = self.create_mock_student(456, "Student", "1234")
+        mock_student_class.query.get.return_value = mock_student
+        
+        # Create analyzer
+        analyzer = TranscriptAnalyzer()
+        
+        # Create AI response with direct structure (fallback prompts)
+        extracted_info = {
+            "first_name": "Oliver",
+            "last_name": "Smith",
+            "age": 10,
+            "grade": 5,
+            "interests": ["soccer", "video games"],
+            "confidence_score": 0.9
+        }
+        
+        # Call the method
+        result = analyzer.update_student_profile(456, extracted_info)
+        
+        # Verify the result
+        self.assertTrue(result, "update_student_profile should return True on success")
+        
+        # Verify that the student name was updated
+        self.assertEqual(mock_student.first_name, "Oliver")
+        self.assertEqual(mock_student.last_name, "Smith")
+        
+        # Verify database commit was called
+        mock_db.session.commit.assert_called_once()
     
-    if not new_last_name and mock_extracted_info.get('last_name'):
-        new_last_name = str(mock_extracted_info['last_name']).strip()
-        print(f"✅ Extracted last_name directly: '{new_last_name}'")
+    @patch('transcript_analyzer.flask.has_app_context')
+    @patch('transcript_analyzer.Student')
+    @patch('transcript_analyzer.Profile')
+    @patch('transcript_analyzer.db')
+    def test_non_placeholder_name_preserved(self, mock_db, mock_profile_class, mock_student_class, mock_has_app_context):
+        """Test that existing non-placeholder names are NOT replaced"""
+        from transcript_analyzer import TranscriptAnalyzer
+        
+        # Setup mocks
+        mock_has_app_context.return_value = True
+        
+        # Create mock student with a real name (not a placeholder)
+        mock_student, mock_profile = self.create_mock_student(789, "Sarah", "Wilson")
+        mock_student_class.query.get.return_value = mock_student
+        
+        # Create analyzer
+        analyzer = TranscriptAnalyzer()
+        
+        # Create AI response trying to change the name
+        extracted_info = {
+            "first_name": "Emma",
+            "last_name": "Johnson",
+            "age": 8,
+            "grade": 3
+        }
+        
+        # Call the method
+        result = analyzer.update_student_profile(789, extracted_info)
+        
+        # Verify the result
+        self.assertTrue(result, "update_student_profile should return True on success")
+        
+        # Verify that the existing name was preserved
+        self.assertEqual(mock_student.first_name, "Sarah")
+        self.assertEqual(mock_student.last_name, "Wilson")
+        
+        # Age should still be updated
+        from datetime import date
+        current_year = date.today().year
+        expected_dob = date(current_year - 8, 1, 1)
+        self.assertEqual(mock_student.date_of_birth, expected_dob)
     
-    print(f"🎯 Final extracted names: first='{new_first_name}', last='{new_last_name}'")
+    @patch('transcript_analyzer.flask.has_app_context')
+    @patch('transcript_analyzer.Student')
+    @patch('transcript_analyzer.Profile')
+    @patch('transcript_analyzer.db')
+    def test_placeholder_with_first_name_only(self, mock_db, mock_profile_class, mock_student_class, mock_has_app_context):
+        """Test replacement when AI provides only first name"""
+        from transcript_analyzer import TranscriptAnalyzer
+        
+        # Setup mocks
+        mock_has_app_context.return_value = True
+        
+        # Create mock student with placeholder name
+        mock_student, mock_profile = self.create_mock_student(101, "Student", "5678")
+        mock_student_class.query.get.return_value = mock_student
+        
+        # Create analyzer
+        analyzer = TranscriptAnalyzer()
+        
+        # Create AI response with only first name
+        extracted_info = {
+            "first_name": "Alex",
+            "age": 12
+        }
+        
+        # Call the method
+        result = analyzer.update_student_profile(101, extracted_info)
+        
+        # Verify the result
+        self.assertTrue(result, "update_student_profile should return True on success")
+        
+        # Verify that the first name was updated, last name kept as is
+        self.assertEqual(mock_student.first_name, "Alex")
+        self.assertEqual(mock_student.last_name, "5678")  # Should keep existing last name
     
-    assert new_first_name == "Henrik", f"Expected 'Henrik', got '{new_first_name}'"
-    assert new_last_name == "Test", f"Expected 'Test', got '{new_last_name}'"
+    @patch('transcript_analyzer.flask.has_app_context')
+    @patch('transcript_analyzer.Student')
+    @patch('transcript_analyzer.Profile')
+    @patch('transcript_analyzer.db')
+    def test_no_valid_name_extracted(self, mock_db, mock_profile_class, mock_student_class, mock_has_app_context):
+        """Test behavior when no valid name is extracted"""
+        from transcript_analyzer import TranscriptAnalyzer
+        
+        # Setup mocks
+        mock_has_app_context.return_value = True
+        
+        # Create mock student with placeholder name
+        mock_student, mock_profile = self.create_mock_student(202, "Student", "9999")
+        mock_student_class.query.get.return_value = mock_student
+        
+        # Create analyzer
+        analyzer = TranscriptAnalyzer()
+        
+        # Create AI response with no valid name
+        extracted_info = {
+            "age": 7,
+            "grade": 2,
+            "interests": ["drawing", "reading"]
+        }
+        
+        # Call the method
+        result = analyzer.update_student_profile(202, extracted_info)
+        
+        # Verify the result
+        self.assertTrue(result, "update_student_profile should return True on success")
+        
+        # Verify that the placeholder name was NOT changed
+        self.assertEqual(mock_student.first_name, "Student")
+        self.assertEqual(mock_student.last_name, "9999")
+        
+        # But other fields should still be updated
+        from datetime import date
+        current_year = date.today().year
+        expected_dob = date(current_year - 7, 1, 1)
+        self.assertEqual(mock_student.date_of_birth, expected_dob)
+        self.assertEqual(mock_student.grade_level, 2)
     
-    print("✅ Name extraction test passed!")
-    return True
+    @patch('transcript_analyzer.flask.has_app_context')
+    @patch('transcript_analyzer.Student')
+    @patch('transcript_analyzer.Profile')
+    @patch('transcript_analyzer.db')
+    def test_edge_case_invalid_names(self, mock_db, mock_profile_class, mock_student_class, mock_has_app_context):
+        """Test handling of invalid or filtered names"""
+        from transcript_analyzer import TranscriptAnalyzer
+        
+        # Setup mocks
+        mock_has_app_context.return_value = True
+        
+        # Create mock student with placeholder name
+        mock_student, mock_profile = self.create_mock_student(303, "Student", "0001")
+        mock_student_class.query.get.return_value = mock_student
+        
+        # Create analyzer
+        analyzer = TranscriptAnalyzer()
+        
+        # Create AI response with invalid names that should be filtered out
+        extracted_info = {
+            "first_name": "Unknown",  # Should be filtered out
+            "last_name": "null",      # Should be filtered out
+            "age": 9
+        }
+        
+        # Call the method
+        result = analyzer.update_student_profile(303, extracted_info)
+        
+        # Verify the result
+        self.assertTrue(result, "update_student_profile should return True on success")
+        
+        # Verify that the placeholder name was NOT changed (invalid names filtered)
+        self.assertEqual(mock_student.first_name, "Student")
+        self.assertEqual(mock_student.last_name, "0001")
 
-def test_ai_processing_step_storage():
-    """Test that AI processing step storage structure is correct"""
-    print("\n🧪 Testing AI processing step storage...")
-    
-    # Test the Session model's get_ai_processing_steps method
-    from app.models.session import Session
-    
-    # Create a mock session object
-    class MockSession:
-        def __init__(self):
-            self.ai_prompt_1 = "What is the student's name?"
-            self.ai_response_1 = '{"student_profile": {"first_name": "Henrik", "last_name": "Test"}}'
-            self.ai_prompt_2 = None
-            self.ai_response_2 = None
-            self.ai_prompt_3 = None
-            self.ai_response_3 = None
-        
-        def get_ai_processing_steps(self):
-            """Get AI processing steps in order"""
-            steps = []
-            
-            if self.ai_prompt_1 or self.ai_response_1:
-                steps.append({
-                    'step': 1,
-                    'prompt': self.ai_prompt_1,
-                    'response': self.ai_response_1,
-                    'has_prompt': bool(self.ai_prompt_1),
-                    'has_response': bool(self.ai_response_1)
-                })
-            
-            if self.ai_prompt_2 or self.ai_response_2:
-                steps.append({
-                    'step': 2,
-                    'prompt': self.ai_prompt_2,
-                    'response': self.ai_response_2,
-                    'has_prompt': bool(self.ai_prompt_2),
-                    'has_response': bool(self.ai_response_2)
-                })
-            
-            if self.ai_prompt_3 or self.ai_response_3:
-                steps.append({
-                    'step': 3,
-                    'prompt': self.ai_prompt_3,
-                    'response': self.ai_response_3,
-                    'has_prompt': bool(self.ai_prompt_3),
-                    'has_response': bool(self.ai_response_3)
-                })
-            
-            return steps
-    
-    mock_session = MockSession()
-    steps = mock_session.get_ai_processing_steps()
-    
-    print(f"✅ Got {len(steps)} AI processing steps")
-    
-    assert len(steps) == 1, f"Expected 1 step, got {len(steps)}"
-    assert steps[0]['step'] == 1, f"Expected step 1, got {steps[0]['step']}"
-    assert steps[0]['has_prompt'] == True, "Expected has_prompt to be True"
-    assert steps[0]['has_response'] == True, "Expected has_response to be True"
-    assert "Henrik" in steps[0]['response'], "Expected 'Henrik' in response"
-    
-    print("✅ AI processing step storage test passed!")
-    return True
 
-def test_conditional_prompt_selection():
-    """Test that conditional prompt selection works for new vs existing students"""
-    print("\n🧪 Testing conditional prompt selection...")
+def run_test_suite():
+    """Run the complete test suite"""
+    # Create test suite
+    loader = unittest.TestLoader()
+    suite = loader.loadTestsFromTestCase(TestNameExtractionFix)
     
-    from ai_poc.call_type_detector import CallType, CallTypeResult, ConditionalPromptSelector, CallTypeDetector
+    # Run tests
+    runner = unittest.TextTestRunner(verbosity=2)
+    result = runner.run(suite)
     
-    # Test with a mock phone number (new student)
-    new_phone = "+1555123XXXX"  # Use a fake number that won't be in DB
-    
-    # Create a mock detector that simulates database lookup
-    class MockCallTypeDetector(CallTypeDetector):
-        def __init__(self, mock_student_exists=False):
-            super().__init__()
-            self.mock_student_exists = mock_student_exists
-        
-        def _lookup_student_by_phone(self, normalized_phone):
-            if self.mock_student_exists:
-                return {
-                    'id': '123',
-                    'name': 'Test Student',
-                    'phone_number': normalized_phone,
-                    'session_count': 5
-                }
-            else:
-                return None
-    
-    # Test new student detection
-    new_detector = MockCallTypeDetector(mock_student_exists=False)
-    result = new_detector.detect_call_type(new_phone)
-    
-    print(f"📞 New student test: {result.call_type.value} (confidence: {result.confidence})")
-    assert result.call_type == CallType.INTRODUCTORY, f"Expected INTRODUCTORY, got {result.call_type.value}"
-    
-    # Test existing student detection
-    existing_detector = MockCallTypeDetector(mock_student_exists=True)
-    result = existing_detector.detect_call_type(new_phone)
-    
-    print(f"📞 Existing student test: {result.call_type.value} (confidence: {result.confidence})")
-    assert result.call_type == CallType.TUTORING, f"Expected TUTORING, got {result.call_type.value}"
-    
-    # Test prompt selection
-    selector = ConditionalPromptSelector(new_detector)
-    prompt, call_result = selector.select_prompt(new_phone)
-    
-    print(f"📝 Prompt selection: {prompt} for {call_result.call_type.value}")
-    assert prompt == "introductory_analysis", f"Expected 'introductory_analysis', got '{prompt}'"
-    
-    selector = ConditionalPromptSelector(existing_detector)
-    prompt, call_result = selector.select_prompt(new_phone)
-    
-    print(f"📝 Prompt selection: {prompt} for {call_result.call_type.value}")
-    assert prompt == "session_analysis", f"Expected 'session_analysis', got '{prompt}'"
-    
-    print("✅ Conditional prompt selection test passed!")
-    return True
-
-def main():
-    """Run all tests"""
-    print("🚀 Starting name extraction and AI processing tests...\n")
-    
-    try:
-        # Test 1: Name extraction with nested structure
-        test_name_extraction_with_nested_structure()
-        
-        # Test 2: AI processing step storage
-        test_ai_processing_step_storage()
-        
-        # Test 3: Conditional prompt selection
-        test_conditional_prompt_selection()
-        
-        print("\n🎉 All tests passed! The fixes should work correctly.")
-        print("\n📋 Summary of what was fixed:")
-        print("✅ VAPI webhook now passes session_id to transcript analyzer")
-        print("✅ Transcript analyzer stores AI processing debug information")
-        print("✅ Name extraction handles both nested and direct field formats")
-        print("✅ Conditional prompt selection works for new vs existing students")
-        print("✅ Session data retrieval includes AI processing steps")
-        print("✅ Template properly displays AI processing debug information")
-        
+    # Print summary
+    if result.wasSuccessful():
+        print(f"\n✅ All {result.testsRun} tests passed successfully!")
+        print("The student name extraction fix is working correctly.")
         return True
-        
-    except Exception as e:
-        print(f"\n❌ Test failed: {e}")
-        import traceback
-        print(f"🔍 Error details: {traceback.format_exc()}")
+    else:
+        print(f"\n❌ {len(result.failures + result.errors)} out of {result.testsRun} tests failed.")
         return False
 
-if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+
+if __name__ == '__main__':
+    print("Testing Student Name Extraction Fix")
+    print("=" * 50)
+    print("This test validates that the refactored update_student_profile method")
+    print("correctly replaces placeholder names with AI-extracted names.")
+    print("=" * 50)
+    
+    success = run_test_suite()
+    
+    if success:
+        print("\n🎉 The fix is ready for deployment!")
+    else:
+        print("\n⚠️  The fix needs additional work before deployment.")
+    
+    exit(0 if success else 1)

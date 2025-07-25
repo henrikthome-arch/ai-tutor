@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import and_, or_, func, desc
 
 from app import db
-from app.models.assessment import StudentSubject, Assessment  # Keep Assessment for backward compatibility
+from app.models.assessment import StudentSubject
 
 def get_all() -> List[Dict[str, Any]]:
     """

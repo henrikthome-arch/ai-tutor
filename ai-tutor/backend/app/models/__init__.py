@@ -6,10 +6,10 @@ from .student import Student
 from .school import School
 from .curriculum import Curriculum
 from .session import Session
-from .assessment import Assessment
+from .assessment import StudentSubject
 from .profile import Profile
 from .system_log import SystemLog
-from .analytics import SessionMetrics, DailyStats, StudentProgress, Analytics
+from .analytics import SessionMetrics, DailyStats
 from .token import Token
 from .mcp_interaction import MCPInteraction
 
@@ -18,13 +18,11 @@ __all__ = [
     'School',
     'Curriculum',
     'Session',
-    'Assessment',
+    'StudentSubject',
     'Profile',
     'SystemLog',
     'SessionMetrics',
     'DailyStats',
-    'StudentProgress',
-    'Analytics',
     'Token',
     'MCPInteraction'
 ]

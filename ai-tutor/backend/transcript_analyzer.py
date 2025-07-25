@@ -19,6 +19,7 @@ from ai_poc.prompts import prompt_manager
 from ai_poc.providers import provider_manager
 from ai_poc.call_type_detector import default_prompt_selector, CallType
 from ai_poc.prompts_file_loader import file_prompt_manager
+from ai_poc.data_models import AIExtractedProfile, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -53,46 +54,67 @@ EXTRACTION GUIDELINES:
 - Do not make assumptions or inferences beyond what is clearly stated
 - Extract information only when you have high confidence it is accurate
 - Format all extracted information in a consistent, structured way
-- If information is not present or unclear, indicate it as unknown
+- If information is not present or unclear, use null for that field
 
 RESPONSE FORMAT:
-You must provide extracted information in JSON format with these fields:
+You must provide extracted information in JSON format with EXACTLY these fields:
 {
-  "name": <string - student's full name or null if not mentioned>,
+  "first_name": <string or null>,
+  "last_name": <string or null>,
   "age": <integer or null>,
   "grade": <integer or null>,
   "interests": [<list of strings>],
   "learning_preferences": [<list of strings>],
-  "subjects": {
-    "favorite": [<list of strings>],
-    "challenging": [<list of strings>]
-  },
+  "favorite_subjects": [<list of strings>],
+  "challenging_subjects": [<list of strings>],
   "confidence_score": <float between 0.0 and 1.0>
 }
 
-IMPORTANT:
-- For name, extract the student's actual name if they introduce themselves (e.g., "Hi, I'm Sarah" → "Sarah")
-- For age and grade, return ONLY numeric values (e.g., 12, not "12 years old")
-- For each field, provide the exact information mentioned by the student
-- If the information is not present, use null for numeric fields and empty arrays for lists.""",
+CRITICAL EXTRACTION RULES:
+- For first_name: Extract only the first name when student introduces themselves (e.g., "Hi, I'm Sarah" → "Sarah")
+- For last_name: Extract only if explicitly mentioned separately (e.g., "I'm Sarah Johnson" → first_name: "Sarah", last_name: "Johnson")
+- For age and grade: Return ONLY numeric values (e.g., 12, not "12 years old", 4 not "fourth grade")
+- For interests: Include hobbies, sports, activities mentioned by the student
+- For learning_preferences: Include any learning style preferences mentioned
+- For favorite_subjects: Include subjects the student explicitly says they like or enjoy
+- For challenging_subjects: Include subjects the student says are hard or difficult
+- For confidence_score: 0.9 for clear information, 0.5 for uncertain, 0.1 for very little found
+- If information is not present, use null for single values and empty arrays [] for lists
+
+DO NOT use nested "subjects" object. Use flat "favorite_subjects" and "challenging_subjects" arrays.""",
             user_prompt_template="""Please extract student profile information from this conversation transcript.
 
 CONVERSATION TRANSCRIPT:
 {transcript}
 
-Extract only information that is explicitly stated by the student. Format your response as a valid JSON object with the following fields:
-- name: The student's full name if they introduce themselves (e.g., "Hi, I'm Sarah" → "Sarah")
-- age: The student's age (integer only, e.g., 10, not "10 years old")
-- grade: The student's grade level (integer only, e.g., 4, not "4th grade")
-- interests: List of the student's interests or hobbies
-- learning_preferences: List of how the student prefers to learn
-- subjects: Object containing favorite and challenging subjects
-- confidence_score: Your confidence in the extracted information (0.0-1.0)
+Extract only information that is explicitly stated by the student. Format your response as a valid JSON object with EXACTLY these fields:
 
-If information for a field is not present in the transcript, use null for numeric fields and empty arrays for lists.
+{{
+  "first_name": <string or null>,
+  "last_name": <string or null>,
+  "age": <integer or null>,
+  "grade": <integer or null>,
+  "interests": [<list of strings>],
+  "learning_preferences": [<list of strings>],
+  "favorite_subjects": [<list of strings>],
+  "challenging_subjects": [<list of strings>],
+  "confidence_score": <float between 0.0 and 1.0>
+}}
 
-IMPORTANT: Look for statements like "Hi, I'm Emma" or "My name is John" or "I'm 10" or "I'm in 4th grade" or "I like playing games" and extract them accurately.
-For age and grade, return ONLY the numeric value - no text formatting.
+EXTRACTION RULES:
+- first_name: Extract only the first name when student introduces themselves (e.g., "Hi, I'm Sarah" → "Sarah")
+- last_name: Extract only if explicitly mentioned separately (e.g., "I'm Sarah Johnson" → "Johnson")
+- age: Return ONLY the numeric value (e.g., 10, not "10 years old")
+- grade: Return ONLY the numeric value (e.g., 4, not "4th grade" or "fourth grade")
+- interests: List hobbies, sports, activities mentioned by the student
+- learning_preferences: List any learning style preferences mentioned
+- favorite_subjects: List subjects the student says they like or enjoy
+- challenging_subjects: List subjects the student says are hard or difficult
+- confidence_score: 0.9 for clear information, 0.5 for uncertain, 0.1 for very little found
+
+If information for a field is not present, use null for single values and empty arrays [] for lists.
+
+IMPORTANT: Look for statements like "Hi, I'm Emma" or "My name is John" or "I'm 10" or "I'm in 4th grade" or "I like soccer" and extract them accurately.
 Do not include any explanatory text in your response, ONLY the JSON object.
 """,
             
@@ -229,39 +251,38 @@ Do not include any explanatory text in your response, ONLY the JSON object.
                 logger.warning(f"🔍 DEBUG: No session_id provided - cannot store AI processing step")
                 print(f"🔍 DEBUG: No session_id provided - cannot store AI processing step")
             
-            # Extract and process the JSON response
+            # Extract and process the JSON response using new data model
             try:
                 raw_response = analysis.raw_response
                 logger.info(f"Received AI response with {len(raw_response) if raw_response else 0} characters")
                 
-                # Parse JSON response (all new prompts generate JSON)
+                # Use the new data model for robust parsing and validation
                 try:
-                    extracted_info = json.loads(raw_response)
-                    logger.info(f"Successfully parsed JSON response for {selected_prompt}")
-                except json.JSONDecodeError:
-                    # Try to extract JSON from the text
-                    import re
-                    json_match = re.search(r'({[\s\S]*})', raw_response)
-                    if json_match:
-                        extracted_info = json.loads(json_match.group(1))
-                        logger.info(f"Extracted JSON from response text")
-                    else:
-                        logger.error("Could not extract JSON from AI response")
-                        logger.error(f"Raw response: {raw_response}")
-                        return {}
-                
-                # Add metadata about the analysis
-                extracted_info['_analysis_metadata'] = {
-                    'prompt_used': selected_prompt,
-                    'call_type': call_type_result.call_type.value if call_type_result else "unknown",
-                    'call_type_confidence': call_type_result.confidence if call_type_result else 0.0,
-                    'provider_used': self.provider_manager.current_provider,
-                    'processing_time': analysis.processing_time,
-                    'analysis_timestamp': analysis.timestamp.isoformat()
-                }
-                
-                logger.info(f"Successfully processed conditional prompt analysis")
-                return extracted_info
+                    profile = AIExtractedProfile.from_ai_response(raw_response)
+                    logger.info(f"Successfully parsed AI response using data model: {profile}")
+                    
+                    # Convert to dictionary and add metadata
+                    extracted_info = profile.to_dict()
+                    extracted_info['_analysis_metadata'] = {
+                        'prompt_used': selected_prompt,
+                        'call_type': call_type_result.call_type.value if call_type_result else "unknown",
+                        'call_type_confidence': call_type_result.confidence if call_type_result else 0.0,
+                        'provider_used': self.provider_manager.current_provider,
+                        'processing_time': analysis.processing_time,
+                        'analysis_timestamp': analysis.timestamp.isoformat()
+                    }
+                    
+                    logger.info(f"Successfully processed conditional prompt analysis with data model")
+                    return extracted_info
+                    
+                except ValidationError as ve:
+                    logger.error(f"Data validation failed: {ve}")
+                    logger.error(f"Raw response: {raw_response}")
+                    return {}
+                except ValueError as ve:
+                    logger.error(f"Data parsing failed: {ve}")
+                    logger.error(f"Raw response: {raw_response}")
+                    return {}
                 
             except Exception as e:
                 logger.error(f"Error parsing conditional prompt response: {e}")
@@ -289,34 +310,35 @@ Do not include any explanatory text in your response, ONLY the JSON object.
 TRANSCRIPT:
 {transcript}
 
-TASK: Extract student information from this conversation and return ONLY a JSON object with the following structure:
+TASK: Extract student information from this conversation and return ONLY a JSON object with EXACTLY this structure:
 
 {{
-  "name": <string or null>,
-  "age": <number or null>,
-  "grade": <number or null>,
+  "first_name": <string or null>,
+  "last_name": <string or null>,
+  "age": <integer or null>,
+  "grade": <integer or null>,
   "interests": ["list", "of", "interests"],
   "learning_preferences": ["list", "of", "preferences"],
-  "subjects": {{
-    "favorite": ["list", "of", "favorite", "subjects"],
-    "challenging": ["list", "of", "challenging", "subjects"]
-  }},
-  "confidence_score": <number between 0.0 and 1.0>
+  "favorite_subjects": ["list", "of", "favorite", "subjects"],
+  "challenging_subjects": ["list", "of", "challenging", "subjects"],
+  "confidence_score": <float between 0.0 and 1.0>
 }}
 
 EXTRACTION RULES:
 1. Look for explicit statements like "Hi, I'm Emma", "My name is John", "I'm 8 years old", "I'm in 3rd grade", "I like soccer"
-2. Extract the student's actual name if they introduce themselves
-3. Extract hobbies, interests, sports, activities mentioned by the student
-4. Note any subjects or topics the student mentions liking or finding difficult
-5. For name: Extract the actual name, not descriptive terms like "student" or "kid"
+2. first_name: Extract only the first name when student introduces themselves (e.g., "Hi, I'm Sarah" → "Sarah")
+3. last_name: Extract only if explicitly mentioned separately (e.g., "I'm Sarah Johnson" → "Johnson")
+4. Extract hobbies, interests, sports, activities mentioned by the student
+5. Note any subjects or topics the student mentions liking (favorite_subjects) or finding difficult (challenging_subjects)
 6. For age: ONLY return the numeric value (e.g., 8, not "8 years old")
 7. For grade: ONLY return the numeric value (e.g., 3, not "third grade" or "Grade 3")
 8. If the student mentions grade level with words like "third grade", convert to number: 3
 9. Be very careful to extract ALL mentioned interests and hobbies
 10. Return confidence_score as 0.9 if you found clear information, 0.5 if uncertain, 0.1 if very little found
+11. If information for a field is not present, use null for single values and empty arrays [] for lists
 
 IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
+DO NOT use nested "subjects" object. Use flat "favorite_subjects" and "challenging_subjects" arrays.
 """
             
             # Log the prompt for debugging
@@ -349,9 +371,8 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             analysis = await provider.analyze_session(transcript, context)
             logger.info(f"Received analysis response from provider")
             
-            # Extract the JSON from the raw response
+            # Extract and process the JSON response using new data model
             try:
-                # Log the raw response for debugging
                 raw_text = analysis.raw_response
                 logger.info(f"Received AI response with {len(raw_text) if raw_text else 0} characters")
                 logger.info(f"Raw response preview: {raw_text[:500] if raw_text else 'None'}")
@@ -359,32 +380,24 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                 # Log the full response for debugging failed extractions
                 print(f"🔍 Full AI response for debugging: {raw_text}")
                 
-                # Try to parse the entire response as JSON first
+                # Use the new data model for robust parsing and validation
                 try:
-                    extracted_info = json.loads(raw_text)
-                    logger.info(f"Successfully parsed JSON response: {json.dumps(extracted_info)}")
-                except json.JSONDecodeError:
-                    # If that fails, try to extract JSON from the text
-                    import re
-                    json_match = re.search(r'({[\s\S]*})', raw_text)
-                    if json_match:
-                        extracted_info = json.loads(json_match.group(1))
-                        logger.info(f"Extracted JSON from text: {json.dumps(extracted_info)}")
-                    else:
-                        # Try a more aggressive approach to find JSON
-                        json_match = re.search(r'({.*})', raw_text.replace('\n', ' '))
-                        if json_match:
-                            extracted_info = json.loads(json_match.group(1))
-                            logger.info(f"Extracted JSON with aggressive approach: {json.dumps(extracted_info)}")
-                        else:
-                            logger.error("Could not extract JSON from AI response")
-                            logger.error(f"Raw response: {raw_text}")
-                            return {}
-                
-                # Validate and clean the extracted information
-                cleaned_info = self._clean_extracted_info(extracted_info)
-                logger.info(f"Cleaned extracted info: {json.dumps(cleaned_info)}")
-                return cleaned_info
+                    profile = AIExtractedProfile.from_ai_response(raw_text)
+                    logger.info(f"Successfully parsed AI response using data model: {profile}")
+                    
+                    # Convert to dictionary for backward compatibility
+                    extracted_info = profile.to_dict()
+                    logger.info(f"Converted to dict: {json.dumps(extracted_info)}")
+                    return extracted_info
+                    
+                except ValidationError as ve:
+                    logger.error(f"Data validation failed: {ve}")
+                    logger.error(f"Raw response: {raw_text}")
+                    return {}
+                except ValueError as ve:
+                    logger.error(f"Data parsing failed: {ve}")
+                    logger.error(f"Raw response: {raw_text}")
+                    return {}
                 
             except Exception as e:
                 logger.error(f"Error parsing AI response: {e}")
@@ -395,62 +408,6 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             logger.error(f"Error in AI transcript analysis: {e}")
             return {}
     
-    def _clean_extracted_info(self, extracted_info: Dict[str, Any]) -> Dict[str, Any]:
-        """Clean and validate the extracted information"""
-        clean_info = {}
-        
-        # Process age
-        if 'age' in extracted_info and extracted_info['age'] is not None:
-            try:
-                age = int(extracted_info['age'])
-                if 3 <= age <= 18:  # Reasonable age range for students
-                    clean_info['age'] = age
-            except (ValueError, TypeError):
-                pass
-        
-        # Process grade
-        if 'grade' in extracted_info and extracted_info['grade'] is not None:
-            try:
-                grade = int(extracted_info['grade'])
-                if 1 <= grade <= 12:  # Valid grade range
-                    clean_info['grade'] = grade
-            except (ValueError, TypeError):
-                pass
-        
-        # Process interests
-        if 'interests' in extracted_info and isinstance(extracted_info['interests'], list):
-            clean_info['interests'] = [
-                interest.strip() for interest in extracted_info['interests']
-                if isinstance(interest, str) and 1 <= len(interest.strip()) <= 100
-            ]
-        
-        # Process learning preferences
-        if 'learning_preferences' in extracted_info and isinstance(extracted_info['learning_preferences'], list):
-            clean_info['learning_preferences'] = [
-                pref.strip() for pref in extracted_info['learning_preferences']
-                if isinstance(pref, str) and len(pref.strip()) > 0
-            ]
-        
-        # Process subjects
-        if 'subjects' in extracted_info and isinstance(extracted_info['subjects'], dict):
-            subjects = {}
-            
-            if 'favorite' in extracted_info['subjects'] and isinstance(extracted_info['subjects']['favorite'], list):
-                subjects['favorite'] = [
-                    subj.strip() for subj in extracted_info['subjects']['favorite']
-                    if isinstance(subj, str) and len(subj.strip()) > 0
-                ]
-            
-            if 'challenging' in extracted_info['subjects'] and isinstance(extracted_info['subjects']['challenging'], list):
-                subjects['challenging'] = [
-                    subj.strip() for subj in extracted_info['subjects']['challenging']
-                    if isinstance(subj, str) and len(subj.strip()) > 0
-                ]
-            
-            if subjects:
-                clean_info['subjects'] = subjects
-        
-        return clean_info
     
     def analyze_transcript_with_conditional_prompts_sync(
         self,
@@ -634,7 +591,7 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             return {}
     
     def update_student_profile(self, student_id, extracted_info):
-        """Update student profile with extracted information using SQL database"""
+        """Update student profile with extracted information using validated data model"""
         if not extracted_info:
             logger.info(f"No extracted_info provided for student {student_id}")
             return False
@@ -652,6 +609,25 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             # Ensure we have app context
             if not flask.has_app_context():
                 logger.error("No Flask app context for profile update")
+                return False
+            
+            # Create AIExtractedProfile from the extracted info
+            try:
+                # If extracted_info is already a validated dict, create profile from it
+                profile_data = AIExtractedProfile(
+                    first_name=extracted_info.get('first_name'),
+                    last_name=extracted_info.get('last_name'),
+                    age=extracted_info.get('age'),
+                    grade=extracted_info.get('grade'),
+                    interests=extracted_info.get('interests', []),
+                    learning_preferences=extracted_info.get('learning_preferences', []),
+                    favorite_subjects=extracted_info.get('favorite_subjects', []),
+                    challenging_subjects=extracted_info.get('challenging_subjects', []),
+                    confidence_score=extracted_info.get('confidence_score', 0.0)
+                )
+                logger.info(f"Created validated profile data: {profile_data}")
+            except Exception as e:
+                logger.error(f"Failed to create profile data from extracted_info: {e}")
                 return False
             
             # Get student from database
@@ -687,108 +663,49 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
             # Track changes
             updated_fields = []
             
-            # PART 1: Standardized Data Access
-            def extract_name_from_ai_response(extracted_info):
-                """Extract first and last name from AI response with standardized logic"""
-                # Priority order for extracting name information
-                sources = [
-                    extracted_info.get('student_profile', {}),  # Nested structure from conditional prompts
-                    extracted_info                              # Direct structure from fallback prompts
-                ]
-                
-                for source in sources:
-                    if not source:
-                        continue
-                        
-                    first_name = source.get('first_name')
-                    last_name = source.get('last_name')
-                    
-                    # Clean and validate first name
-                    if first_name:
-                        first_name = str(first_name).strip()
-                        if first_name and first_name not in ['Unknown', 'unknown', 'None', 'null', '']:
-                            # Also extract last name if available
-                            if last_name:
-                                last_name = str(last_name).strip()
-                                if last_name in ['Unknown', 'unknown', 'None', 'null', '']:
-                                    last_name = None
-                            
-                            return first_name, last_name
-                
-                return None, None
-            
-            # Extract name using standardized logic
-            new_first_name, new_last_name = extract_name_from_ai_response(extracted_info)
-            
-            # PART 2: Decisive Update Rule
-            if new_first_name:
+            # Update name with simplified, decisive logic
+            if profile_data.has_valid_name():
                 current_first = student.first_name or ''
                 
-                logger.info(f"Current name: '{current_first}' - Extracted name: '{new_first_name}'")
+                logger.info(f"Current name: '{current_first}' - Extracted name: '{profile_data.first_name}'")
                 
                 # Simple, decisive rule: If current first name starts with "Student", update it
                 if current_first.startswith('Student'):
-                    logger.info(f"✅ UPDATING placeholder name '{current_first}' to '{new_first_name}'")
+                    logger.info(f"✅ UPDATING placeholder name '{current_first}' to '{profile_data.first_name}'")
                     
-                    student.first_name = new_first_name
-                    if new_last_name:
-                        student.last_name = new_last_name
+                    student.first_name = profile_data.first_name
+                    if profile_data.last_name:
+                        student.last_name = profile_data.last_name
                     
                     updated_fields.append('name')
                     logger.info(f"Updated student name to: '{student.first_name}' '{student.last_name or ''}'")
                 else:
                     logger.info(f"Keeping existing name '{current_first}' (not a placeholder)")
             else:
-                logger.info("No valid first name extracted from AI response")
-            
-            # Update other profile fields using the same standardized approach
-            def extract_field_value(field_name, expected_type=None):
-                """Extract field value from AI response using standardized logic"""
-                sources = [
-                    extracted_info.get('student_profile', {}),
-                    extracted_info
-                ]
-                
-                for source in sources:
-                    if not source:
-                        continue
-                    
-                    value = source.get(field_name)
-                    if value is not None:
-                        if expected_type == int:
-                            try:
-                                return int(value)
-                            except (ValueError, TypeError):
-                                continue
-                        else:
-                            return value
-                return None
+                logger.info("No valid first name in extracted profile data")
             
             # Update age by calculating date_of_birth if provided
-            age_val = extract_field_value('age', int)
-            if age_val is not None and 3 <= age_val <= 18:
+            if profile_data.age is not None:
                 from datetime import date
                 current_year = date.today().year
-                birth_year = current_year - age_val
+                birth_year = current_year - profile_data.age
                 calculated_dob = date(birth_year, 1, 1)
                 
                 student.date_of_birth = calculated_dob
                 updated_fields.append('date_of_birth')
-                logger.info(f"Updated date_of_birth to {calculated_dob} (age {age_val})")
+                logger.info(f"Updated date_of_birth to {calculated_dob} (age {profile_data.age})")
             
             # Update grade_level in Student model if provided
-            grade_val = extract_field_value('grade', int)
-            if grade_val is not None and 1 <= grade_val <= 12:
-                student.grade_level = grade_val
+            if profile_data.grade is not None:
+                student.grade_level = profile_data.grade
                 updated_fields.append('grade_level')
-                logger.info(f"Updated grade_level to {grade_val}")
+                logger.info(f"Updated grade_level to {profile_data.grade}")
             
             # Handle interests
-            interests_to_add = extract_field_value('interests')
-            if interests_to_add and isinstance(interests_to_add, list):
+            if profile_data.interests:
                 current_interests = profile.interests or []
                 new_interests = []
-                for interest in interests_to_add:
+                for interest in profile_data.interests:
                     if interest and interest not in current_interests:
                         new_interests.append(interest)
                         current_interests.append(interest)
@@ -799,15 +716,14 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                     logger.info(f"Added new interests: {new_interests}")
             
             # Handle learning preferences
-            learning_prefs_to_add = extract_field_value('learning_preferences')
-            if learning_prefs_to_add and isinstance(learning_prefs_to_add, list):
+            if profile_data.learning_preferences:
                 # Initialize learning_preferences if None
                 if profile.learning_preferences is None:
                     profile.learning_preferences = []
                     
                 current_prefs = profile.learning_preferences or []
                 new_prefs = []
-                for pref in learning_prefs_to_add:
+                for pref in profile_data.learning_preferences:
                     if pref and pref not in current_prefs:
                         new_prefs.append(pref)
                         current_prefs.append(pref)
@@ -816,6 +732,42 @@ IMPORTANT: Return ONLY the JSON object, no explanatory text before or after.
                     profile.learning_preferences = current_prefs
                     updated_fields.append('learning_preferences')
                     logger.info(f"Added new learning preferences: {new_prefs}")
+            
+            # Handle favorite subjects
+            if profile_data.favorite_subjects:
+                # Initialize favorite_subjects if None
+                if profile.favorite_subjects is None:
+                    profile.favorite_subjects = []
+                    
+                current_fav_subjects = profile.favorite_subjects or []
+                new_fav_subjects = []
+                for subject in profile_data.favorite_subjects:
+                    if subject and subject not in current_fav_subjects:
+                        new_fav_subjects.append(subject)
+                        current_fav_subjects.append(subject)
+                
+                if new_fav_subjects:
+                    profile.favorite_subjects = current_fav_subjects
+                    updated_fields.append('favorite_subjects')
+                    logger.info(f"Added new favorite subjects: {new_fav_subjects}")
+            
+            # Handle challenging subjects
+            if profile_data.challenging_subjects:
+                # Initialize challenging_subjects if None
+                if profile.challenging_subjects is None:
+                    profile.challenging_subjects = []
+                    
+                current_challenging = profile.challenging_subjects or []
+                new_challenging = []
+                for subject in profile_data.challenging_subjects:
+                    if subject and subject not in current_challenging:
+                        new_challenging.append(subject)
+                        current_challenging.append(subject)
+                
+                if new_challenging:
+                    profile.challenging_subjects = current_challenging
+                    updated_fields.append('challenging_subjects')
+                    logger.info(f"Added new challenging subjects: {new_challenging}")
             
             # Save changes if any were made
             if updated_fields:

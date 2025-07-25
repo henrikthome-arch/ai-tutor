@@ -283,15 +283,7 @@ def delete(student_id) -> bool:
             print(f"⚠️ Error deleting sessions: {session_error}")
             # Continue with deletion even if sessions fail
         
-        # Delete legacy Assessment records if they exist (backward compatibility)
-        try:
-            from app.models.assessment import Assessment
-            deleted_legacy = Assessment.query.filter_by(student_id=student_id_int).delete()
-            if deleted_legacy > 0:
-                print(f"✅ Deleted {deleted_legacy} legacy assessment records")
-        except Exception as legacy_error:
-            print(f"⚠️ Error deleting legacy assessments: {legacy_error}")
-            # Continue with deletion even if legacy records fail
+        # Legacy Assessment model has been removed - no cleanup needed
         
         # Delete profile (foreign key constraint)
         try:
@@ -371,13 +363,8 @@ def delete_gdpr_compliant(student_id) -> Dict[str, Any]:
         except Exception as e:
             deletion_results['errors'].append(f"Session deletion error: {str(e)}")
         
-        # Delete legacy assessments
-        try:
-            from app.models.assessment import Assessment
-            deleted_legacy = Assessment.query.filter_by(student_id=student_id_int).delete()
-            deletion_results['deleted_records']['legacy_assessments'] = deleted_legacy
-        except Exception as e:
-            deletion_results['errors'].append(f"Legacy assessment deletion error: {str(e)}")
+        # Legacy Assessment model has been removed - no cleanup needed
+        deletion_results['deleted_records']['legacy_assessments'] = 0
         
         # Delete profile
         try:

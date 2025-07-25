@@ -9,7 +9,6 @@ from app import db
 from app.models.session import Session
 from app.models.student import Student
 from app.models.profile import Profile
-from app.models.assessment import Assessment
 from ai.providers import provider_manager
 
 logger = logging.getLogger(__name__)
@@ -63,8 +62,18 @@ class AIProcessor:
             session.summary = analysis.raw_response
             db.session.commit()
             
-            # Update student profile
-            self._update_student_profile(student.id, analysis)
+            # Update student profile using transcript analyzer
+            from transcript_analyzer import TranscriptAnalyzer
+            analyzer = TranscriptAnalyzer()
+            
+            # Extract profile information from analysis
+            if hasattr(analysis, 'raw_response'):
+                try:
+                    import json
+                    profile_info = json.loads(analysis.raw_response)
+                    analyzer.update_student_profile(student.id, profile_info)
+                except (json.JSONDecodeError, Exception) as e:
+                    logger.warning(f"Could not parse analysis for profile update: {e}")
             
             # Update assessment
             self._update_assessment(student.id, student.grade, "General", analysis)
@@ -98,7 +107,7 @@ class AIProcessor:
     
     def _update_assessment(self, student_id: int, grade: int, subject: str, analysis: Any) -> None:
         """
-        Update assessment based on analysis
+        Update assessment using StudentSubject model (replaces legacy Assessment)
         
         Args:
             student_id: The student ID
@@ -106,22 +115,24 @@ class AIProcessor:
             subject: The subject
             analysis: The analysis result
         """
-        # Get or create assessment
-        assessment = Assessment.query.filter_by(
+        # Use StudentSubject model instead of legacy Assessment
+        from app.models.assessment import StudentSubject
+        
+        # Get or create student subject
+        student_subject = StudentSubject.query.filter_by(
             student_id=student_id,
-            grade=grade,
-            subject=subject
+            subject_name=subject
         ).first()
         
-        if not assessment:
-            assessment = Assessment(
+        if not student_subject:
+            student_subject = StudentSubject(
                 student_id=student_id,
-                grade=grade,
-                subject=subject
+                subject_name=subject,
+                grade_level=grade
             )
-            db.session.add(assessment)
+            db.session.add(student_subject)
         
-        # Update assessment fields
+        # Update assessment fields based on analysis
         # This is a placeholder - in a real implementation, we would extract
         # strengths, weaknesses, mastery level, etc. from the analysis
         

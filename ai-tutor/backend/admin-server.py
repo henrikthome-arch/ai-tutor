@@ -26,7 +26,7 @@ from app.models.curriculum import Curriculum, Subject, CurriculumDetail
 from app.models.session import Session
 from app.models.token import Token
 from app.repositories import student_repository, session_repository, token_repository, assessment_repository
-from sqlalchemy import inspect
+from sqlalchemy import inspect, select, text, func, cast, Date
 
 # Load environment variables
 try:
@@ -158,7 +158,8 @@ class DatabasePhoneManager:
                 return None
             
             # Query database directly for student with matching phone number
-            student = Student.query.filter_by(phone_number=clean_phone).first()
+            stmt = select(Student).where(Student.phone_number == clean_phone)
+            student = db.session.execute(stmt).scalar_one_or_none()
             if student:
                 return str(student.id)
             
@@ -173,7 +174,8 @@ class DatabasePhoneManager:
         """Get all phone number to student ID mappings from database"""
         try:
             # Query all students with phone numbers
-            students = Student.query.filter(Student.phone_number.isnot(None)).all()
+            stmt = select(Student).where(Student.phone_number.isnot(None))
+            students = db.session.execute(stmt).scalars().all()
             
             phone_mappings = {}
             for student in students:
@@ -198,7 +200,8 @@ class DatabasePhoneManager:
                 return False
             
             # Find student and update phone number
-            student = Student.query.get(student_id)
+            stmt = select(Student).where(Student.id == student_id)
+            student = db.session.execute(stmt).scalar_one_or_none()
             if student:
                 student.phone_number = clean_phone
                 db.session.commit()
@@ -224,7 +227,8 @@ class DatabasePhoneManager:
                 return False
             
             # Find student with this phone number and clear it
-            student = Student.query.filter_by(phone_number=clean_phone).first()
+            stmt = select(Student).where(Student.phone_number == clean_phone)
+            student = db.session.execute(stmt).scalar_one_or_none()
             if student:
                 student.phone_number = None
                 db.session.commit()
@@ -241,7 +245,8 @@ class DatabasePhoneManager:
     def get_phone_mappings_count() -> int:
         """Get count of phone mappings from database"""
         try:
-            return Student.query.filter(Student.phone_number.isnot(None)).count()
+            stmt = select(func.count(Student.id)).where(Student.phone_number.isnot(None))
+            return db.session.execute(stmt).scalar()
         except Exception as e:
             log_error('DATABASE', f'Error counting phone mappings in database: {str(e)}', e)
             return 0
@@ -253,7 +258,8 @@ class DatabasePhoneManager:
             if not student_id:
                 return None
             
-            student = Student.query.get(student_id)
+            stmt = select(Student).where(Student.id == student_id)
+            student = db.session.execute(stmt).scalar_one_or_none()
             if student and student.phone_number:
                 return student.phone_number
             
@@ -305,7 +311,8 @@ def load_cambridge_curriculum_data():
         # In development mode, always reload (database was reset)
         # In production mode, check if default curriculum already exists
         if FLASK_ENV != 'development':
-            existing_curriculum = Curriculum.query.filter_by(name='Cambridge Primary 2025', is_default=True).first()
+            stmt = select(Curriculum).where(Curriculum.name == 'Cambridge Primary 2025', Curriculum.is_default == True)
+            existing_curriculum = db.session.execute(stmt).scalar_one_or_none()
             if existing_curriculum:
                 print(f"ℹ️ Cambridge Primary 2025 curriculum already exists, skipping import")
                 return existing_curriculum
@@ -369,7 +376,8 @@ def load_cambridge_curriculum_data():
         
         for subject_name, grade_data in subject_details.items():
             # Create or get subject
-            subject = Subject.query.filter_by(name=subject_name).first()
+            stmt = select(Subject).where(Subject.name == subject_name)
+            subject = db.session.execute(stmt).scalar_one_or_none()
             if not subject:
                 # Determine subject category and if it's core
                 category = determine_subject_category(subject_name)
@@ -419,7 +427,8 @@ def load_cambridge_curriculum_data():
             print(f"   📋 Is template: {cambridge_curriculum.is_template}")
             
             # Verify the data was actually saved
-            verification_curriculum = Curriculum.query.filter_by(id=cambridge_curriculum.id).first()
+            stmt = select(Curriculum).where(Curriculum.id == cambridge_curriculum.id)
+            verification_curriculum = db.session.execute(stmt).scalar_one_or_none()
             if verification_curriculum:
                 print(f"✅ Curriculum verification successful - found in database")
             else:
@@ -808,11 +817,13 @@ try:
                 print(f"🎯 Is default: {cambridge_curriculum.is_default}")
                 
                 # Verify curriculum details were created
-                detail_count = CurriculumDetail.query.filter_by(curriculum_id=cambridge_curriculum.id).count()
+                stmt = select(func.count(CurriculumDetail.id)).where(CurriculumDetail.curriculum_id == cambridge_curriculum.id)
+                detail_count = db.session.execute(stmt).scalar()
                 print(f"📝 Curriculum details created: {detail_count}")
                 
                 # Verify subjects were created
-                subject_count = Subject.query.count()
+                stmt = select(func.count(Subject.id))
+                subject_count = db.session.execute(stmt).scalar()
                 print(f"📚 Total subjects in database: {subject_count}")
                 
             else:
@@ -1056,7 +1067,8 @@ def get_student_data(student_id):
         profile_data = {}
         try:
             from app.models.student import Student
-            student_obj = Student.query.get(student_id)
+            stmt = select(Student).where(Student.id == student_id)
+            student_obj = db.session.execute(stmt).scalar_one_or_none()
             if student_obj and student_obj.profile:
                 profile_data = student_obj.profile.to_dict()
                 print(f"📊 Profile data retrieved: {json.dumps(profile_data, indent=2)}")
@@ -1156,7 +1168,8 @@ def get_student_data(student_id):
                 print(f"🔍 DEBUG: Starting detailed subject query for student {student_id}")
                 
                 # First, check if any StudentSubject records exist for this student
-                basic_student_subjects = StudentSubject.query.filter_by(student_id=student_id).all()
+                stmt = select(StudentSubject).where(StudentSubject.student_id == student_id)
+                basic_student_subjects = db.session.execute(stmt).scalars().all()
                 print(f"📊 DEBUG: Found {len(basic_student_subjects)} basic StudentSubject records for student {student_id}")
                 
                 if basic_student_subjects:
@@ -1165,19 +1178,22 @@ def get_student_data(student_id):
                         print(f"📋 DEBUG: StudentSubject {i+1}: ID={ss.id}, curriculum_detail_id={ss.curriculum_detail_id}")
                         
                         # Check if the curriculum detail exists
-                        cd = CurriculumDetail.query.get(ss.curriculum_detail_id)
+                        stmt = select(CurriculumDetail).where(CurriculumDetail.id == ss.curriculum_detail_id)
+                        cd = db.session.execute(stmt).scalar_one_or_none()
                         if cd:
                             print(f"📚 DEBUG: CurriculumDetail found: ID={cd.id}, subject_id={cd.subject_id}, curriculum_id={cd.curriculum_id}")
                             
                             # Check if subject exists
-                            subj = Subject.query.get(cd.subject_id)
+                            stmt = select(Subject).where(Subject.id == cd.subject_id)
+                            subj = db.session.execute(stmt).scalar_one_or_none()
                             if subj:
                                 print(f"📖 DEBUG: Subject found: ID={subj.id}, name={subj.name}")
                             else:
                                 print(f"❌ DEBUG: Subject NOT found for ID={cd.subject_id}")
                                 
                             # Check if curriculum exists
-                            curr = Curriculum.query.get(cd.curriculum_id)
+                            stmt = select(Curriculum).where(Curriculum.id == cd.curriculum_id)
+                            curr = db.session.execute(stmt).scalar_one_or_none()
                             if curr:
                                 print(f"🎓 DEBUG: Curriculum found: ID={curr.id}, name={curr.name}")
                             else:
@@ -1368,7 +1384,8 @@ def get_system_stats():
         
         # Count students
         try:
-            total_students = Student.query.count()
+            stmt = select(func.count(Student.id))
+            total_students = db.session.execute(stmt).scalar()
         except Exception as e:
             log_error('DATABASE', 'Error counting students', e)
         
@@ -1381,19 +1398,19 @@ def get_system_stats():
                 from sqlalchemy import func, cast, Date
                 
                 # Use PostgreSQL date function to compare dates properly
-                sessions_today = Session.query.filter(
-                    cast(Session.start_datetime, Date) == today
-                ).count()
+                stmt = select(func.count(Session.id)).where(cast(Session.start_datetime, Date) == today)
+                sessions_today = db.session.execute(stmt).scalar()
                 
                 if sessions_today == 0:
                     # Fallback: use datetime range comparison
                     today_start = datetime.combine(today, datetime.min.time())
                     today_end = datetime.combine(today, datetime.max.time())
                     
-                    sessions_today = Session.query.filter(
+                    stmt = select(func.count(Session.id)).where(
                         Session.start_datetime >= today_start,
                         Session.start_datetime <= today_end
-                    ).count()
+                    )
+                    sessions_today = db.session.execute(stmt).scalar()
                     
                     if sessions_today > 0:
                         log_system('Used datetime range comparison for sessions_today', count=sessions_today)
@@ -1401,7 +1418,8 @@ def get_system_stats():
                 # Manual filtering as last resort
                 log_error('DATABASE', 'Using manual filtering for sessions_today', date_error)
                 try:
-                    all_sessions = Session.query.all()
+                    stmt = select(Session)
+                    all_sessions = db.session.execute(stmt).scalars().all()
                     sessions_today = 0
                     
                     for session in all_sessions:
@@ -1425,32 +1443,37 @@ def get_system_stats():
         
         # Get total sessions
         try:
-            total_sessions = Session.query.count()
+            stmt = select(func.count(Session.id))
+            total_sessions = db.session.execute(stmt).scalar()
         except Exception as e:
             log_error('DATABASE', 'Error counting total sessions', e)
         
         # Get curriculum statistics
         try:
-            total_curriculums = Curriculum.query.count()
-            curriculum_details_count = CurriculumDetail.query.count()
+            stmt = select(func.count(Curriculum.id))
+            total_curriculums = db.session.execute(stmt).scalar()
+            
+            stmt = select(func.count(CurriculumDetail.id))
+            curriculum_details_count = db.session.execute(stmt).scalar()
             
             # Get default curriculum
-            default_curriculum_obj = Curriculum.query.filter_by(is_default=True).first()
+            stmt = select(Curriculum).where(Curriculum.is_default == True)
+            default_curriculum_obj = db.session.execute(stmt).scalar_one_or_none()
             if default_curriculum_obj:
                 default_curriculum = default_curriculum_obj.to_dict()
                 
                 # Count subjects in default curriculum
-                default_curriculum_subjects = CurriculumDetail.query.filter_by(
-                    curriculum_id=default_curriculum_obj.id
-                ).count()
+                stmt = select(func.count(CurriculumDetail.id)).where(
+                    CurriculumDetail.curriculum_id == default_curriculum_obj.id
+                )
+                default_curriculum_subjects = db.session.execute(stmt).scalar()
                 
                 # Count students with default curriculum assignments
                 from app.models.assessment import StudentSubject
-                students_with_default_curriculum = StudentSubject.query.join(
-                    CurriculumDetail
-                ).filter(
-                    CurriculumDetail.curriculum_id == default_curriculum_obj.id
-                ).distinct(StudentSubject.student_id).count()
+                stmt = select(func.count(func.distinct(StudentSubject.student_id))).select_from(
+                    StudentSubject.join(CurriculumDetail)
+                ).where(CurriculumDetail.curriculum_id == default_curriculum_obj.id)
+                students_with_default_curriculum = db.session.execute(stmt).scalar()
                 
         except Exception as e:
             log_error('DATABASE', 'Error getting curriculum statistics', e)
@@ -1498,7 +1521,8 @@ def get_system_stats():
 def get_all_schools():
     """Get list of all schools from database"""
     try:
-        schools = School.query.all()
+        stmt = select(School)
+        schools = db.session.execute(stmt).scalars().all()
         return [school.to_dict() for school in schools]
     except Exception as e:
         print(f"Error getting schools from database: {e}")
@@ -1509,7 +1533,12 @@ def save_school(school_data):
     """Save a school to the database"""
     try:
         # Check if school exists
-        school = School.query.filter_by(id=school_data.get('id')).first()
+        school_id = school_data.get('id')
+        if school_id:
+            stmt = select(School).where(School.id == school_id)
+            school = db.session.execute(stmt).scalar_one_or_none()
+        else:
+            school = None
         
         if school:
             # Update existing school
@@ -1532,7 +1561,8 @@ def save_school(school_data):
 def delete_school(school_id):
     """Delete a school from the database"""
     try:
-        school = School.query.get(school_id)
+        stmt = select(School).where(School.id == school_id)
+        school = db.session.execute(stmt).scalar_one_or_none()
         if school:
             db.session.delete(school)
             db.session.commit()
@@ -1547,7 +1577,8 @@ def delete_school(school_id):
 def get_all_curriculums():
     """Get list of all curriculums from database"""
     try:
-        curriculums = Curriculum.query.all()
+        stmt = select(Curriculum)
+        curriculums = db.session.execute(stmt).scalars().all()
         return [curriculum.to_dict() for curriculum in curriculums]
     except Exception as e:
         print(f"Error getting curriculums from database: {e}")
@@ -1558,7 +1589,12 @@ def save_curriculum(curriculum_data):
     """Save a curriculum to the database"""
     try:
         # Check if curriculum exists
-        curriculum = Curriculum.query.filter_by(id=curriculum_data.get('id')).first()
+        curriculum_id = curriculum_data.get('id')
+        if curriculum_id:
+            stmt = select(Curriculum).where(Curriculum.id == curriculum_id)
+            curriculum = db.session.execute(stmt).scalar_one_or_none()
+        else:
+            curriculum = None
         
         if curriculum:
             # Update existing curriculum
@@ -1581,7 +1617,8 @@ def save_curriculum(curriculum_data):
 def delete_curriculum(curriculum_id):
     """Delete a curriculum from the database"""
     try:
-        curriculum = Curriculum.query.get(curriculum_id)
+        stmt = select(Curriculum).where(Curriculum.id == curriculum_id)
+        curriculum = db.session.execute(stmt).scalar_one_or_none()
         if curriculum:
             db.session.delete(curriculum)
             db.session.commit()
@@ -1596,7 +1633,8 @@ def delete_curriculum(curriculum_id):
 def get_school_curriculums(school_id):
     """Get all curriculums for a specific school"""
     try:
-        curriculums = Curriculum.query.filter_by(school_id=school_id).all()
+        stmt = select(Curriculum).where(Curriculum.school_id == school_id)
+        curriculums = db.session.execute(stmt).scalars().all()
         return [curriculum.to_dict() for curriculum in curriculums]
     except Exception as e:
         print(f"Error getting school curriculums from database: {e}")
@@ -1606,7 +1644,8 @@ def get_school_curriculums(school_id):
 def get_curriculum_by_id(curriculum_id):
     """Get a specific curriculum by ID"""
     try:
-        curriculum = Curriculum.query.get(curriculum_id)
+        stmt = select(Curriculum).where(Curriculum.id == curriculum_id)
+        curriculum = db.session.execute(stmt).scalar_one_or_none()
         return curriculum.to_dict() if curriculum else None
     except Exception as e:
         print(f"Error getting curriculum from database: {e}")
@@ -2215,7 +2254,8 @@ def edit_school(school_id):
        return redirect(url_for('admin_login'))
 
    # Get school from database
-   school = School.query.get(school_id)
+   stmt = select(School).where(School.id == school_id)
+   school = db.session.execute(stmt).scalar_one_or_none()
    if not school:
        flash('School not found!', 'error')
        return redirect(url_for('admin_schools'))
@@ -2295,8 +2335,11 @@ def admin_curriculum():
         
         # Get subject and detail counts
         try:
-            curriculum_stats['total_subjects'] = Subject.query.count()
-            curriculum_stats['total_details'] = CurriculumDetail.query.count()
+            stmt = select(func.count(Subject.id))
+            curriculum_stats['total_subjects'] = db.session.execute(stmt).scalar()
+            
+            stmt = select(func.count(CurriculumDetail.id))
+            curriculum_stats['total_details'] = db.session.execute(stmt).scalar()
         except Exception as e:
             log_error('ADMIN', 'Error getting curriculum statistics', e)
         
@@ -2324,8 +2367,11 @@ def curriculum_details(curriculum_id):
         
         # Get curriculum details grouped by subject and grade
         try:
-            curriculum_details = CurriculumDetail.query.filter_by(curriculum_id=curriculum_id).all()
-            subjects = Subject.query.all()
+            stmt = select(CurriculumDetail).where(CurriculumDetail.curriculum_id == curriculum_id)
+            curriculum_details = db.session.execute(stmt).scalars().all()
+            
+            stmt = select(Subject)
+            subjects = db.session.execute(stmt).scalars().all()
             
             # Group details by subject
             details_by_subject = {}
@@ -2362,7 +2408,8 @@ def edit_curriculum_basic(curriculum_id):
         return redirect(url_for('admin_login'))
     
     try:
-        curriculum = Curriculum.query.get(curriculum_id)
+        stmt = select(Curriculum).where(Curriculum.id == curriculum_id)
+        curriculum = db.session.execute(stmt).scalar_one_or_none()
         if not curriculum:
             flash('Curriculum not found', 'error')
             return redirect(url_for('admin_curriculum'))
@@ -2377,7 +2424,10 @@ def edit_curriculum_basic(curriculum_id):
                 is_default = request.form.get('is_default') == 'on'
                 if is_default and not curriculum.is_default:
                     # Remove default from other curriculums
-                    Curriculum.query.filter_by(is_default=True).update({'is_default': False})
+                    stmt = select(Curriculum).where(Curriculum.is_default == True)
+                    other_curriculums = db.session.execute(stmt).scalars().all()
+                    for other_curriculum in other_curriculums:
+                        other_curriculum.is_default = False
                     curriculum.is_default = True
                 elif not is_default:
                     curriculum.is_default = False
@@ -2405,12 +2455,14 @@ def add_curriculum_detail(curriculum_id):
         return redirect(url_for('admin_login'))
     
     try:
-        curriculum = Curriculum.query.get(curriculum_id)
+        stmt = select(Curriculum).where(Curriculum.id == curriculum_id)
+        curriculum = db.session.execute(stmt).scalar_one_or_none()
         if not curriculum:
             flash('Curriculum not found', 'error')
             return redirect(url_for('admin_curriculum'))
         
-        subjects = Subject.query.all()
+        stmt = select(Subject)
+        subjects = db.session.execute(stmt).scalars().all()
         
         if request.method == 'POST':
             try:
@@ -2418,11 +2470,12 @@ def add_curriculum_detail(curriculum_id):
                 grade_level = int(request.form.get('grade_level'))
                 
                 # Check if detail already exists
-                existing_detail = CurriculumDetail.query.filter_by(
-                    curriculum_id=curriculum_id,
-                    subject_id=subject_id,
-                    grade_level=grade_level
-                ).first()
+                stmt = select(CurriculumDetail).where(
+                    CurriculumDetail.curriculum_id == curriculum_id,
+                    CurriculumDetail.subject_id == subject_id,
+                    CurriculumDetail.grade_level == grade_level
+                )
+                existing_detail = db.session.execute(stmt).scalar_one_or_none()
                 
                 if existing_detail:
                     flash('Curriculum detail for this subject and grade already exists', 'error')
@@ -2484,12 +2537,14 @@ def edit_curriculum_detail(detail_id):
         return redirect(url_for('admin_login'))
     
     try:
-        detail = CurriculumDetail.query.get(detail_id)
+        stmt = select(CurriculumDetail).where(CurriculumDetail.id == detail_id)
+        detail = db.session.execute(stmt).scalar_one_or_none()
         if not detail:
             flash('Curriculum detail not found', 'error')
             return redirect(url_for('admin_curriculum'))
         
-        subjects = Subject.query.all()
+        stmt = select(Subject)
+        subjects = db.session.execute(stmt).scalars().all()
         
         if request.method == 'POST':
             try:
@@ -2538,7 +2593,8 @@ def delete_curriculum_detail(detail_id):
         return redirect(url_for('admin_login'))
     
     try:
-        detail = CurriculumDetail.query.get(detail_id)
+        stmt = select(CurriculumDetail).where(CurriculumDetail.id == detail_id)
+        detail = db.session.execute(stmt).scalar_one_or_none()
         if not detail:
             flash('Curriculum detail not found', 'error')
             return redirect(url_for('admin_curriculum'))
@@ -2572,7 +2628,8 @@ def add_curriculum():
             school_id = request.form['school_id']
             
             # Validate school exists
-            school = School.query.get(school_id)
+            stmt = select(School).where(School.id == school_id)
+            school = db.session.execute(stmt).scalar_one_or_none()
             if not school:
                 flash('School not found', 'error')
                 return render_template('add_curriculum.html', schools=schools)
@@ -3037,8 +3094,11 @@ def admin_database_reset():
                     reset_results['curriculum_loaded'] = True
                     
                     # Verify curriculum details were created
-                    detail_count = CurriculumDetail.query.filter_by(curriculum_id=cambridge_curriculum.id).count()
-                    subject_count = Subject.query.count()
+                    stmt = select(func.count(CurriculumDetail.id)).where(CurriculumDetail.curriculum_id == cambridge_curriculum.id)
+                    detail_count = db.session.execute(stmt).scalar()
+                    
+                    stmt = select(func.count(Subject.id))
+                    subject_count = db.session.execute(stmt).scalar()
                     
                     print(f"📝 Curriculum details created: {detail_count}")
                     print(f"📚 Total subjects in database: {subject_count}")
@@ -3668,7 +3728,8 @@ def debug_student_subjects(student_id):
         from app.models.curriculum import CurriculumDetail, Subject, Curriculum
         
         # Get all StudentSubject records for this student
-        student_subjects = StudentSubject.query.filter_by(student_id=student_id).all()
+        stmt = select(StudentSubject).where(StudentSubject.student_id == student_id)
+        student_subjects = db.session.execute(stmt).scalars().all()
         
         # Get detailed info with joins
         detailed_subjects = db.session.query(StudentSubject, CurriculumDetail, Subject, Curriculum)\
@@ -3730,7 +3791,8 @@ def debug_student_subjects(student_id):
         
         # Check if default curriculum exists
         try:
-            default_curriculum = Curriculum.query.filter_by(is_default=True).first()
+            stmt = select(Curriculum).where(Curriculum.is_default == True)
+            default_curriculum = db.session.execute(stmt).scalar_one_or_none()
             debug_info['default_curriculum'] = {
                 'exists': default_curriculum is not None,
                 'id': default_curriculum.id if default_curriculum else None,
@@ -3771,7 +3833,8 @@ def delete_and_reassign_curriculum(student_id):
         from app.models.curriculum import CurriculumDetail, Subject, Curriculum
         
         # Get existing StudentSubject records before deletion
-        existing_subjects = StudentSubject.query.filter_by(student_id=student_id).all()
+        stmt = select(StudentSubject).where(StudentSubject.student_id == student_id)
+        existing_subjects = db.session.execute(stmt).scalars().all()
         existing_count = len(existing_subjects)
         
         # Get details about what we're deleting for logging
@@ -3779,10 +3842,15 @@ def delete_and_reassign_curriculum(student_id):
         if existing_subjects:
             for ss in existing_subjects:
                 try:
-                    curriculum_detail = CurriculumDetail.query.get(ss.curriculum_detail_id)
+                    stmt = select(CurriculumDetail).where(CurriculumDetail.id == ss.curriculum_detail_id)
+                    curriculum_detail = db.session.execute(stmt).scalar_one_or_none()
                     if curriculum_detail:
-                        subject = Subject.query.get(curriculum_detail.subject_id)
-                        curriculum = Curriculum.query.get(curriculum_detail.curriculum_id)
+                        stmt = select(Subject).where(Subject.id == curriculum_detail.subject_id)
+                        subject = db.session.execute(stmt).scalar_one_or_none()
+                        
+                        stmt = select(Curriculum).where(Curriculum.id == curriculum_detail.curriculum_id)
+                        curriculum = db.session.execute(stmt).scalar_one_or_none()
+                        
                         deleted_subjects_info.append({
                             'subject_name': subject.name if subject else 'Unknown',
                             'grade_level': curriculum_detail.grade_level,
@@ -3798,7 +3866,10 @@ def delete_and_reassign_curriculum(student_id):
         # Delete all existing StudentSubject records for this student
         if existing_count > 0:
             print(f"🗑️ Deleting {existing_count} existing StudentSubject records for student {student_id}")
-            StudentSubject.query.filter_by(student_id=student_id).delete()
+            stmt = select(StudentSubject).where(StudentSubject.student_id == student_id)
+            subjects_to_delete = db.session.execute(stmt).scalars().all()
+            for subject in subjects_to_delete:
+                db.session.delete(subject)
             db.session.flush()  # Flush to ensure deletions are processed
             print(f"✅ Deleted {existing_count} StudentSubject records")
         else:
@@ -3942,13 +4013,16 @@ def admin_all_sessions():
             # Set transcript and analysis flags based on actual content availability
             # Get the Session object to check actual content
             try:
-                session_obj = Session.query.get(session.get('id'))
-                if session_obj:
-                    session_with_content = session_obj.to_dict_with_content()
-                    transcript = session_with_content.get('transcript')
-                    analysis = session_with_content.get('summary')
-                    session['has_transcript'] = bool(transcript and len(transcript.strip()) > 0)
-                    session['has_analysis'] = bool(analysis and len(analysis.strip()) > 0)
+                session_id = session.get('id')
+                if session_id:
+                    stmt = select(Session).where(Session.id == session_id)
+                    session_obj = db.session.execute(stmt).scalar_one_or_none()
+                    if session_obj:
+                        session_with_content = session_obj.to_dict_with_content()
+                        transcript = session_with_content.get('transcript')
+                        analysis = session_with_content.get('summary')
+                        session['has_transcript'] = bool(transcript and len(transcript.strip()) > 0)
+                        session['has_analysis'] = bool(analysis and len(analysis.strip()) > 0)
                 else:
                     # Fallback to metadata flags if session object not found
                     session['has_transcript'] = (
@@ -4043,13 +4117,16 @@ def view_student_sessions(student_id):
             # Set transcript and analysis flags based on actual content availability
             # Get the Session object to check actual content
             try:
-                session_obj = Session.query.get(session.get('id'))
-                if session_obj:
-                    session_with_content = session_obj.to_dict_with_content()
-                    transcript = session_with_content.get('transcript')
-                    analysis = session_with_content.get('summary')
-                    session['has_transcript'] = bool(transcript and len(transcript.strip()) > 0)
-                    session['has_analysis'] = bool(analysis and len(analysis.strip()) > 0)
+                session_id = session.get('id')
+                if session_id:
+                    stmt = select(Session).where(Session.id == session_id)
+                    session_obj = db.session.execute(stmt).scalar_one_or_none()
+                    if session_obj:
+                        session_with_content = session_obj.to_dict_with_content()
+                        transcript = session_with_content.get('transcript')
+                        analysis = session_with_content.get('summary')
+                        session['has_transcript'] = bool(transcript and len(transcript.strip()) > 0)
+                        session['has_analysis'] = bool(analysis and len(analysis.strip()) > 0)
                 else:
                     # Fallback to metadata flags if session object not found
                     session['has_transcript'] = (
@@ -4102,7 +4179,8 @@ def view_session_detail_direct(session_id):
     
     try:
         # Get session from database with full content
-        session = Session.query.get(session_id)
+        stmt = select(Session).where(Session.id == session_id)
+        session = db.session.execute(stmt).scalar_one_or_none()
         if not session:
             flash('Session not found', 'error')
             return redirect(url_for('admin_all_sessions'))
@@ -4142,7 +4220,8 @@ def view_session_detail(student_id, session_id):
     
     try:
         # Get session from database with full content
-        session = Session.query.get(session_id)
+        stmt = select(Session).where(Session.id == session_id)
+        session = db.session.execute(stmt).scalar_one_or_none()
         if not session:
             flash('Session not found', 'error')
             return redirect(url_for('view_student_sessions', student_id=student_id))
@@ -5178,7 +5257,8 @@ def verify_and_assign_curriculum(student_id: str, call_id: str):
         # Check if student exists
         try:
             from app.models.student import Student
-            student_obj = Student.query.get(int(student_id))
+            stmt = select(Student).where(Student.id == int(student_id))
+            student_obj = db.session.execute(stmt).scalar_one_or_none()
             if not student_obj:
                 print(f"❌ Student {student_id} not found in database")
                 log_error('WEBHOOK', f"Student not found for curriculum verification", ValueError(f"Student {student_id} not found"),
@@ -5193,7 +5273,8 @@ def verify_and_assign_curriculum(student_id: str, call_id: str):
         
         # Check if default curriculum exists
         try:
-            default_curriculum = Curriculum.query.filter_by(is_default=True).first()
+            stmt = select(Curriculum).where(Curriculum.is_default == True)
+            default_curriculum = db.session.execute(stmt).scalar_one_or_none()
             if not default_curriculum:
                 print(f"❌ No default curriculum found in database")
                 log_error('WEBHOOK', f"No default curriculum found", ValueError("No default curriculum"),
@@ -5208,7 +5289,8 @@ def verify_and_assign_curriculum(student_id: str, call_id: str):
         
         # Check current StudentSubject count
         try:
-            subject_count = StudentSubject.query.filter_by(student_id=int(student_id)).count()
+            stmt = select(func.count(StudentSubject.id)).where(StudentSubject.student_id == int(student_id))
+            subject_count = db.session.execute(stmt).scalar()
             print(f"📚 Curriculum verification: Student {student_id} has {subject_count} subjects assigned")
         except Exception as count_error:
             print(f"❌ Error counting student subjects: {count_error}")

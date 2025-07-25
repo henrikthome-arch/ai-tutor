@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 
 from app import db
-from app.models.analytics import SessionMetrics, DailyStats, StudentProgress
+from app.models.analytics import SessionMetrics, DailyStats
 
 # Session Metrics Methods
 
@@ -78,35 +78,6 @@ def create_or_update_daily_stats(date: datetime, stats_data: dict) -> DailyStats
     except Exception as e:
         db.session.rollback()
         print(f"Error creating/updating daily stats: {e}")
-        raise e
-
-# Student Progress Methods
-
-def get_student_progress(student_id: str, subject: str = None) -> List[StudentProgress]:
-    """Get progress records for a student, optionally filtered by subject."""
-    query = StudentProgress.query.filter_by(student_id=student_id)
-    
-    if subject:
-        query = query.filter_by(subject=subject)
-    
-    return query.order_by(StudentProgress.date).all()
-
-def get_latest_student_progress(student_id: str, subject: str) -> Optional[StudentProgress]:
-    """Get the most recent progress record for a student in a subject."""
-    return StudentProgress.query.filter_by(
-        student_id=student_id, subject=subject
-    ).order_by(desc(StudentProgress.date)).first()
-
-def create_student_progress(progress_data: dict) -> StudentProgress:
-    """Create a new student progress record."""
-    try:
-        progress = StudentProgress(**progress_data)
-        db.session.add(progress)
-        db.session.commit()
-        return progress
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error creating student progress: {e}")
         raise e
 
 # Analytics Query Methods
