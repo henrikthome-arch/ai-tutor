@@ -99,7 +99,7 @@ def admin_dashboard():
     stats = student_service.get_system_stats()
     recent_students = student_service.get_all_students()[:5]  # Get 5 most recent
     phone_mappings = student_service.get_phone_mappings()
-    students_info = {s['id']: s for s in student_service.get_all_students()}
+    students_info = {s.id: s for s in student_service.get_all_students()}
     
     return render_template('dashboard.html',
                          stats=stats,
@@ -361,10 +361,10 @@ def admin_system():
     students = student_service.get_all_students()
     students_info = {}
     for student in students:
-        students_info[student['id']] = {
-            'name': student['name'],
-            'id': student['id'],
-            'grade': student['grade']
+        students_info[student.id] = {
+            'name': student.name,
+            'id': student.id,
+            'grade': student.grade
         }
     
     # Get recent system events from system logs
