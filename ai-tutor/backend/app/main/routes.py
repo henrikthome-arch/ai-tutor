@@ -1464,32 +1464,36 @@ def curriculum_details(curriculum_id):
         flash('Curriculum not found', 'error')
         return redirect(url_for('main.admin_curriculum'))
     
-    # Get curriculum details ordered by grade and order_index
+    # Get curriculum details ordered by grade_level
     details = db.session.query(CurriculumDetail).filter_by(curriculum_id=curriculum_id)\
-                       .order_by(CurriculumDetail.grade, CurriculumDetail.order_index).all()
+                       .order_by(CurriculumDetail.grade_level).all()
     
-    # Group details by grade and subject
-    details_by_grade = {}
+    # Group details by subject (as expected by template)
+    details_by_subject = {}
     for detail in details:
-        grade = detail.grade
-        if grade not in details_by_grade:
-            details_by_grade[grade] = {}
+        subject_name = detail.subject.name if detail.subject else 'Unknown Subject'
+        grade = detail.grade_level
         
-        subject = detail.subject
-        if subject not in details_by_grade[grade]:
-            details_by_grade[grade][subject] = []
+        # Initialize subject if not exists
+        if subject_name not in details_by_subject:
+            details_by_subject[subject_name] = {
+                'subject': detail.subject,
+                'grades': {}
+            }
         
-        details_by_grade[grade][subject].append({
+        # Add grade-specific detail to subject
+        details_by_subject[subject_name]['grades'][grade] = {
             'id': detail.id,
-            'code': detail.code,
-            'description': detail.description,
-            'learning_objectives': detail.learning_objectives,
-            'order_index': detail.order_index
-        })
+            'subject_name': subject_name,
+            'goals_description': detail.goals_description,
+            'learning_objectives': detail.learning_objectives or [],
+            'is_mandatory': detail.is_mandatory,
+            'recommended_hours_per_week': detail.recommended_hours_per_week
+        }
     
     return render_template('curriculum_details.html',
                          curriculum=curriculum,
-                         details_by_grade=details_by_grade,
+                         details_by_subject=details_by_subject,
                          total_details=len(details))
 
 # MCP Interactions Management Routes
