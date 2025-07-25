@@ -20,16 +20,49 @@ class SessionService:
     
     def get_all_sessions(self) -> List[Dict[str, Any]]:
         """
-        Get all sessions
+        Get all sessions with formatted data for admin template
         
         Returns:
-            List of session dictionaries
+            List of session dictionaries formatted for template
         """
         try:
-            sessions = Session.query.all()
-            return [session.to_dict() for session in sessions] if hasattr(Session, 'to_dict') else []
+            # Query sessions with student information
+            sessions_query = db.session.query(Session, Student).join(
+                Student, Session.student_id == Student.id
+            ).order_by(Session.start_datetime.desc()).all()
+            
+            formatted_sessions = []
+            for session, student in sessions_query:
+                # Convert duration from seconds to minutes
+                duration_minutes = None
+                if session.duration:
+                    duration_minutes = round(session.duration / 60, 1)
+                
+                # Check if transcript and summary exist
+                has_transcript = bool(session.transcript and session.transcript.strip())
+                has_summary = bool(session.summary and session.summary.strip())
+                
+                formatted_session = {
+                    'id': session.id,
+                    'student_id': session.student_id,
+                    'student_name': f"{student.first_name} {student.last_name}".strip(),
+                    'start_datetime': session.start_datetime.isoformat() if session.start_datetime else None,
+                    'duration': session.duration,  # Keep original for calculations
+                    'duration_minutes': duration_minutes,  # For display
+                    'session_type': session.session_type or 'phone',
+                    'transcript': session.transcript,
+                    'summary': session.summary,
+                    'has_transcript': has_transcript,
+                    'has_summary': has_summary,
+                    'call_id': f"session_{session.id}"  # Fallback call ID
+                }
+                formatted_sessions.append(formatted_session)
+            
+            print(f"📋 Loaded {len(formatted_sessions)} sessions for admin display")
+            return formatted_sessions
+            
         except Exception as e:
-            print(f"Error getting all sessions: {e}")
+            print(f"❌ Error getting all sessions: {e}")
             return []
     
     def get_session_by_id(self, session_id: str) -> Optional[Dict[str, Any]]:

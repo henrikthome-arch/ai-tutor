@@ -367,6 +367,27 @@ def admin_system():
             'grade': student['grade']
         }
     
+    # Get recent system events from system logs
+    try:
+        recent_events = system_logger.get_logs(days=1, limit=10)  # Last 24 hours, max 10 events
+        system_events = []
+        
+        for log_entry in recent_events:
+            # Convert log entry to system event format
+            event = {
+                'timestamp': log_entry.get('timestamp', ''),
+                'message': log_entry.get('message', ''),
+                'user': log_entry.get('metadata', {}).get('admin_user', log_entry.get('metadata', {}).get('user', 'System')),
+                'status': 'success' if log_entry.get('level', '').upper() in ['INFO', 'DEBUG'] else 'warning' if log_entry.get('level', '').upper() == 'WARNING' else 'error'
+            }
+            system_events.append(event)
+        
+        print(f"📋 Loaded {len(system_events)} recent system events for display")
+        
+    except Exception as e:
+        print(f"⚠️ Error fetching system events: {e}")
+        system_events = []
+    
     return render_template('system.html',
                          stats=stats,
                          phone_mappings=phone_mappings,
@@ -374,7 +395,7 @@ def admin_system():
                          system_stats=stats,
                          mcp_port=3001,
                          vapi_status=vapi_client.is_configured(),
-                         system_events=[])
+                         system_events=system_events)
 
 # Phone Mapping Management
 @main.route('/admin/phone-mappings/remove', methods=['POST'])
