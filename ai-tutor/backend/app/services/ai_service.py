@@ -3,8 +3,8 @@ Service for AI processing with support for asynchronous tasks.
 """
 
 import logging
-from app.ai.session_processor import SessionProcessor
-from app.tasks.ai_tasks import process_ai_response, analyze_session_transcript
+from ai.session_processor import SessionProcessor
+from tasks.ai_tasks import process_ai_response, analyze_session_transcript
 
 logger = logging.getLogger(__name__)
 
