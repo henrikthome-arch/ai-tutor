@@ -32,8 +32,8 @@ from app.services.session_service import SessionService
 from app.services.analytics_service import AnalyticsService
 from app.services.mcp_interaction_service import MCPInteractionService
 
-# Create blueprint
-main = Blueprint('main', __name__)
+# Import the blueprint from __init__.py
+from app.main import bp as main
 
 # Initialize services
 student_service = StudentService()
