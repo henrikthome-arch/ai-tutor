@@ -1079,6 +1079,8 @@ def admin_database():
     from app.models.curriculum import Curriculum
     from app.models.student import Student
     from app.models.session import Session
+    from app.models.profile import Profile
+    from app.models.school import School
     
     try:
         # Count records in each table
@@ -1086,9 +1088,28 @@ def admin_database():
         student_count = db.session.query(Student).count()
         session_count = db.session.query(Session).count()
         
+        # Try to count other tables safely
+        profile_count = 0
+        school_count = 0
+        try:
+            profile_count = db.session.query(Profile).count()
+            school_count = db.session.query(School).count()
+        except Exception as e:
+            print(f"Error counting profiles/schools: {e}")
+        
         # Check for default curriculum
         default_curriculum = db.session.query(Curriculum).filter_by(is_default=True).first()
         
+        # Statistics for template compatibility
+        stats = {
+            'students': student_count,
+            'schools': school_count,
+            'curriculums': curriculum_count,
+            'sessions': session_count,
+            'assessments': 0  # Placeholder
+        }
+        
+        # Database stats for detailed info
         db_stats = {
             'curriculum_count': curriculum_count,
             'student_count': student_count,
@@ -1097,7 +1118,25 @@ def admin_database():
             'default_curriculum_name': default_curriculum.name if default_curriculum else None
         }
         
+        # Mock tables list for template compatibility
+        tables = [
+            {'name': 'students', 'count': student_count, 'url': url_for('main.admin_students')},
+            {'name': 'sessions', 'count': session_count, 'url': url_for('main.admin_all_sessions')},
+            {'name': 'curriculums', 'count': curriculum_count, 'url': url_for('main.admin_curriculum')},
+            {'name': 'schools', 'count': school_count, 'url': url_for('main.admin_schools')},
+            {'name': 'profiles', 'count': profile_count, 'url': '#'}
+        ]
+        
     except Exception as e:
+        print(f"Error in admin_database: {e}")
+        stats = {
+            'students': 0,
+            'schools': 0,
+            'curriculums': 0,
+            'sessions': 0,
+            'assessments': 0
+        }
+        
         db_stats = {
             'curriculum_count': 0,
             'student_count': 0,
@@ -1106,8 +1145,10 @@ def admin_database():
             'default_curriculum_name': None,
             'error': str(e)
         }
+        
+        tables = []
     
-    return render_template('database.html', db_stats=db_stats)
+    return render_template('database.html', stats=stats, db_stats=db_stats, tables=tables)
 
 @main.route('/admin/database/reset', methods=['POST'])
 def reset_database():

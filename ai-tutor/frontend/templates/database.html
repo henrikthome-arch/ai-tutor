@@ -219,7 +219,7 @@ document.addEventListener('DOMContentLoaded', function() {
         formData.append('confirm', 'true');
         
         // Send reset request
-        fetch('{{ url_for("main.admin_database_reset") }}', {
+        fetch('{{ url_for("main.reset_database") }}', {
             method: 'POST',
             body: formData
         })
