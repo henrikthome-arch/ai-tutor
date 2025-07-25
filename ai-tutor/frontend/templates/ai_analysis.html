@@ -36,7 +36,7 @@
                     </div>
                     {% endif %}
                     
-                    <form id="providerSwitchForm" method="POST" action="{{ url_for('switch_ai_provider') }}">
+                    <form id="providerSwitchForm" method="POST" action="{{ url_for('main.switch_ai_provider') }}">
                         <div class="form-group">
                             <label for="provider">Switch Provider:</label>
                             <select name="provider" class="form-control" id="providerSelect">
@@ -167,7 +167,7 @@
                 <div class="card-body">
                     <p>Test the AI analysis system with sample educational session data:</p>
                     
-                    <form method="POST" action="{{ url_for('test_sample_analysis') }}">
+                    <form method="POST" action="{{ url_for('main.test_sample_analysis') }}">
                         <button type="submit" class="btn btn-success">
                             <i class="fas fa-play"></i> Run Sample Analysis
                         </button>
@@ -195,12 +195,12 @@
                     <p>Analyze real student session transcripts:</p>
                     
                     <div class="list-group">
-                        <a href="{{ url_for('analyze_student_session', student_id='emma_smith') }}" 
+                        <a href="{{ url_for('main.analyze_student_session', student_id='emma_smith') }}"
                            class="list-group-item list-group-item-action">
                             <i class="fas fa-analytics"></i> Analyze Emma Smith's Session
                             <small class="text-muted d-block">Mathematics - Linear Equations</small>
                         </a>
-                        <a href="{{ url_for('analyze_student_session', student_id='jane_doe') }}" 
+                        <a href="{{ url_for('main.analyze_student_session', student_id='jane_doe') }}"
                            class="list-group-item list-group-item-action">
                             <i class="fas fa-analytics"></i> Analyze Jane Doe's Session
                             <small class="text-muted d-block">General Education Session</small>
@@ -228,7 +228,7 @@ document.getElementById('providerSwitchForm').addEventListener('submit', functio
     
     const formData = new FormData(this);
     
-    fetch('{{ url_for("switch_ai_provider") }}', {
+    fetch('{{ url_for("main.switch_ai_provider") }}', {
         method: 'POST',
         body: formData
     })
@@ -249,7 +249,7 @@ document.getElementById('providerSwitchForm').addEventListener('submit', functio
 // Reset statistics
 function resetStats() {
     if (confirm('Are you sure you want to reset all processing statistics?')) {
-        fetch('{{ url_for("reset_ai_stats") }}', {
+        fetch('{{ url_for("main.reset_ai_stats") }}', {
             method: 'POST'
         })
         .then(response => response.json())
@@ -269,7 +269,7 @@ function resetStats() {
 
 // Auto-refresh stats every 30 seconds
 setInterval(function() {
-    fetch('{{ url_for("api_ai_stats") }}')
+    fetch('{{ url_for("main.api_ai_stats") }}')
     .then(response => response.json())
     .then(data => {
         // Update stats if needed (you could implement live updates here)
