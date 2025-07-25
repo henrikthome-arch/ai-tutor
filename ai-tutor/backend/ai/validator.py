@@ -7,7 +7,7 @@ import re
 from typing import Dict, Any, List
 from dataclasses import dataclass
 
-from .providers import BasicAnalysis
+from .providers import AnalysisResult
 
 @dataclass
 class ValidationResult:
@@ -33,7 +33,7 @@ class BasicValidator:
             'comprehension', 'engagement', 'improvement', 'mastery', 'concept'
         ]
     
-    def validate_analysis(self, analysis: BasicAnalysis, transcript: str) -> ValidationResult:
+    def validate_analysis(self, analysis: AnalysisResult, transcript: str) -> ValidationResult:
         """Basic validation checks for educational analysis"""
         
         issues = []
@@ -78,7 +78,7 @@ class BasicValidator:
             confidence_adjusted=confidence_adjusted
         )
     
-    def _check_completeness(self, analysis: BasicAnalysis, issues: List[str]) -> float:
+    def _check_completeness(self, analysis: AnalysisResult, issues: List[str]) -> float:
         """Check if all required fields are present and meaningful"""
         
         score = 0.0
@@ -122,7 +122,7 @@ class BasicValidator:
         
         return score / total_checks
     
-    def _check_quality_indicators(self, analysis: BasicAnalysis, warnings: List[str]) -> float:
+    def _check_quality_indicators(self, analysis: AnalysisResult, warnings: List[str]) -> float:
         """Check for educational quality indicators in the analysis"""
         
         # Combine all analysis text
@@ -147,7 +147,7 @@ class BasicValidator:
         
         return score
     
-    def _check_appropriateness(self, analysis: BasicAnalysis, issues: List[str]) -> float:
+    def _check_appropriateness(self, analysis: AnalysisResult, issues: List[str]) -> float:
         """Check for inappropriate content or error messages"""
         
         # Combine all analysis text
@@ -170,7 +170,7 @@ class BasicValidator:
         
         return 1.0
     
-    def _check_confidence(self, analysis: BasicAnalysis, warnings: List[str]) -> float:
+    def _check_confidence(self, analysis: AnalysisResult, warnings: List[str]) -> float:
         """Check confidence score validity"""
         
         if analysis.confidence_score < 0.0 or analysis.confidence_score > 1.0:
@@ -182,7 +182,7 @@ class BasicValidator:
         
         return analysis.confidence_score
     
-    def _check_performance(self, analysis: BasicAnalysis, warnings: List[str]) -> float:
+    def _check_performance(self, analysis: AnalysisResult, warnings: List[str]) -> float:
         """Check processing performance metrics"""
         
         score = 1.0
@@ -199,7 +199,7 @@ class BasicValidator:
         
         return score
     
-    def _check_evidence_grounding(self, analysis: BasicAnalysis, transcript: str, warnings: List[str]) -> float:
+    def _check_evidence_grounding(self, analysis: AnalysisResult, transcript: str, warnings: List[str]) -> float:
         """Basic check for evidence grounding"""
         
         if not transcript or len(transcript.strip()) < 50:
