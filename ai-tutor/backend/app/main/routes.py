@@ -1398,7 +1398,9 @@ def admin_curriculum():
     from app.models.curriculum import Curriculum, CurriculumDetail
     
     try:
-        # Get all curriculums with their details count
+        from app.models.curriculum import Subject
+        
+        # Get all curriculums with their details count and subjects count
         curriculums = db.session.query(Curriculum).all()
         
         curriculum_data = []
@@ -1407,6 +1409,13 @@ def admin_curriculum():
         
         for curriculum in curriculums:
             details_count = db.session.query(CurriculumDetail).filter_by(curriculum_id=curriculum.id).count()
+            
+            # Get unique subjects for this curriculum
+            subjects_count = db.session.query(Subject.id)\
+                                    .join(CurriculumDetail, Subject.id == CurriculumDetail.subject_id)\
+                                    .filter(CurriculumDetail.curriculum_id == curriculum.id)\
+                                    .distinct().count()
+            
             total_details += details_count
             
             curriculum_info = {
@@ -1419,13 +1428,16 @@ def admin_curriculum():
                 'is_template': curriculum.is_template,
                 'created_by': curriculum.created_by,
                 'created_at': curriculum.created_at,
-                'details_count': details_count
+                'details_count': details_count,
+                'subjects_count': subjects_count
             }
             
             curriculum_data.append(curriculum_info)
             
             if curriculum.is_default:
                 default_curriculum = curriculum_info
+                
+            print(f"📚 Curriculum {curriculum.name}: {subjects_count} subjects, {details_count} details")
         
         stats = {
             'total_curriculums': len(curriculums),
@@ -1454,45 +1466,69 @@ def curriculum_details(curriculum_id):
     if not check_auth():
         return redirect(url_for('main.admin_login'))
     
-    from app import db
-    from app.models.curriculum import Curriculum, CurriculumDetail
-    
-    curriculum = db.session.query(Curriculum).get(curriculum_id)
-    if not curriculum:
-        flash('Curriculum not found', 'error')
+    try:
+        from app import db
+        from app.models.curriculum import Curriculum, CurriculumDetail
+        from app.models.curriculum import Subject
+        
+        curriculum = db.session.query(Curriculum).get(curriculum_id)
+        if not curriculum:
+            flash('Curriculum not found', 'error')
+            return redirect(url_for('main.admin_curriculum'))
+        
+        print(f"📋 Loading curriculum details for curriculum {curriculum_id}: {curriculum.name}")
+        
+        # Get curriculum details with eager loading of subject relationship
+        details = db.session.query(CurriculumDetail)\
+                           .join(Subject, CurriculumDetail.subject_id == Subject.id)\
+                           .filter(CurriculumDetail.curriculum_id == curriculum_id)\
+                           .order_by(CurriculumDetail.grade_level)\
+                           .all()
+        
+        print(f"📊 Found {len(details)} curriculum details")
+        
+        # Group details by subject (as expected by template)
+        details_by_subject = {}
+        for detail in details:
+            try:
+                subject_name = detail.subject.name if detail.subject else 'Unknown Subject'
+                grade = detail.grade_level
+                
+                print(f"📖 Processing {subject_name} for grade {grade}")
+                
+                # Initialize subject if not exists
+                if subject_name not in details_by_subject:
+                    details_by_subject[subject_name] = {
+                        'subject': detail.subject,
+                        'grades': {}
+                    }
+                
+                # Add grade-specific detail to subject
+                details_by_subject[subject_name]['grades'][grade] = {
+                    'id': detail.id,
+                    'subject_name': subject_name,
+                    'goals_description': detail.goals_description,
+                    'learning_objectives': detail.learning_objectives or [],
+                    'is_mandatory': detail.is_mandatory,
+                    'recommended_hours_per_week': detail.recommended_hours_per_week
+                }
+            except Exception as detail_error:
+                print(f"❌ Error processing detail {detail.id}: {detail_error}")
+                continue
+        
+        print(f"✅ Successfully grouped {len(details_by_subject)} subjects")
+        
+        return render_template('curriculum_details.html',
+                             curriculum=curriculum,
+                             details_by_subject=details_by_subject,
+                             total_details=len(details))
+                             
+    except Exception as e:
+        print(f"❌ Error in curriculum_details for curriculum {curriculum_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        flash(f'Error loading curriculum details: {str(e)}', 'error')
         return redirect(url_for('main.admin_curriculum'))
-    
-    # Get curriculum details ordered by grade_level
-    details = db.session.query(CurriculumDetail).filter_by(curriculum_id=curriculum_id)\
-                       .order_by(CurriculumDetail.grade_level).all()
-    
-    # Group details by subject (as expected by template)
-    details_by_subject = {}
-    for detail in details:
-        subject_name = detail.subject.name if detail.subject else 'Unknown Subject'
-        grade = detail.grade_level
-        
-        # Initialize subject if not exists
-        if subject_name not in details_by_subject:
-            details_by_subject[subject_name] = {
-                'subject': detail.subject,
-                'grades': {}
-            }
-        
-        # Add grade-specific detail to subject
-        details_by_subject[subject_name]['grades'][grade] = {
-            'id': detail.id,
-            'subject_name': subject_name,
-            'goals_description': detail.goals_description,
-            'learning_objectives': detail.learning_objectives or [],
-            'is_mandatory': detail.is_mandatory,
-            'recommended_hours_per_week': detail.recommended_hours_per_week
-        }
-    
-    return render_template('curriculum_details.html',
-                         curriculum=curriculum,
-                         details_by_subject=details_by_subject,
-                         total_details=len(details))
 
 # MCP Interactions Management Routes
 @main.route('/admin/mcp-interactions')
