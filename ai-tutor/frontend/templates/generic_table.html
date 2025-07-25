@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}{{ table_name|title }} - Database Table{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('main.admin_dashboard') }}">📊 Dashboard</a> / 
+    <a href="{{ url_for('main.admin_database') }}">🗄️ Database</a> / 
+    <span>{{ table_name|title }}</span>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <div>
+        <h1 style="color: #2c3e50; margin-bottom: 0.5rem;">📋 {{ table_name|title }} Table</h1>
+        <p style="color: #7f8c8d; margin: 0;">{{ rows|length }} records found</p>
+    </div>
+    <div>
+        <button id="copyTableBtn" class="btn" style="background: #3498db; color: white; margin-right: 1rem;">
+            📋 Copy Table Data
+        </button>
+        <a href="{{ url_for('main.admin_database') }}" class="btn" style="background: #7f8c8d;">
+            ← Back to Database
+        </a>
+    </div>
+</div>
+
+<!-- Table Statistics -->
+<div class="card" style="margin-bottom: 2rem;">
+    <h2>📊 Table Information</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        <div class="stat-card">
+            <h3>{{ rows|length }}</h3>
+            <p>Total Records</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ columns|length }}</h3>
+            <p>Columns</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ table_name }}</h3>
+            <p>Table Name</p>
+        </div>
+    </div>
+</div>
+
+<!-- Table Data -->
+<div class="card">
+    <h2>📋 Table Contents</h2>
+    
+    {% if rows %}
+    <div style="overflow-x: auto;">
+        <table class="table" id="dataTable">
+            <thead>
+                <tr>
+                    {% for column in columns %}
+                    <th>{{ column }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    {% for column in columns %}
+                    <td>
+                        {% set value = row[column] %}
+                        {% if value is none %}
+                            <span style="color: #999; font-style: italic;">NULL</span>
+                        {% elif value is sameas true %}
+                            <span style="color: #27ae60; font-weight: bold;">✓ TRUE</span>
+                        {% elif value is sameas false %}
+                            <span style="color: #e74c3c; font-weight: bold;">✗ FALSE</span>
+                        {% elif value is string and value|length > 100 %}
+                            <span title="{{ value }}">{{ value[:100] }}...</span>
+                        {% else %}
+                            {{ value }}
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 3rem; color: #666;">
+        <h3>No Data Found</h3>
+        <p>This table appears to be empty.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Copy Status Toast -->
+<div id="copyToast" style="display: none; position: fixed; top: 20px; right: 20px; background: #27ae60; color: white; padding: 1rem 1.5rem; border-radius: 4px; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+    ✅ {{ table_name|title }} table data copied to clipboard!
+</div>
+
+<style>
+.stat-card {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid #e9ecef;
+}
+
+.stat-card h3 {
+    margin: 0 0 0.5rem 0;
+    color: #2c3e50;
+    font-size: 1.5rem;
+}
+
+.stat-card p {
+    margin: 0;
+    color: #7f8c8d;
+    font-size: 0.9rem;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+}
+
+.table th,
+.table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 0.9rem;
+}
+
+.table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    color: #2c3e50;
+    position: sticky;
+    top: 0;
+}
+
+.table tr:hover {
+    background-color: #f8f9fa;
+}
+
+@media (max-width: 768px) {
+    .table th,
+    .table td {
+        padding: 8px;
+        font-size: 0.8rem;
+    }
+    
+    .stat-card {
+        padding: 1rem;
+    }
+}
+</style>
+
+<!-- Hidden data for JavaScript -->
+<script type="application/json" id="tableData">
+{
+    "tableName": "{{ table_name }}",
+    "columns": {{ columns|tojson }},
+    "rows": {{ rows|tojson }},
+    "rowCount": {{ rows|length }}
+}
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const copyBtn = document.getElementById('copyTableBtn');
+    const copyToast = document.getElementById('copyToast');
+    const tableData = JSON.parse(document.getElementById('tableData').textContent);
+    
+    copyBtn.addEventListener('click', function() {
+        copyTableData();
+    });
+    
+    function copyTableData() {
+        let markdown = `# ${tableData.tableName.charAt(0).toUpperCase() + tableData.tableName.slice(1)} Table Data\n\n`;
+        markdown += `**Table:** ${tableData.tableName}\n`;
+        markdown += `**Records:** ${tableData.rowCount}\n`;
+        markdown += `**Columns:** ${tableData.columns.length}\n`;
+        markdown += `**Export Date:** ${new Date().toLocaleString()}\n\n`;
+        
+        if (tableData.rows && tableData.rows.length > 0) {
+            // Build markdown table
+            markdown += `## Table Contents\n\n`;
+            markdown += `| ${tableData.columns.join(' | ')} |\n`;
+            markdown += `| ${tableData.columns.map(() => '---').join(' | ')} |\n`;
+            
+            tableData.rows.forEach(row => {
+                markdown += `| `;
+                tableData.columns.forEach((column, index) => {
+                    let value = row[column];
+                    if (value === null || value === undefined) {
+                        value = 'NULL';
+                    } else if (value === true) {
+                        value = 'TRUE';
+                    } else if (value === false) {
+                        value = 'FALSE';
+                    } else if (typeof value === 'string' && value.includes('|')) {
+                        value = value.replace(/\|/g, '\\|');
+                    }
+                    markdown += String(value);
+                    if (index < tableData.columns.length - 1) {
+                        markdown += ' | ';
+                    }
+                });
+                markdown += ' |\n';
+            });
+        } else {
+            markdown += `*No data found in this table.*\n`;
+        }
+        
+        // Copy to clipboard
+        navigator.clipboard.writeText(markdown).then(function() {
+            showCopyToast();
+        }).catch(function(err) {
+            console.error('Failed to copy text: ', err);
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = markdown;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            showCopyToast();
+        });
+    }
+    
+    function showCopyToast() {
+        copyToast.style.display = 'block';
+        setTimeout(function() {
+            copyToast.style.display = 'none';
+        }, 3000);
+    }
+});
+</script>
+
+{% endblock %}

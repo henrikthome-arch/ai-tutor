@@ -1106,16 +1106,7 @@ def admin_database():
         
         print(f"📊 Auto-discovered {len(all_table_names)} database tables: {all_table_names}")
         
-        # Dictionary to map table names to admin URLs where available
-        table_urls = {
-            'students': url_for('main.admin_students'),
-            'sessions': url_for('main.admin_all_sessions'),
-            'curriculums': url_for('main.admin_curriculum'),
-            'schools': url_for('main.admin_schools'),
-            'tokens': url_for('main.admin_tokens'),
-            'system_logs': url_for('main.admin_system_logs'),
-            'mcp_interactions': url_for('main.admin_mcp_interactions')
-        }
+        # All tables will use the generic table viewer
         
         # Auto-discover all tables and get their counts
         tables = []
@@ -1132,8 +1123,7 @@ def admin_database():
                 # Add to tables list
                 tables.append({
                     'name': table_name,
-                    'count': count,
-                    'url': table_urls.get(table_name, '#')
+                    'count': count
                 })
                 
                 # Add to stats for main tables
@@ -1147,8 +1137,7 @@ def admin_database():
                 print(f"⚠️ Error counting records in table {table_name}: {e}")
                 tables.append({
                     'name': table_name,
-                    'count': 0,
-                    'url': table_urls.get(table_name, '#')
+                    'count': 0
                 })
         
         # Ensure all required stats fields exist
@@ -1655,3 +1644,52 @@ def search_mcp_interactions():
                              'limit': limit
                          },
                          result_count=len(interactions))
+
+# Generic Database Table Viewer Route
+@main.route('/admin/database/table/<table_name>')
+def view_database_table(table_name):
+   """Generic database table viewer for any table"""
+   if not check_auth():
+       return redirect(url_for('main.admin_login'))
+   
+   from app import db
+   from sqlalchemy import text, inspect
+   
+   try:
+       # Validate table exists using SQLAlchemy inspector
+       inspector = inspect(db.engine)
+       all_table_names = inspector.get_table_names()
+       
+       if table_name not in all_table_names:
+           flash(f'Table "{table_name}" not found in database', 'error')
+           return redirect(url_for('main.admin_database'))
+       
+       # Get table columns
+       columns_info = inspector.get_columns(table_name)
+       columns = [col['name'] for col in columns_info]
+       
+       # Get all rows from the table
+       query = text(f"SELECT * FROM {table_name} ORDER BY {columns[0]} DESC LIMIT 1000")  # Limit to 1000 rows for performance
+       result = db.session.execute(query)
+       
+       # Convert rows to dictionaries
+       rows = []
+       for row in result:
+           row_dict = {}
+           for i, column in enumerate(columns):
+               row_dict[column] = row[i]
+           rows.append(row_dict)
+       
+       log_admin_action('view_database_table', session.get('admin_username', 'unknown'),
+                       table_name=table_name,
+                       row_count=len(rows))
+       
+       return render_template('generic_table.html',
+                            table_name=table_name,
+                            columns=columns,
+                            rows=rows)
+       
+   except Exception as e:
+       log_error('DATABASE', f'Error viewing table {table_name}', e)
+       flash(f'Error loading table "{table_name}": {str(e)}', 'error')
+       return redirect(url_for('main.admin_database'))
