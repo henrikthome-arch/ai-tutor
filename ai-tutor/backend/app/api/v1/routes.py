@@ -367,13 +367,13 @@ def create_student_from_call(phone: str, call_id: str) -> str:
     # Ensure phone is normalized for consistent lookup and storage
     normalized_phone = normalize_phone_number(phone)
     
-    # Use last 4 digits of normalized phone for ID creation
-    phone_suffix = normalized_phone[-4:] if normalized_phone else ""
-    student_id = f"student_{phone_suffix}" if phone else f"unknown_{call_id[-6:]}"
+    # Generate a descriptive name suffix from phone for the student name
+    phone_suffix = normalized_phone[-4:] if normalized_phone else call_id[-6:]
+    caller_name = f"Caller {phone_suffix}"
     
-    # Create student with basic info
+    # Create student with basic info - let database generate integer ID
     return student_service.create_student_from_call(
-        student_id=student_id,
+        student_id=caller_name,  # Use as name suffix, not ID
         phone=normalized_phone,
         call_id=call_id
     )

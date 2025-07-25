@@ -347,21 +347,21 @@ class StudentService:
     def create_student_from_call(self, student_id: str, phone: str, call_id: str) -> str:
         """Create a new student from call data"""
         try:
-            # Create student with basic info
+            # Create student with basic info - student_id param is actually used as name suffix
             student_data = {
                 'first_name': 'Unknown',
-                'last_name': f'Caller {student_id}',
+                'last_name': student_id,  # This is actually the caller name like "Caller 6010"
                 'phone_number': phone,
                 'student_type': 'International'
             }
             
             student = Student(**student_data)
             db.session.add(student)
-            db.session.flush()  # Get the ID
+            db.session.flush()  # Get the database-generated integer ID
             
             # Create basic profile
             profile = Profile(
-                student_id=student.id,
+                student_id=student.id,  # Use the real integer ID from database
                 grade='Unknown',
                 curriculum='Unknown',
                 interests=[],
@@ -370,13 +370,14 @@ class StudentService:
             db.session.add(profile)
             db.session.commit()
             
+            # Return the actual database-generated integer ID as string
             return str(student.id)
             
         except Exception as e:
             db.session.rollback()
             print(f"Error creating student from call: {e}")
-            # Return the original student_id as fallback
-            return student_id
+            # Don't return a string ID as fallback since it causes database errors
+            raise e
     
     def remove_phone_mapping(self, phone_number: str) -> bool:
         """Remove phone mapping (set phone to None)"""
