@@ -75,12 +75,35 @@ graph TD
   │   ├── services/             # Business logic layer
   │   ├── repositories/         # Data access layer
   │   ├── main/                # Admin UI blueprint
-  │   │   ├── __init__.py
+  │   │   ├── __init__.py      # Blueprint config (points to frontend templates)
   │   │   └── routes.py        # Admin dashboard routes (1,511 lines)
   │   └── api/                 # REST API blueprint
   │       ├── __init__.py
   │       └── v1/routes.py     # API endpoints & VAPI webhooks (1,042 lines)
   └── admin-server-legacy-backup.py  # Archived monolithic version
+  
+  ai-tutor/frontend/
+  ├── templates/                # HTML templates for admin interface
+  │   ├── base.html            # Base template with navigation
+  │   ├── login.html           # Admin login page
+  │   ├── dashboard.html       # Main admin dashboard
+  │   ├── students.html        # Student management interface
+  │   ├── student_detail.html  # Individual student details
+  │   ├── schools.html         # School management
+  │   ├── sessions.html        # Session management
+  │   ├── system.html          # System status and monitoring
+  │   ├── files.html           # File browser interface
+  │   ├── curriculum.html      # Curriculum management
+  │   ├── database.html        # Database management interface
+  │   ├── tokens.html          # Token management
+  │   ├── system_logs.html     # System logs viewer
+  │   ├── ai_analysis.html     # AI analysis dashboard
+  │   ├── mcp_interactions.html # MCP interaction monitoring
+  │   └── admin/              # Advanced admin templates
+  │       ├── analytics.html   # System analytics
+  │       ├── generate_token.html # Token generation
+  │       └── student_analytics.html # Student-specific analytics
+  └── static/                  # Static assets (CSS, JS, images)
   ```
 - **Responsibilities**:
   - **Application Factory**: Environment-based app creation with extension initialization
@@ -580,6 +603,13 @@ All prompts generate structured JSON responses with standardized fields:
 - **Token Persistence**: Tokens survive all deployments via PostgreSQL storage
 - **Zero-Downtime**: Managed service ensures availability during updates
 - **Gunicorn Integration**: Production WSGI server with gevent workers for performance
+
+### 7.5. Template Architecture
+- **Template Repository**: All HTML templates centrally managed in [`ai-tutor/frontend/templates/`](ai-tutor/frontend/templates/)
+- **Blueprint Configuration**: Main blueprint configured with `template_folder='../../../frontend/templates'`
+- **Template Separation**: Frontend templates separated from backend logic for maintainability
+- **Comprehensive Coverage**: 30+ templates covering complete admin interface functionality
+- **Template Hierarchy**: Base templates with inheritance for consistent UI/UX
 
 ### 7.4. Database Migration Process
 - **Migration Scripts**: Flask-Migrate generates and applies schema changes
