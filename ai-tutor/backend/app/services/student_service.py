@@ -80,10 +80,8 @@ class StudentService:
                         curriculum_id=default_curriculum_obj.id
                     ).count()
                     
-                    # Count students using default curriculum (approximation)
-                    students_with_default_curriculum = Student.query.join(Profile).filter(
-                        Profile.curriculum == default_curriculum_obj.name
-                    ).count() if hasattr(Student, 'profile') else 0
+                    # Count students using default curriculum (approximation - legacy Profile removed)
+                    students_with_default_curriculum = 0  # Legacy Profile table no longer used
                     
             except Exception as curriculum_e:
                 print(f"Error getting curriculum stats: {curriculum_e}")
@@ -207,21 +205,13 @@ class StudentService:
             for student in students:
                 student_dict = student.to_dict()
                 
-                # Add profile information if exists
-                if student.profile:
-                    student_dict.update({
-                        'interests': student.profile.interests or [],
-                        'learning_preferences': student.profile.learning_preferences or [],
-                        'grade': student.profile.grade or 'Unknown',
-                        'curriculum': student.profile.curriculum or 'Unknown'
-                    })
-                else:
-                    student_dict.update({
-                        'interests': [],
-                        'learning_preferences': [],
-                        'grade': 'Unknown',
-                        'curriculum': 'Unknown'
-                    })
+                # Use Student table fields directly (Profile is legacy)
+                student_dict.update({
+                    'interests': [],  # Legacy field, not stored in Student table
+                    'learning_preferences': [],  # Legacy field, not stored in Student table
+                    'grade': student.get_grade() or 'Unknown',
+                    'curriculum': 'Unknown'  # Legacy field, not stored in Student table
+                })
                 
                 # Format for template compatibility - ensure all required fields
                 student_dict.update({
@@ -278,30 +268,17 @@ class StudentService:
             # Base student data
             student_data = student.to_dict()
             
-            # Profile data
-            profile_data = {}
-            if student.profile:
-                profile_data = {
-                    'name': student.full_name,
-                    'age': student.age,
-                    'grade': student.profile.grade,
-                    'curriculum': student.profile.curriculum,
-                    'interests': student.profile.interests or [],
-                    'learning_preferences': student.profile.learning_preferences or [],
-                    'learning_style': student.profile.learning_style,
-                    'motivational_triggers': student.profile.motivational_triggers
-                }
-            else:
-                profile_data = {
-                    'name': student.full_name,
-                    'age': student.age,
-                    'grade': 'Unknown',
-                    'curriculum': 'Unknown',
-                    'interests': [],
-                    'learning_preferences': [],
-                    'learning_style': 'Unknown',
-                    'motivational_triggers': 'Unknown'
-                }
+            # Profile data from Student table (Profile is legacy)
+            profile_data = {
+                'name': student.full_name,
+                'age': student.age,
+                'grade': student.get_grade() or 'Unknown',
+                'curriculum': 'Unknown',  # Legacy field, not in Student table
+                'interests': [],  # Legacy field, not in Student table
+                'learning_preferences': [],  # Legacy field, not in Student table
+                'learning_style': 'Unknown',  # Legacy field, not in Student table
+                'motivational_triggers': []  # Legacy field, not in Student table
+            }
             
             # Sessions data
             sessions_data = []
@@ -359,15 +336,7 @@ class StudentService:
             db.session.add(student)
             db.session.flush()  # Get the database-generated integer ID
             
-            # Create basic profile
-            profile = Profile(
-                student_id=student.id,  # Use the real integer ID from database
-                grade='Unknown',
-                curriculum='Unknown',
-                interests=[],
-                learning_preferences=[]
-            )
-            db.session.add(profile)
+            # Commit the student creation (no separate Profile needed - data is in Student table)
             db.session.commit()
             
             # Return the actual database-generated integer ID as string
@@ -441,15 +410,8 @@ class StudentService:
             db.session.add(student)
             db.session.flush()
             
-            # Create profile
-            profile = Profile(
-                student_id=student.id,
-                grade=str(grade),
-                curriculum='Unknown',
-                interests=interests,
-                learning_preferences=[]
-            )
-            db.session.add(profile)
+            # Set grade level directly on student
+            student.grade_level = grade
             db.session.commit()
             
             return str(student.id)
@@ -477,19 +439,8 @@ class StudentService:
                 birth_year = datetime.now().year - age
                 student.date_of_birth = date(birth_year, 1, 1)
             
-            # Update profile
-            if student.profile:
-                student.profile.grade = str(grade)
-                student.profile.interests = interests
-            else:
-                profile = Profile(
-                    student_id=student.id,
-                    grade=str(grade),
-                    curriculum='Unknown',
-                    interests=interests,
-                    learning_preferences=[]
-                )
-                db.session.add(profile)
+            # Update grade level directly on student (Profile is legacy)
+            student.grade_level = grade
             
             db.session.commit()
             return True
