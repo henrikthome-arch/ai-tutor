@@ -4,7 +4,16 @@ This document outlines the detailed requirements for the AI Tutor system, coveri
 
 ## 1. System Requirements
 
-### 1.1. Functional Requirements
+### 1.1. Architectural Requirements
+
+-   **Application Factory Pattern**: The system must use Flask Application Factory pattern for clean, testable, and environment-aware application creation.
+-   **Blueprint Architecture**: All routes must be organized into domain-specific blueprints (main, api) for modular development and maintenance.
+-   **Service Layer Pattern**: Business logic must be separated from route handlers through a dedicated service layer.
+-   **Repository Pattern**: Data access must be abstracted through repository classes for consistent database operations.
+-   **Modular Design**: The system must maintain clear separation of concerns with models, services, repositories, and route handlers in separate modules.
+-   **Environment Configuration**: Support for multiple environments (development, testing, production) with appropriate configuration classes.
+
+### 1.2. Functional Requirements
 
 -   **Multi-Channel Interaction**: Support for tutoring sessions via phone calls, with a design that accommodates future channels like web and mobile apps.
 -   **Context-Aware Conversation**: Provide the AI tutor with relevant student context at the start of each session.

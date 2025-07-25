@@ -632,7 +632,9 @@ DO NOT use nested "subjects" object. Use flat "favorite_subjects" and "challengi
             
             # Get student from database
             try:
-                student = Student.query.get(student_id)
+                from sqlalchemy import select
+                stmt = select(Student).where(Student.id == student_id)
+                student = db.session.execute(stmt).scalar_one_or_none()
                 if not student:
                     logger.warning(f"Student {student_id} not found in database")
                     return False
@@ -824,7 +826,9 @@ DO NOT use nested "subjects" object. Use flat "favorite_subjects" and "challengi
                 return False
             
             # Get session from database
-            session = Session.query.get(session_id)
+            from sqlalchemy import select
+            stmt = select(Session).where(Session.id == session_id)
+            session = db.session.execute(stmt).scalar_one_or_none()
             if not session:
                 logger.warning(f"Session {session_id} not found for storing AI processing step")
                 return False

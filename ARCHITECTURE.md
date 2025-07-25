@@ -18,43 +18,80 @@ The AI Tutor system is a cloud-native, PostgreSQL-backed platform that provides 
 
 ### 2.1. Core Components
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        AI Tutor System                         │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
-│  │   Admin Web     │  │   Flask API     │  │   MCP Server    │  │
-│  │   Dashboard     │  │    Backend      │  │   (Node.js)     │  │
-│  │   (Flask)       │  │                 │  │                 │  │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘  │
-│           │                     │                     │          │
-│           └─────────────────────┼─────────────────────┘          │
-│                                 │                                │
-│  ┌─────────────────────────────────────────────────────────────┐  │
-│  │              PostgreSQL Database                            │  │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌───────┐  │  │
-│  │  │Students │ │Sessions │ │ Tokens  │ │ Logs    │ │School │  │  │
-│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └───────┘  │  │
-│  └─────────────────────────────────────────────────────────────┘  │
-│                                 │                                │
-│  ┌─────────────────────────────────────────────────────────────┐  │
-│  │                  VAPI Integration                           │  │
-│  │              (External Service)                             │  │
-│  └─────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph "Entry & Config"
+        A[run.py] --> B["app/__init__.py: create_app()"];
+        B --> C{Initialize Extensions};
+        B --> D{Register Blueprints};
+    end
+
+    subgraph "Blueprints Layer (Routes)"
+        direction LR
+        D --> E["main Blueprint <br> (admin dashboard)"];
+        D --> F["api Blueprint <br> (REST API & Webhooks)"];
+    end
+    
+    subgraph "Service Layer (Business Logic)"
+        E --> G["StudentService"];
+        E --> H["SessionService"];
+        F --> I["AIService"];
+        F --> J["TokenService"];
+    end
+
+    subgraph "Data Access Layer (DAL)"
+        G --> K["StudentRepository"];
+        H --> L["SessionRepository"];
+        I --> K;
+        J --> M["TokenRepository"];
+        
+        K --> N["Student/Profile Models"];
+        L --> O["Session Model"];
+        M --> P["Token Model"];
+    end
+
+    subgraph "Database"
+      N & O & P --> Q[("PostgreSQL DB")];
+    end
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style B fill:#ccf,stroke:#333,stroke-width:2px
+    style Q fill:#bbf,stroke:#333,stroke-width:2px,shape:cylinder
 ```
 
 #### 2.1.1. Flask Backend (`ai-tutor/backend/`)
 - **Purpose**: Main application server providing web UI and APIs
-- **Framework**: Flask with SQLAlchemy ORM
+- **Framework**: Flask with Application Factory Pattern and Blueprint Architecture
+- **Architecture**: Modular service-oriented design with clean separation of concerns
+- **Entry Point**: [`run.py`](ai-tutor/backend/run.py) using application factory pattern
+- **Core Structure**:
+  ```
+  ai-tutor/backend/
+  ├── run.py                     # Production entry point
+  ├── app/
+  │   ├── __init__.py           # Application factory (create_app)
+  │   ├── config.py             # Environment configurations
+  │   ├── models/               # SQLAlchemy database models
+  │   ├── services/             # Business logic layer
+  │   ├── repositories/         # Data access layer
+  │   ├── main/                # Admin UI blueprint
+  │   │   ├── __init__.py
+  │   │   └── routes.py        # Admin dashboard routes (1,511 lines)
+  │   └── api/                 # REST API blueprint
+  │       ├── __init__.py
+  │       └── v1/routes.py     # API endpoints & VAPI webhooks (1,042 lines)
+  └── admin-server-legacy-backup.py  # Archived monolithic version
+  ```
 - **Responsibilities**:
-  - Admin dashboard web interface (hybrid repository and direct ORM access)
-  - RESTful API endpoints (for external access)
-  - VAPI webhook processing
-  - Student profile management
-  - Session data processing
-  - Token-based authentication
-  - AI prompt management via file-based system
+  - **Application Factory**: Environment-based app creation with extension initialization
+  - **Blueprint Architecture**: Modular route organization by domain
+  - **Service Layer**: Clean business logic separation from route handlers
+  - **Repository Pattern**: Consistent data access abstraction
+  - **Admin Dashboard**: Web interface via main blueprint
+  - **RESTful API**: External access via api blueprint
+  - **VAPI Integration**: Webhook processing and call management
+  - **Authentication**: Token-based and session-based security
+  - **AI Integration**: Structured prompt management and analysis
 
 #### 2.1.2. MCP Server (`mcp-server/`)
 - **Purpose**: Model Context Protocol server for external data access
@@ -514,23 +551,35 @@ All prompts generate structured JSON responses with standardized fields:
 
 ### 7.1. Render.com Deployment
 - **Platform**: Render.com managed services
-- **Web Service**: Flask application (auto-deploy from Git)
+- **Web Service**: Flask application using Application Factory pattern
+- **Entry Point**: [`run.py`](ai-tutor/backend/run.py) with production-ready configuration
 - **Database**: Managed PostgreSQL service
-- **Environment**: Production-ready with health checks
+- **Environment**: Production-ready with health checks and automatic table creation
 
-### 7.2. Environment Configuration
-- **Development**: Local PostgreSQL for development consistency
-- **Production**: Managed PostgreSQL with connection pooling
-- **Configuration**: Environment variables for all secrets
-- **Logging**: Centralized logging to PostgreSQL
+### 7.2. Application Factory Deployment
+- **Production Entry**: `run.py` creates Flask app using `create_app()` factory function
+- **Environment Detection**: Automatic development/production configuration selection
+- **Extension Initialization**: SQLAlchemy, JWT, Celery initialized via factory
+- **Blueprint Registration**: Modular route registration through application factory
+- **Database Auto-Setup**: Automatic table creation on first deployment
 
-### 7.3. Deployment Features
-- **Auto-Deploy**: Git-based deployment triggers
-- **Health Checks**: Built-in endpoint monitoring
+### 7.3. Environment Configuration
+- **Development**: Local development with SQLite/PostgreSQL
+- **Production**: Managed PostgreSQL with connection pooling and environment-based config
+- **Configuration Classes**: Separate config classes for dev/test/production environments
+- **Environment Variables**: All secrets and deployment-specific settings via env vars
+- **Logging**: Centralized PostgreSQL-based logging with structured event tracking
+
+### 7.4. Deployment Features
+- **Auto-Deploy**: Git-based deployment triggers using new application factory
+- **Health Checks**: Built-in `/health` endpoint monitoring
 - **Database Migrations**: SQLAlchemy-based schema updates with Flask-Migrate
+- **Service Layer**: Clean business logic separation for easier testing and deployment
+- **Blueprint Architecture**: Modular deployment with separate admin UI and API services
 - **Data Seeding**: Automatic creation of default curriculum and system data
-- **Token Persistence**: Tokens survive all deployments
-- **Zero-Downtime**: Managed service ensures availability
+- **Token Persistence**: Tokens survive all deployments via PostgreSQL storage
+- **Zero-Downtime**: Managed service ensures availability during updates
+- **Gunicorn Integration**: Production WSGI server with gevent workers for performance
 
 ### 7.4. Database Migration Process
 - **Migration Scripts**: Flask-Migrate generates and applies schema changes

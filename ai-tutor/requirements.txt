@@ -14,5 +14,7 @@ alembic==1.12.1
 flask-migrate==4.0.5
 flask-sqlalchemy==3.1.1
 gunicorn==21.2.0
+gevent==23.9.0
 python-dotenv==1.0.0
 requests==2.31.0
+asyncio
