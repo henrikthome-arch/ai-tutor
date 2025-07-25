@@ -1118,11 +1118,11 @@ def reset_database():
     try:
         from app import db
         from app.models.curriculum import Curriculum, Subject, CurriculumDetail
-        from app.models.student import Student, StudentSubject
+        from app.models.student import Student
+        from app.models.assessment import StudentSubject
         from app.models.session import Session
-        from app.models.assessment import Assessment, AssessmentResult
-        from app.models.analytics import AnalyticsData
-        from app.models.profile import UserProfile
+        from app.models.analytics import SessionMetrics, DailyStats
+        from app.models.profile import Profile
         from app.models.school import School
         from app.models.system_log import SystemLog
         from app.models.token import Token
