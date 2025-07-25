@@ -73,50 +73,50 @@
             </thead>
             <tbody>
                 {% for session in sessions %}
-                <tr class="session-row" 
-                    data-student="{{ session.student_name|lower }}"
-                    data-type="{{ session.type }}"
-                    data-date="{{ session.date }}"
-                    data-analysis="{{ 'yes' if session.has_analysis else 'no' }}">
+                <tr class="session-row"
+                    data-student="{{ session['student_name']|lower if session['student_name'] else '' }}"
+                    data-type="{{ session['session_type'] }}"
+                    data-date="{{ session['start_datetime'][:10] if session['start_datetime'] else '' }}"
+                    data-analysis="{{ 'yes' if session['has_summary'] else 'no' }}">
                     <td>
-                        <strong>{{ session.student_name }}</strong><br>
-                        <small style="color: #666;">{{ session.student_id }}</small>
+                        <strong>{{ session['student_name'] or 'Unknown' }}</strong><br>
+                        <small style="color: #666;">{{ session['student_id'] }}</small>
                     </td>
-                    <td>{{ session.student_grade }}</td>
-                    <td>{{ session.date }}</td>
-                    <td>{{ session.time if session.time else 'N/A' }}</td>
+                    <td>N/A</td>
+                    <td>{{ session['start_datetime'][:10] if session['start_datetime'] else 'N/A' }}</td>
+                    <td>{{ session['start_datetime'][11:16] if session['start_datetime'] and session['start_datetime']|length > 16 else 'N/A' }}</td>
                     <td>
-                        {% if session.duration != 'Unknown' %}
-                            {{ session.duration }} min
+                        {% if session['duration_minutes'] %}
+                            {{ session['duration_minutes'] }} min
                         {% else %}
                             Unknown
                         {% endif %}
                     </td>
                     <td>
-                        <span class="badge {% if session.type == 'VAPI Call' %}badge-primary{% else %}badge-secondary{% endif %}">
-                            {{ session.type }}
+                        <span class="badge {% if session['session_type'] == 'phone' %}badge-primary{% else %}badge-secondary{% endif %}">
+                            {{ session['session_type']|title }}
                         </span>
                     </td>
                     <td>
                         <div style="display: flex; gap: 0.5rem; align-items: center;">
-                            {% if session.has_transcript %}
+                            {% if session['has_transcript'] %}
                                 <span title="Has Transcript" style="color: #27ae60;">📄</span>
                             {% endif %}
-                            {% if session.has_analysis %}
+                            {% if session['has_summary'] %}
                                 <span title="Has AI Analysis" style="color: #3498db;">🤖</span>
                             {% endif %}
-                            {% if not session.has_transcript and not session.has_analysis %}
+                            {% if not session['has_transcript'] and not session['has_summary'] %}
                                 <span style="color: #95a5a6;">—</span>
                             {% endif %}
                         </div>
                     </td>
                     <td>
                         <div style="display: flex; gap: 0.5rem;">
-                            <a href="{{ url_for('main.view_session_detail', student_id=session.student_id, session_file=session.file or (session.date + '_summary.json')) }}"
+                            <a href="{{ url_for('main.view_session_detail', student_id=session['student_id'], session_file=session.get('call_id', 'session_' + session['id']|string) + '_summary.json') }}"
                                class="btn btn-sm" style="font-size: 12px; padding: 5px 10px;">
                                 View
                             </a>
-                            <a href="{{ url_for('main.admin_student_detail', student_id=session.student_id) }}"
+                            <a href="{{ url_for('main.admin_student_detail', student_id=session['student_id']) }}"
                                class="btn btn-sm" style="font-size: 12px; padding: 5px 10px; background: #95a5a6;">
                                 Student
                             </a>
