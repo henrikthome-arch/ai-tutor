@@ -1076,59 +1076,100 @@ def admin_database():
     
     # Get database statistics
     from app import db
-    from app.models.curriculum import Curriculum
-    from app.models.student import Student
-    from app.models.session import Session
-    from app.models.profile import Profile
-    from app.models.school import School
+    from sqlalchemy import inspect, text
     
     try:
-        # Count records in each table
-        curriculum_count = db.session.query(Curriculum).count()
-        student_count = db.session.query(Student).count()
-        session_count = db.session.query(Session).count()
+        # Use SQLAlchemy inspector to auto-discover all tables
+        inspector = inspect(db.engine)
+        all_table_names = inspector.get_table_names()
         
-        # Try to count other tables safely
-        profile_count = 0
-        school_count = 0
-        try:
-            profile_count = db.session.query(Profile).count()
-            school_count = db.session.query(School).count()
-        except Exception as e:
-            print(f"Error counting profiles/schools: {e}")
+        print(f"📊 Auto-discovered {len(all_table_names)} database tables: {all_table_names}")
+        
+        # Dictionary to map table names to admin URLs where available
+        table_urls = {
+            'students': url_for('main.admin_students'),
+            'sessions': url_for('main.admin_all_sessions'),
+            'curriculums': url_for('main.admin_curriculum'),
+            'schools': url_for('main.admin_schools'),
+            'tokens': url_for('main.admin_tokens'),
+            'system_logs': url_for('main.admin_system_logs'),
+            'mcp_interactions': url_for('main.admin_mcp_interactions')
+        }
+        
+        # Auto-discover all tables and get their counts
+        tables = []
+        stats = {}
+        total_records = 0
+        
+        for table_name in sorted(all_table_names):
+            try:
+                # Get record count for each table using raw SQL
+                result = db.session.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
+                count = result.scalar()
+                total_records += count
+                
+                # Add to tables list
+                tables.append({
+                    'name': table_name,
+                    'count': count,
+                    'url': table_urls.get(table_name, '#')
+                })
+                
+                # Add to stats for main tables
+                if table_name in ['students', 'schools', 'curriculums', 'sessions', 'student_subjects']:
+                    if table_name == 'student_subjects':
+                        stats['assessments'] = count
+                    else:
+                        stats[table_name] = count
+                
+            except Exception as e:
+                print(f"⚠️ Error counting records in table {table_name}: {e}")
+                tables.append({
+                    'name': table_name,
+                    'count': 0,
+                    'url': table_urls.get(table_name, '#')
+                })
+        
+        # Ensure all required stats fields exist
+        required_stats = ['students', 'schools', 'curriculums', 'sessions', 'assessments']
+        for stat in required_stats:
+            if stat not in stats:
+                stats[stat] = 0
         
         # Check for default curriculum
-        default_curriculum = db.session.query(Curriculum).filter_by(is_default=True).first()
+        default_curriculum = None
+        default_curriculum_name = None
         
-        # Statistics for template compatibility
-        stats = {
-            'students': student_count,
-            'schools': school_count,
-            'curriculums': curriculum_count,
-            'sessions': session_count,
-            'assessments': 0  # Placeholder
-        }
+        if 'curriculums' in all_table_names:
+            try:
+                result = db.session.execute(text("SELECT name FROM curriculums WHERE is_default = true LIMIT 1"))
+                default_row = result.fetchone()
+                if default_row:
+                    default_curriculum_name = default_row[0]
+                    default_curriculum = True
+                else:
+                    default_curriculum = False
+            except Exception as e:
+                print(f"⚠️ Error checking default curriculum: {e}")
+                default_curriculum = False
+        else:
+            default_curriculum = False
         
         # Database stats for detailed info
         db_stats = {
-            'curriculum_count': curriculum_count,
-            'student_count': student_count,
-            'session_count': session_count,
-            'has_default_curriculum': default_curriculum is not None,
-            'default_curriculum_name': default_curriculum.name if default_curriculum else None
+            'total_tables': len(all_table_names),
+            'total_records': total_records,
+            'curriculum_count': stats.get('curriculums', 0),
+            'student_count': stats.get('students', 0),
+            'session_count': stats.get('sessions', 0),
+            'has_default_curriculum': default_curriculum,
+            'default_curriculum_name': default_curriculum_name
         }
         
-        # Mock tables list for template compatibility
-        tables = [
-            {'name': 'students', 'count': student_count, 'url': url_for('main.admin_students')},
-            {'name': 'sessions', 'count': session_count, 'url': url_for('main.admin_all_sessions')},
-            {'name': 'curriculums', 'count': curriculum_count, 'url': url_for('main.admin_curriculum')},
-            {'name': 'schools', 'count': school_count, 'url': url_for('main.admin_schools')},
-            {'name': 'profiles', 'count': profile_count, 'url': '#'}
-        ]
+        print(f"✅ Database discovery complete: {len(tables)} tables found, {total_records} total records")
         
     except Exception as e:
-        print(f"Error in admin_database: {e}")
+        print(f"❌ Error in admin_database: {e}")
         stats = {
             'students': 0,
             'schools': 0,
@@ -1138,6 +1179,8 @@ def admin_database():
         }
         
         db_stats = {
+            'total_tables': 0,
+            'total_records': 0,
             'curriculum_count': 0,
             'student_count': 0,
             'session_count': 0,
