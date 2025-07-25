@@ -6,7 +6,8 @@ from typing import Dict, List, Optional, Any
 from sqlalchemy import and_
 
 from app import db
-from app.models.curriculum import Curriculum, Subject, CurriculumDetail, SchoolDefaultSubject
+from app.models.curriculum import Curriculum, Subject, CurriculumDetail
+# Note: SchoolDefaultSubject removed - was documented but never implemented
 
 def get_all() -> List[Dict[str, Any]]:
     """

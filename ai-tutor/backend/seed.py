@@ -14,7 +14,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from app import create_app, db
 from app.models.school import School
-from app.models.curriculum import Curriculum, Subject, CurriculumDetail, SchoolDefaultSubject
+from app.models.curriculum import Curriculum, Subject, CurriculumDetail
+# Note: SchoolDefaultSubject removed - was documented but never implemented
 from app.models.student import Student
 
 def create_default_subjects():
@@ -271,7 +272,7 @@ def get_social_studies_objectives(grade):
     return objectives.get(grade, [f'Grade {grade} social studies'])
 
 def create_school_defaults(schools, curriculums, subjects):
-    """Create default subject assignments for schools"""
+    """Create default curriculum assignments for schools"""
     for school in schools:
         # Assign default curriculum if not already set
         if not school.default_curriculum_id and curriculums:
@@ -283,26 +284,11 @@ def create_school_defaults(schools, curriculums, subjects):
                 # Assign first available curriculum
                 school.default_curriculum_id = curriculums[0].id
         
-        # Create default subject assignments
-        core_subjects = [s for s in subjects if s.is_core]
-        for subject in core_subjects:
-            # Check if assignment already exists
-            existing_assignment = SchoolDefaultSubject.query.filter_by(
-                school_id=school.id, 
-                subject_id=subject.id
-            ).first()
-            
-            if not existing_assignment:
-                assignment = SchoolDefaultSubject(
-                    school_id=school.id,
-                    subject_id=subject.id,
-                    is_required=subject.is_core,
-                    default_hours_per_week=4 if subject.is_core else 2,
-                    grade_levels=[1, 2, 3, 4, 5, 6]
-                )
-                db.session.add(assignment)
+        # Note: SchoolDefaultSubject functionality removed - was documented but never implemented
+        # Schools now use the default curriculum system instead
+        # Individual students receive curriculum assignments via StudentSubject records
         
-        print(f"✅ Created default subjects for {school.name}")
+        print(f"✅ Assigned default curriculum to {school.name}")
     
     db.session.commit()
 
