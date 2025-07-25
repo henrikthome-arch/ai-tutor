@@ -9,7 +9,66 @@ from typing import Dict, List, Optional, Any
 from app import db
 from app.models.analytics import SessionMetrics, DailyStats
 
-# Session Metrics Methods
+class AnalyticsRepository:
+    """Repository class for analytics data access."""
+    
+    def __init__(self, db_session):
+        """Initialize with database session."""
+        self.session = db_session or db.session
+    
+    # Session Metrics Methods
+    def get_session_metrics(self, session_id: str) -> Optional[SessionMetrics]:
+        """Get metrics for a specific session."""
+        return get_session_metrics(session_id)
+    
+    def create_session_metrics(self, metrics_data: dict) -> SessionMetrics:
+        """Create new session metrics."""
+        return create_session_metrics(metrics_data)
+    
+    def update_session_metrics(self, session_id: str, metrics_data: dict) -> Optional[SessionMetrics]:
+        """Update existing session metrics."""
+        return update_session_metrics(session_id, metrics_data)
+    
+    # Daily Stats Methods
+    def get_daily_stats(self, date: datetime) -> Optional[DailyStats]:
+        """Get stats for a specific date."""
+        return get_daily_stats(date)
+    
+    def get_daily_stats_range(self, start_date: datetime, end_date: datetime) -> List[DailyStats]:
+        """Get stats for a date range."""
+        return get_daily_stats_range(start_date, end_date)
+    
+    def create_or_update_daily_stats(self, date: datetime, stats_data: dict) -> DailyStats:
+        """Create or update daily stats."""
+        return create_or_update_daily_stats(date, stats_data)
+    
+    # Analytics Query Methods
+    def get_popular_topics(self, days: int = 30) -> dict:
+        """Get popular topics from the last N days."""
+        return get_popular_topics(days)
+    
+    def get_student_engagement_over_time(self, student_id: str, days: int = 90) -> List[SessionMetrics]:
+        """Get a student's engagement metrics over time."""
+        return get_student_engagement_over_time(student_id, days)
+    
+    def get_system_performance_metrics(self, days: int = 30) -> dict:
+        """Get system performance metrics for the dashboard."""
+        return get_system_performance_metrics(days)
+    
+    # Student Progress Methods (stubs for missing functionality)
+    def get_student_progress(self, student_id: str) -> List:
+        """Get student progress records - stub implementation."""
+        return []
+    
+    def get_latest_student_progress(self, student_id: str, subject: str) -> Optional[Any]:
+        """Get latest student progress - stub implementation."""
+        return None
+    
+    def create_student_progress(self, progress_data: dict) -> bool:
+        """Create student progress record - stub implementation."""
+        return True
+
+# Standalone functions (maintained for backward compatibility)
 
 def get_session_metrics(session_id: str) -> Optional[SessionMetrics]:
     """Get metrics for a specific session."""
