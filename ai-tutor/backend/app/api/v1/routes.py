@@ -112,6 +112,7 @@ def verify_vapi_signature(payload_body, signature, headers_info):
 @api.route('/vapi/webhook', methods=['POST'])
 def vapi_webhook():
     """Handle VAPI webhook events - simplified API-first approach"""
+    mcp_request_id = None
     try:
         # Get raw payload for signature verification
         payload = request.get_data(as_text=True)
@@ -126,6 +127,31 @@ def vapi_webhook():
             'all_header_names': list(request.headers.keys())
         }
         
+        # Parse the webhook data first to get call info for MCP logging
+        data = request.get_json()
+        message = data.get('message', {}) if data else {}
+        call_id = message.get('call', {}).get('id') if isinstance(message, dict) else None
+        
+        # MCP INTERACTION LOGGING: Log the incoming VAPI webhook request
+        try:
+            mcp_request_id = mcp_interaction_service.log_request(
+                endpoint='vapi_webhook',
+                request_data={
+                    'message_type': message.get('type'),
+                    'call_id': call_id,
+                    'phone_number': message.get('phoneNumber'),
+                    'payload_size': len(payload),
+                    'signature_provided': bool(signature),
+                    'headers': vapi_headers
+                },
+                session_id=call_id
+            )
+            print(f"🔄 MCP interaction logged: {mcp_request_id}")
+        except Exception as mcp_error:
+            log_error('MCP_LOGGING', f"Error logging MCP request for VAPI webhook", mcp_error,
+                     call_id=call_id)
+            print(f"⚠️ Error logging MCP request: {mcp_error}")
+        
         # Verify signature
         if not verify_vapi_signature(payload, signature, headers_info):
             log_webhook('SECURITY_FAILURE', 'VAPI webhook signature verification failed',
@@ -133,41 +159,97 @@ def vapi_webhook():
                        signature_provided=bool(signature),
                        payload_size=len(payload))
             print(f"🚨 VAPI webhook signature verification failed")
+            
+            # Log MCP response for failed signature
+            if mcp_request_id:
+                try:
+                    mcp_interaction_service.log_response(
+                        request_id=mcp_request_id,
+                        response_data={'error': 'Invalid signature'},
+                        http_status_code=401
+                    )
+                except Exception as mcp_error:
+                    print(f"⚠️ Error logging MCP response for failed signature: {mcp_error}")
+            
             return jsonify({'error': 'Invalid signature'}), 401
         
-        # Parse the webhook data
-        data = request.get_json()
         if not data:
             log_webhook('INVALID_PAYLOAD', 'VAPI webhook received empty or invalid payload',
                        ip_address=request.remote_addr,
                        payload_size=len(payload))
+            
+            # Log MCP response for invalid payload
+            if mcp_request_id:
+                try:
+                    mcp_interaction_service.log_response(
+                        request_id=mcp_request_id,
+                        response_data={'error': 'Invalid payload'},
+                        http_status_code=400
+                    )
+                except Exception as mcp_error:
+                    print(f"⚠️ Error logging MCP response for invalid payload: {mcp_error}")
+            
             return jsonify({'error': 'Invalid payload'}), 400
         
-        message = data.get('message', {})
         message_type = message.get('type')
         
         log_webhook(message_type or 'unknown-event', f"VAPI webhook received: {message_type}",
                    ip_address=request.remote_addr,
-                   call_id=message.get('call', {}).get('id') if isinstance(message, dict) else None,
+                   call_id=call_id,
                    payload_size=len(payload))
         print(f"📞 VAPI webhook received: {message_type}")
+        
+        # Process the webhook and prepare response
+        response_data = {'status': 'ok'}
+        status_code = 200
         
         # Only handle end-of-call-report - ignore all other events
         if message_type == 'end-of-call-report':
             handle_end_of_call_api_driven(message)
+            response_data['processed'] = True
+            response_data['message_type'] = message_type
         else:
             # Log but ignore other events
             log_webhook('ignored-event', f"Ignored VAPI event: {message_type}",
-                       call_id=message.get('call', {}).get('id') if isinstance(message, dict) else None)
+                       call_id=call_id)
             print(f"📝 Ignored VAPI event: {message_type}")
+            response_data['processed'] = False
+            response_data['ignored'] = True
+            response_data['message_type'] = message_type
         
-        return jsonify({'status': 'ok'}), 200
+        # MCP INTERACTION LOGGING: Log the successful response
+        if mcp_request_id:
+            try:
+                mcp_interaction_service.log_response(
+                    request_id=mcp_request_id,
+                    response_data=response_data,
+                    http_status_code=status_code
+                )
+                print(f"✅ MCP response logged for request: {mcp_request_id}")
+            except Exception as mcp_error:
+                log_error('MCP_LOGGING', f"Error logging MCP response for VAPI webhook", mcp_error,
+                         call_id=call_id, request_id=mcp_request_id)
+                print(f"⚠️ Error logging MCP response: {mcp_error}")
+        
+        return jsonify(response_data), status_code
         
     except Exception as e:
         log_error('WEBHOOK', f"VAPI webhook error: {str(e)}", e,
                  ip_address=request.remote_addr,
                  payload_size=len(payload) if 'payload' in locals() else 0)
         print(f"❌ VAPI webhook error: {e}")
+        
+        # Log MCP response for error
+        if mcp_request_id:
+            try:
+                mcp_interaction_service.log_response(
+                    request_id=mcp_request_id,
+                    response_data={'error': str(e)},
+                    http_status_code=500
+                )
+            except Exception as mcp_error:
+                print(f"⚠️ Error logging MCP response for webhook error: {mcp_error}")
+        
         return jsonify({'error': str(e)}), 500
 
 def handle_end_of_call_api_driven(message: Dict[Any, Any]) -> None:
@@ -344,16 +426,67 @@ def identify_or_create_student(phone_number: str, call_id: str) -> str:
     log_webhook('phone-lookup', f"Looking up student by phone: {clean_phone}",
                call_id=call_id, phone=clean_phone, original_phone=phone_number)
     
+    # MCP INTERACTION LOGGING: Log student lookup request
+    lookup_request_id = None
+    try:
+        lookup_request_id = mcp_interaction_service.log_request(
+            endpoint='student_lookup_by_phone',
+            request_data={
+                'phone_number': clean_phone,
+                'original_phone': phone_number,
+                'call_id': call_id
+            },
+            session_id=call_id
+        )
+        print(f"🔄 MCP student lookup logged: {lookup_request_id}")
+    except Exception as mcp_error:
+        log_error('MCP_LOGGING', f"Error logging MCP student lookup request", mcp_error,
+                 call_id=call_id, phone=clean_phone)
+        print(f"⚠️ Error logging MCP student lookup: {mcp_error}")
+    
     # Get student by phone
     student_id = student_service.get_student_by_phone(clean_phone)
     if student_id:
         log_webhook('student-identified', f"Found student {student_id}",
                    call_id=call_id, student_id=student_id, phone=clean_phone)
+        
+        # MCP INTERACTION LOGGING: Log successful student lookup
+        if lookup_request_id:
+            try:
+                mcp_interaction_service.log_response(
+                    request_id=lookup_request_id,
+                    response_data={
+                        'student_found': True,
+                        'student_id': student_id,
+                        'phone_number': clean_phone
+                    },
+                    http_status_code=200
+                )
+                print(f"✅ MCP student lookup response logged: {lookup_request_id}")
+            except Exception as mcp_error:
+                print(f"⚠️ Error logging MCP student lookup response: {mcp_error}")
+        
         return student_id
     
     # Create new student if not found
     log_webhook('student-not-found', f"No student found for phone: {clean_phone}",
                call_id=call_id, phone=clean_phone)
+    
+    # MCP INTERACTION LOGGING: Log student not found response
+    if lookup_request_id:
+        try:
+            mcp_interaction_service.log_response(
+                request_id=lookup_request_id,
+                response_data={
+                    'student_found': False,
+                    'phone_number': clean_phone,
+                    'will_create_new': True
+                },
+                http_status_code=404
+            )
+            print(f"✅ MCP student not found response logged: {lookup_request_id}")
+        except Exception as mcp_error:
+            print(f"⚠️ Error logging MCP student not found response: {mcp_error}")
     
     # Create new student
     new_student_id = create_student_from_call(clean_phone, call_id)
@@ -371,12 +504,72 @@ def create_student_from_call(phone: str, call_id: str) -> str:
     phone_suffix = normalized_phone[-4:] if normalized_phone else call_id[-6:]
     caller_name = f"Caller {phone_suffix}"
     
+    # MCP INTERACTION LOGGING: Log student creation request
+    creation_request_id = None
+    try:
+        creation_request_id = mcp_interaction_service.log_request(
+            endpoint='student_creation_from_call',
+            request_data={
+                'phone_number': normalized_phone,
+                'caller_name': caller_name,
+                'call_id': call_id,
+                'phone_suffix': phone_suffix
+            },
+            session_id=call_id
+        )
+        print(f"🔄 MCP student creation logged: {creation_request_id}")
+    except Exception as mcp_error:
+        log_error('MCP_LOGGING', f"Error logging MCP student creation request", mcp_error,
+                 call_id=call_id, phone=normalized_phone)
+        print(f"⚠️ Error logging MCP student creation: {mcp_error}")
+    
     # Create student with basic info - let database generate integer ID
-    return student_service.create_student_from_call(
-        student_id=caller_name,  # Use as name suffix, not ID
-        phone=normalized_phone,
-        call_id=call_id
-    )
+    try:
+        new_student_id = student_service.create_student_from_call(
+            student_id=caller_name,  # Use as name suffix, not ID
+            phone=normalized_phone,
+            call_id=call_id
+        )
+        
+        # MCP INTERACTION LOGGING: Log successful student creation
+        if creation_request_id:
+            try:
+                mcp_interaction_service.log_response(
+                    request_id=creation_request_id,
+                    response_data={
+                        'student_created': True,
+                        'new_student_id': new_student_id,
+                        'phone_number': normalized_phone,
+                        'caller_name': caller_name
+                    },
+                    http_status_code=201
+                )
+                print(f"✅ MCP student creation response logged: {creation_request_id}")
+            except Exception as mcp_error:
+                print(f"⚠️ Error logging MCP student creation response: {mcp_error}")
+        
+        return new_student_id
+        
+    except Exception as creation_error:
+        # MCP INTERACTION LOGGING: Log failed student creation
+        if creation_request_id:
+            try:
+                mcp_interaction_service.log_response(
+                    request_id=creation_request_id,
+                    response_data={
+                        'student_created': False,
+                        'error': str(creation_error),
+                        'phone_number': normalized_phone,
+                        'caller_name': caller_name
+                    },
+                    http_status_code=500
+                )
+                print(f"✅ MCP student creation error response logged: {creation_request_id}")
+            except Exception as mcp_error:
+                print(f"⚠️ Error logging MCP student creation error response: {mcp_error}")
+        
+        # Re-raise the original error
+        raise creation_error
 
 def save_api_driven_session(call_id: str, student_id: str, phone: str,
                            duration: int, transcript: str, call_data: Dict[Any, Any]):
