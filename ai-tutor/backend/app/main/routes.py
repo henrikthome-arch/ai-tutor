@@ -173,14 +173,31 @@ def admin_student_detail(student_id):
     
     # Process sessions for recent sessions display
     recent_sessions = []
-    for session in sessions[:5]:  # Last 5 sessions
-        recent_sessions.append({
-            'date': session.get('start_time', '').split('T')[0] if session.get('start_time') else 'Unknown',
-            'duration': session.get('duration_minutes', session.get('duration_seconds', 0) // 60 if session.get('duration_seconds') else 'Unknown'),
-            'topics': session.get('topics_covered', ['General']),
-            'engagement': session.get('engagement_score', 75),
-            'file': session.get('transcript_file', '')
-        })
+    for session_dict in sessions[:5]:  # Last 5 sessions
+        # Handle both database Session objects and dict format
+        if hasattr(session_dict, 'to_dict'):
+            # Database Session object
+            session_data = session_dict.to_dict()
+            recent_sessions.append({
+                'id': session_data.get('id'),
+                'date': session_data.get('start_datetime', '').split('T')[0] if session_data.get('start_datetime') else 'Unknown',
+                'duration': session_data.get('duration_minutes', session_data.get('duration', 0) // 60 if session_data.get('duration') else 'Unknown'),
+                'topics': ['VAPI Call'],  # Database sessions don't have topics_covered yet
+                'engagement': 75,  # Default engagement for now
+                'session_type': session_data.get('session_type', 'phone'),
+                'has_transcript': session_data.get('has_transcript', False),
+                'file': None  # Database sessions don't have files
+            })
+        else:
+            # Legacy file-based session dict
+            recent_sessions.append({
+                'id': None,
+                'date': session_dict.get('start_time', '').split('T')[0] if session_dict.get('start_time') else 'Unknown',
+                'duration': session_dict.get('duration_minutes', session_dict.get('duration_seconds', 0) // 60 if session_dict.get('duration_seconds') else 'Unknown'),
+                'topics': session_dict.get('topics_covered', ['General']),
+                'engagement': session_dict.get('engagement_score', 75),
+                'file': session_dict.get('transcript_file', '')
+            })
     
     return render_template('student_detail.html',
                          student=student,
