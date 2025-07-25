@@ -4,9 +4,18 @@ Service for AI processing with support for asynchronous tasks.
 
 import logging
 from ai.session_processor import SessionProcessor
-from tasks.ai_tasks import process_ai_response, analyze_session_transcript
 
 logger = logging.getLogger(__name__)
+
+# Try to import Celery tasks, but gracefully handle if they don't exist
+try:
+    from tasks.ai_tasks import process_ai_response, analyze_session_transcript
+    CELERY_AVAILABLE = True
+except ImportError:
+    logger.warning("Celery tasks not available - async processing disabled")
+    CELERY_AVAILABLE = False
+    process_ai_response = None
+    analyze_session_transcript = None
 
 class AIService:
     """Service for AI processing with support for asynchronous tasks."""
@@ -34,10 +43,14 @@ class AIService:
         
         logger.info(f"Generating AI response for session {session_id} (async={async_mode})")
         
-        if async_mode:
+        if async_mode and CELERY_AVAILABLE:
             # Process asynchronously using Celery
             task = process_ai_response.delay(prompt, model_params, session_id)
             return {"task_id": task.id, "status": "processing"}
+        elif async_mode and not CELERY_AVAILABLE:
+            logger.warning("Async mode requested but Celery not available, falling back to sync")
+            # Fall back to synchronous processing
+            return self.processor.process(prompt, model_params)
         else:
             # Process synchronously
             return self.processor.process(prompt, model_params)
@@ -57,10 +70,20 @@ class AIService:
         """
         logger.info(f"Analyzing transcript for session {session_id} (async={async_mode})")
         
-        if async_mode:
+        if async_mode and CELERY_AVAILABLE:
             # Process asynchronously using Celery
             task = analyze_session_transcript.delay(transcript, session_id)
             return {"task_id": task.id, "status": "processing"}
+        elif async_mode and not CELERY_AVAILABLE:
+            logger.warning("Async mode requested but Celery not available, falling back to sync")
+            # Fall back to synchronous processing
+            return {
+                "session_id": session_id,
+                "topics_covered": ["placeholder"],
+                "student_understanding": "placeholder",
+                "areas_for_improvement": ["placeholder"],
+                "recommended_next_steps": ["placeholder"]
+            }
         else:
             # This would use the AI to analyze the transcript synchronously
             # For now, we'll return a placeholder
