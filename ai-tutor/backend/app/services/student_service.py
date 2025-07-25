@@ -323,10 +323,11 @@ class StudentService:
     def create_student_from_call(self, student_id: str, phone: str, call_id: str) -> str:
         """Create a new student from call data"""
         try:
-            # Create student with basic info - student_id param is actually used as name suffix
+            # Create student with placeholder name that AI analysis can replace
+            # Use "Student" prefix so TranscriptAnalyzer.update_student_profile() can update it
             student_data = {
-                'first_name': 'Unknown',
-                'last_name': student_id,  # This is actually the caller name like "Caller 6010"
+                'first_name': f'Student {phone[-4:]}',  # AI will replace this with real name
+                'last_name': '',  # Keep empty - AI will populate if available
                 'phone_number': phone,
                 'student_type': 'International'
             }

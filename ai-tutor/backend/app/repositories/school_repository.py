@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Any
 
 from app import db
 from app.models.school import School
-from app.models.curriculum import SchoolDefaultSubject
+# Note: SchoolDefaultSubject model removed - was documented but never implemented
 
 def get_all() -> List[Dict[str, Any]]:
     """
@@ -81,9 +81,9 @@ def get_with_default_subjects(school_id) -> Dict[str, Any]:
         # Get school data
         school_data = school.to_dict()
         
-        # Get default subjects
-        default_subjects = SchoolDefaultSubject.query.filter_by(school_id=school_id_int).all()
-        school_data['default_subjects'] = [ds.to_dict() for ds in default_subjects]
+        # Note: SchoolDefaultSubject functionality removed - was documented but never implemented
+        # Schools now use the default curriculum system instead
+        school_data['default_subjects'] = []
         
         return school_data
     except (ValueError, TypeError):
@@ -108,21 +108,17 @@ def create(school_data: Dict[str, Any]) -> Dict[str, Any]:
         db.session.add(school)
         db.session.flush()  # Get the ID without committing
         
-        # Create default subject assignments if provided
-        for subject_data in default_subjects:
-            subject_data['school_id'] = school.id
-            default_subject = SchoolDefaultSubject(**subject_data)
-            db.session.add(default_subject)
+        # Note: SchoolDefaultSubject functionality removed - was documented but never implemented
+        # Schools now use the default curriculum system instead
+        if default_subjects:
+            print(f"Warning: default_subjects provided but SchoolDefaultSubject model removed. Use default curriculum system instead.")
         
         # Commit all changes
         db.session.commit()
         
         # Return school data
         result = school.to_dict()
-        if default_subjects:
-            # Reload default subjects with IDs
-            created_subjects = SchoolDefaultSubject.query.filter_by(school_id=school.id).all()
-            result['default_subjects'] = [ds.to_dict() for ds in created_subjects]
+        result['default_subjects'] = []  # Empty since model removed
         
         return result
     except Exception as e:
@@ -157,25 +153,15 @@ def update(school_id, school_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             if hasattr(school, key):
                 setattr(school, key, value)
         
-        # Update default subjects if provided
+        # Note: SchoolDefaultSubject functionality removed - was documented but never implemented
         if default_subjects is not None:
-            # Remove existing default subjects
-            SchoolDefaultSubject.query.filter_by(school_id=school_id_int).delete()
-            
-            # Add new default subjects
-            for subject_data in default_subjects:
-                subject_data['school_id'] = school_id_int
-                default_subject = SchoolDefaultSubject(**subject_data)
-                db.session.add(default_subject)
+            print(f"Warning: default_subjects provided but SchoolDefaultSubject model removed. Use default curriculum system instead.")
         
         db.session.commit()
         
         # Return updated school data
         result = school.to_dict()
-        if default_subjects is not None:
-            # Reload default subjects
-            updated_subjects = SchoolDefaultSubject.query.filter_by(school_id=school_id_int).all()
-            result['default_subjects'] = [ds.to_dict() for ds in updated_subjects]
+        result['default_subjects'] = []  # Empty since model removed
         
         return result
     except (ValueError, TypeError):
@@ -203,9 +189,7 @@ def delete(school_id) -> bool:
         if not school:
             return False
         
-        # Delete related default subjects first (foreign key constraint)
-        SchoolDefaultSubject.query.filter_by(school_id=school_id_int).delete()
-        
+        # Note: SchoolDefaultSubject functionality removed - was documented but never implemented
         # Note: Students associated with this school will have their school_id set to NULL
         # This is handled by the database foreign key constraint (nullable=True)
         
@@ -226,70 +210,35 @@ def add_default_subject(school_id, subject_data: Dict[str, Any]) -> Optional[Dic
     """
     Add a default subject to a school
     
+    Note: SchoolDefaultSubject functionality removed - was documented but never implemented
+    Schools now use the default curriculum system instead
+    
     Args:
         school_id: The school ID (int or str)
         subject_data: The subject assignment data
         
     Returns:
-        The created default subject assignment or None if school not found
+        None (functionality deprecated)
     """
-    try:
-        school_id_int = int(school_id)
-        school = School.query.get(school_id_int)
-        if not school:
-            return None
-        
-        # Add school_id to subject data
-        subject_data['school_id'] = school_id_int
-        
-        # Create default subject assignment
-        default_subject = SchoolDefaultSubject(**subject_data)
-        db.session.add(default_subject)
-        db.session.commit()
-        
-        return default_subject.to_dict()
-    except (ValueError, TypeError):
-        return None
-    except Exception as e:
-        # Rollback transaction on any error
-        db.session.rollback()
-        print(f"Error adding default subject: {e}")
-        raise e
+    print(f"Warning: add_default_subject called but SchoolDefaultSubject model removed. Use default curriculum system instead.")
+    return None
 
 def remove_default_subject(school_id, subject_id) -> bool:
     """
     Remove a default subject from a school
+    
+    Note: SchoolDefaultSubject functionality removed - was documented but never implemented
+    Schools now use the default curriculum system instead
     
     Args:
         school_id: The school ID (int or str)
         subject_id: The subject ID (int or str)
         
     Returns:
-        True if removed, False if not found
+        False (functionality deprecated)
     """
-    try:
-        school_id_int = int(school_id)
-        subject_id_int = int(subject_id)
-        
-        default_subject = SchoolDefaultSubject.query.filter_by(
-            school_id=school_id_int,
-            subject_id=subject_id_int
-        ).first()
-        
-        if not default_subject:
-            return False
-        
-        db.session.delete(default_subject)
-        db.session.commit()
-        
-        return True
-    except (ValueError, TypeError):
-        return False
-    except Exception as e:
-        # Rollback transaction on any error
-        db.session.rollback()
-        print(f"Error removing default subject: {e}")
-        raise e
+    print(f"Warning: remove_default_subject called but SchoolDefaultSubject model removed. Use default curriculum system instead.")
+    return False
 
 def get_students_count(school_id) -> int:
     """

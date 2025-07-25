@@ -591,7 +591,7 @@ DO NOT use nested "subjects" object. Use flat "favorite_subjects" and "challengi
             return {}
     
     def update_student_profile(self, student_id, extracted_info):
-        """Update student profile with extracted information using validated data model"""
+        """Update student profile with extracted information using Student model directly (Profile model removed)"""
         if not extracted_info:
             logger.info(f"No extracted_info provided for student {student_id}")
             return False
@@ -602,7 +602,6 @@ DO NOT use nested "subjects" object. Use flat "favorite_subjects" and "challengi
         try:
             # Import models and app context
             from app.models.student import Student
-            from app.models.profile import Profile
             from app import db
             import flask
             
@@ -613,7 +612,6 @@ DO NOT use nested "subjects" object. Use flat "favorite_subjects" and "challengi
             
             # Create AIExtractedProfile from the extracted info
             try:
-                # If extracted_info is already a validated dict, create profile from it
                 profile_data = AIExtractedProfile(
                     first_name=extracted_info.get('first_name'),
                     last_name=extracted_info.get('last_name'),
@@ -647,32 +645,17 @@ DO NOT use nested "subjects" object. Use flat "favorite_subjects" and "challengi
                 logger.error(f"Error getting student {student_id}: {e}")
                 return False
             
-            # Get or create profile for student
-            try:
-                profile = student.profile
-                if not profile:
-                    logger.info(f"Creating new profile for student {student_id}")
-                    profile = Profile(student_id=student_id)
-                    db.session.add(profile)
-                    db.session.flush()  # Get the ID
-                    
-                    # Update student relationship
-                    student.profile = profile
-            except Exception as e:
-                logger.error(f"Error getting/creating profile for student {student_id}: {e}")
-                return False
-            
             # Track changes
             updated_fields = []
             
-            # Update name with simplified, decisive logic
+            # Update name with enhanced logic for placeholder names
             if profile_data.has_valid_name():
                 current_first = student.first_name or ''
                 
                 logger.info(f"Current name: '{current_first}' - Extracted name: '{profile_data.first_name}'")
                 
-                # Simple, decisive rule: If current first name starts with "Student", update it
-                if current_first.startswith('Student'):
+                # Enhanced rule: Update if current name is placeholder (starts with "Student" or "Caller")
+                if current_first.startswith(('Student', 'Caller')):
                     logger.info(f"✅ UPDATING placeholder name '{current_first}' to '{profile_data.first_name}'")
                     
                     student.first_name = profile_data.first_name
@@ -703,9 +686,10 @@ DO NOT use nested "subjects" object. Use flat "favorite_subjects" and "challengi
                 updated_fields.append('grade_level')
                 logger.info(f"Updated grade_level to {profile_data.grade}")
             
-            # Handle interests
+            # Handle interests directly in Student model (migrated from Profile)
             if profile_data.interests:
-                current_interests = profile.interests or []
+                # Initialize interests array if None
+                current_interests = student.interests or []
                 new_interests = []
                 for interest in profile_data.interests:
                     if interest and interest not in current_interests:
@@ -713,17 +697,14 @@ DO NOT use nested "subjects" object. Use flat "favorite_subjects" and "challengi
                         current_interests.append(interest)
                 
                 if new_interests:
-                    profile.interests = current_interests
+                    student.interests = current_interests
                     updated_fields.append('interests')
-                    logger.info(f"Added new interests: {new_interests}")
+                    logger.info(f"Added new interests to Student model: {new_interests}")
             
-            # Handle learning preferences
+            # Handle learning_preferences directly in Student model (migrated from Profile)
             if profile_data.learning_preferences:
-                # Initialize learning_preferences if None
-                if profile.learning_preferences is None:
-                    profile.learning_preferences = []
-                    
-                current_prefs = profile.learning_preferences or []
+                # Initialize learning_preferences array if None
+                current_prefs = student.learning_preferences or []
                 new_prefs = []
                 for pref in profile_data.learning_preferences:
                     if pref and pref not in current_prefs:
@@ -731,45 +712,32 @@ DO NOT use nested "subjects" object. Use flat "favorite_subjects" and "challengi
                         current_prefs.append(pref)
                 
                 if new_prefs:
-                    profile.learning_preferences = current_prefs
+                    student.learning_preferences = current_prefs
                     updated_fields.append('learning_preferences')
-                    logger.info(f"Added new learning preferences: {new_prefs}")
+                    logger.info(f"Added new learning preferences to Student model: {new_prefs}")
             
-            # Handle favorite subjects
+            # Handle motivational_triggers from AI analysis (map from favorite_subjects and challenging_subjects)
+            motivational_data = []
             if profile_data.favorite_subjects:
-                # Initialize favorite_subjects if None
-                if profile.favorite_subjects is None:
-                    profile.favorite_subjects = []
-                    
-                current_fav_subjects = profile.favorite_subjects or []
-                new_fav_subjects = []
                 for subject in profile_data.favorite_subjects:
-                    if subject and subject not in current_fav_subjects:
-                        new_fav_subjects.append(subject)
-                        current_fav_subjects.append(subject)
-                
-                if new_fav_subjects:
-                    profile.favorite_subjects = current_fav_subjects
-                    updated_fields.append('favorite_subjects')
-                    logger.info(f"Added new favorite subjects: {new_fav_subjects}")
-            
-            # Handle challenging subjects
+                    motivational_data.append(f"Enjoys {subject}")
             if profile_data.challenging_subjects:
-                # Initialize challenging_subjects if None
-                if profile.challenging_subjects is None:
-                    profile.challenging_subjects = []
-                    
-                current_challenging = profile.challenging_subjects or []
-                new_challenging = []
                 for subject in profile_data.challenging_subjects:
-                    if subject and subject not in current_challenging:
-                        new_challenging.append(subject)
-                        current_challenging.append(subject)
+                    motivational_data.append(f"Needs support in {subject}")
+            
+            if motivational_data:
+                # Initialize motivational_triggers array if None
+                current_triggers = student.motivational_triggers or []
+                new_triggers = []
+                for trigger in motivational_data:
+                    if trigger and trigger not in current_triggers:
+                        new_triggers.append(trigger)
+                        current_triggers.append(trigger)
                 
-                if new_challenging:
-                    profile.challenging_subjects = current_challenging
-                    updated_fields.append('challenging_subjects')
-                    logger.info(f"Added new challenging subjects: {new_challenging}")
+                if new_triggers:
+                    student.motivational_triggers = current_triggers
+                    updated_fields.append('motivational_triggers')
+                    logger.info(f"Added new motivational triggers to Student model: {new_triggers}")
             
             # Save changes if any were made
             if updated_fields:
@@ -777,11 +745,11 @@ DO NOT use nested "subjects" object. Use flat "favorite_subjects" and "challengi
                 
                 try:
                     db.session.commit()
-                    logger.info(f"Successfully updated profile for student {student_id} with fields: {updated_fields}")
+                    logger.info(f"Successfully updated Student model for student {student_id} with fields: {updated_fields}")
                     
                     # Log successful update to system logger
                     from system_logger import log_ai_analysis
-                    log_ai_analysis("Successfully updated student profile in database",
+                    log_ai_analysis("Successfully updated student profile in Student model (Profile removed)",
                                    updated_fields=updated_fields,
                                    student_id=student_id)
                     return True
@@ -809,7 +777,7 @@ DO NOT use nested "subjects" object. Use flat "favorite_subjects" and "challengi
             
             # Log error to system logger
             from system_logger import log_error
-            log_error('TRANSCRIPT_ANALYSIS', f"Error updating student profile in database", e,
+            log_error('TRANSCRIPT_ANALYSIS', f"Error updating student profile in Student model", e,
                      student_id=student_id)
             return False
     
