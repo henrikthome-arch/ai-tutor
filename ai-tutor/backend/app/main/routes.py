@@ -1117,7 +1117,7 @@ def reset_database():
     
     try:
         from app import db
-        from app.models.curriculum import Curriculum, CurriculumDetail
+        from app.models.curriculum import Curriculum, Subject, CurriculumDetail
         from app.models.student import Student, StudentSubject
         from app.models.session import Session
         from app.models.assessment import Assessment, AssessmentResult
@@ -1182,10 +1182,12 @@ def reset_database():
         db.session.flush()  # Get the curriculum ID
         print(f"📚 Curriculum created with ID: {cambridge_curriculum.id}")
         
-        # Parse the downloaded TSV data
+        # Parse the downloaded TSV data and create subjects and curriculum details
         lines = curriculum_data.strip().split('\n')
         print(f"📄 Processing {len(lines)} lines from downloaded curriculum data")
         
+        # Track unique subjects
+        subjects_dict = {}
         curriculum_details = []
         
         for line_num, line in enumerate(lines, 1):
@@ -1200,21 +1202,54 @@ def reset_database():
                     print(f"⚠️ Line {line_num}: Not enough columns ({len(parts)}), skipping")
                     continue
                 
-                grade = int(parts[0])
-                subject = parts[1].strip()
+                grade_level = int(parts[0])
+                subject_name = parts[1].strip()
                 code = parts[2].strip()
                 description = parts[3].strip()
                 learning_objectives = parts[4].strip()
                 
-                # Create curriculum detail
+                # Create or get subject
+                if subject_name not in subjects_dict:
+                    # Determine subject category
+                    subject_category = 'General'
+                    if subject_name.lower() in ['mathematics', 'maths', 'math', 'science', 'computing', 'ict']:
+                        subject_category = 'STEM'
+                    elif subject_name.lower() in ['english', 'language', 'literacy', 'writing', 'reading']:
+                        subject_category = 'Language Arts'
+                    elif subject_name.lower() in ['art', 'music', 'drama', 'creative']:
+                        subject_category = 'Arts'
+                    elif subject_name.lower() in ['history', 'geography', 'social studies', 'pshe']:
+                        subject_category = 'Humanities'
+                    elif subject_name.lower() in ['pe', 'physical education', 'sports']:
+                        subject_category = 'Physical Education'
+                    
+                    # Create new subject
+                    subject = Subject(
+                        name=subject_name,
+                        description=f'{subject_name} curriculum for primary education',
+                        category=subject_category,
+                        is_core=True
+                    )
+                    
+                    db.session.add(subject)
+                    db.session.flush()  # Get the subject ID
+                    subjects_dict[subject_name] = subject
+                    print(f"📖 Created subject: {subject_name} (ID: {subject.id})")
+                else:
+                    subject = subjects_dict[subject_name]
+                
+                # Create curriculum detail with proper relationships
                 detail = CurriculumDetail(
                     curriculum_id=cambridge_curriculum.id,
-                    subject=subject,
-                    grade=grade,
-                    code=code,
-                    description=description,
-                    learning_objectives=learning_objectives,
-                    order_index=line_num
+                    subject_id=subject.id,
+                    grade_level=grade_level,
+                    is_mandatory=True,
+                    learning_objectives=[learning_objectives] if learning_objectives else [],
+                    assessment_criteria=[],
+                    recommended_hours_per_week=None,
+                    prerequisites=[],
+                    resources=[],
+                    goals_description=description
                 )
                 
                 curriculum_details.append(detail)
@@ -1232,12 +1267,14 @@ def reset_database():
         db.session.commit()
         
         log_admin_action('database_reset_complete', session.get('admin_username', 'unknown'),
-                        curriculum_count=len(curriculum_details))
+                        curriculum_count=len(curriculum_details),
+                        subjects_count=len(subjects_dict))
         
         return jsonify({
             'success': True,
-            'message': f'Database reset successfully. Loaded {len(curriculum_details)} curriculum entries.',
+            'message': f'Database reset successfully. Created {len(subjects_dict)} subjects and {len(curriculum_details)} curriculum entries.',
             'curriculum_id': cambridge_curriculum.id,
+            'subjects_count': len(subjects_dict),
             'curriculum_details': len(curriculum_details)
         })
         
