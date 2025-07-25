@@ -1290,17 +1290,19 @@ def reset_database():
                 continue
                 
             try:
-                # Parse TSV format: Grade	Subject	Code	Description	Learning_Objectives
+                # Parse TSV format: Grade	Subject	Mandatory	Details
                 parts = line.split('\t')
-                if len(parts) < 5:
+                if len(parts) < 4:
                     print(f"⚠️ Line {line_num}: Not enough columns ({len(parts)}), skipping")
                     continue
                 
                 grade_level = int(parts[0])
                 subject_name = parts[1].strip()
-                code = parts[2].strip()
-                description = parts[3].strip()
-                learning_objectives = parts[4].strip()
+                is_mandatory_str = parts[2].strip()
+                details = parts[3].strip()
+                
+                # Convert mandatory field
+                is_mandatory = is_mandatory_str.lower() == 'yes'
                 
                 # Create or get subject
                 if subject_name not in subjects_dict:
@@ -1337,13 +1339,13 @@ def reset_database():
                     curriculum_id=cambridge_curriculum.id,
                     subject_id=subject.id,
                     grade_level=grade_level,
-                    is_mandatory=True,
-                    learning_objectives=[learning_objectives] if learning_objectives else [],
+                    is_mandatory=is_mandatory,
+                    learning_objectives=[details] if details else [],
                     assessment_criteria=[],
                     recommended_hours_per_week=None,
                     prerequisites=[],
                     resources=[],
-                    goals_description=description
+                    goals_description=details
                 )
                 
                 curriculum_details.append(detail)
@@ -1369,7 +1371,14 @@ def reset_database():
             'message': f'Database reset successfully. Created {len(subjects_dict)} subjects and {len(curriculum_details)} curriculum entries.',
             'curriculum_id': cambridge_curriculum.id,
             'subjects_count': len(subjects_dict),
-            'curriculum_details': len(curriculum_details)
+            'curriculum_details_count': len(curriculum_details),
+            'results': {
+                'tables_dropped': True,
+                'tables_created': True,
+                'curriculum_loaded': True,
+                'curriculum_details': len(curriculum_details),
+                'total_subjects': len(subjects_dict)
+            }
         })
         
     except Exception as e:
