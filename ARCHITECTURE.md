@@ -183,6 +183,9 @@ erDiagram
         int school_id FK
         int grade_level
         string student_type "foreign|local for international schools"
+        string[] interests "Student interests (ARRAY column)"
+        string[] learning_preferences "Learning preferences and metadata (ARRAY column)"
+        string[] motivational_triggers "Motivational factors (ARRAY column)"
         timestamp created_at
         timestamp updated_at
     }
@@ -212,11 +215,6 @@ erDiagram
         text goals_description "Natural language description of learning goals for this grade/subject"
     }
 
-    school_default_subjects {
-        int id PK
-        int school_id FK
-        int curriculum_detail_id FK "Default subject template for the school (grade level inherent in curriculum_detail)"
-    }
 
     student_subjects {
         int id PK
@@ -306,7 +304,6 @@ erDiagram
 
     %% Relationships
     schools ||--o{ students : "enrolls"
-    schools ||--o{ school_default_subjects : "defines templates"
     schools }o--|| curriculums : "uses default"
     
     students ||--o{ student_subjects : "enrolled in"
@@ -315,7 +312,6 @@ erDiagram
     curriculums ||--|{ curriculum_details : "contains"
     subjects ||--|{ curriculum_details : "part of curriculum"
     curriculum_details ||--o{ student_subjects : "instantiated as"
-    curriculum_details ||--o{ school_default_subjects : "template includes"
     
     sessions ||--o| session_metrics : "measured by"
     tokens ||--o{ mcp_interactions : "authenticates"

@@ -335,6 +335,9 @@ class StudentService:
             db.session.add(student)
             db.session.flush()  # Get the database-generated integer ID
             
+            # Assign default curriculum subjects (use grade 1 as default for unknown students)
+            self._assign_default_curriculum_subjects(student.id, grade_level=1)
+            
             # Commit the student creation (no separate Profile needed - data is in Student table)
             db.session.commit()
             
@@ -397,7 +400,8 @@ class StudentService:
                 'first_name': first_name,
                 'last_name': last_name,
                 'phone_number': phone,
-                'student_type': 'International'
+                'student_type': 'International',
+                'interests': interests
             }
             
             # Calculate date of birth from age
@@ -411,6 +415,10 @@ class StudentService:
             
             # Set grade level directly on student
             student.grade_level = grade
+            
+            # Assign default curriculum subjects
+            self._assign_default_curriculum_subjects(student.id, grade)
+            
             db.session.commit()
             
             return str(student.id)
@@ -464,6 +472,70 @@ class StudentService:
         except Exception as e:
             db.session.rollback()
             print(f"Error deleting student {student_id}: {e}")
+            return False
+    
+    def _assign_default_curriculum_subjects(self, student_id: int, grade_level: int) -> bool:
+        """Assign default curriculum subjects to a newly created student"""
+        try:
+            from app.models.curriculum import Curriculum, CurriculumDetail
+            from app.models.assessment import StudentSubject
+            
+            # Find the default curriculum
+            default_curriculum = Curriculum.query.filter_by(is_default=True).first()
+            if not default_curriculum:
+                print("⚠️ No default curriculum found - students will not have subjects assigned")
+                return False
+            
+            print(f"📚 Assigning default curriculum '{default_curriculum.name}' to student {student_id} (grade {grade_level})")
+            
+            # Get all curriculum details for the student's grade level and above
+            # This follows the architecture requirement: "for their grade and above"
+            curriculum_details = CurriculumDetail.query.filter(
+                CurriculumDetail.curriculum_id == default_curriculum.id,
+                CurriculumDetail.grade_level >= grade_level
+            ).all()
+            
+            print(f"📖 Found {len(curriculum_details)} curriculum details to assign")
+            
+            student_subjects_created = 0
+            for detail in curriculum_details:
+                try:
+                    # Check if StudentSubject already exists
+                    existing = StudentSubject.query.filter_by(
+                        student_id=student_id,
+                        curriculum_detail_id=detail.id
+                    ).first()
+                    
+                    if existing:
+                        print(f"⚠️ StudentSubject already exists for student {student_id}, detail {detail.id}")
+                        continue
+                    
+                    # Create StudentSubject record
+                    student_subject = StudentSubject(
+                        student_id=student_id,
+                        curriculum_detail_id=detail.id,
+                        is_in_use=True,  # Mark as in use (part of current curriculum)
+                        is_active_for_tutoring=False,  # Initially inactive for tutoring
+                        progress_percentage=0.0,  # Start at 0% progress
+                        completion_percentage=0.0,  # Start at 0% completion
+                        mastery_level='Not Started'  # Initial mastery level
+                    )
+                    
+                    db.session.add(student_subject)
+                    student_subjects_created += 1
+                    
+                    subject_name = detail.subject.name if detail.subject else 'Unknown'
+                    print(f"✅ Created StudentSubject: {subject_name} (Grade {detail.grade_level})")
+                    
+                except Exception as detail_error:
+                    print(f"❌ Error creating StudentSubject for detail {detail.id}: {detail_error}")
+                    continue
+            
+            print(f"✅ Successfully created {student_subjects_created} StudentSubject records for student {student_id}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error assigning default curriculum subjects to student {student_id}: {e}")
             return False
     
     def get_student_name(self, student_id: str) -> str:

@@ -22,7 +22,6 @@ class School(db.Model):
     # Relationships
     students = db.relationship('Student', back_populates='school', lazy='dynamic')
     default_curriculum = db.relationship('Curriculum', foreign_keys=[default_curriculum_id])
-    school_default_subjects = db.relationship('SchoolDefaultSubject', back_populates='school', lazy='dynamic', cascade='all, delete-orphan')
     
     def __repr__(self):
         return f'<School {self.name}>'

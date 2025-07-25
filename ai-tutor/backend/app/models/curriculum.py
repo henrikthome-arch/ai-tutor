@@ -91,8 +91,6 @@ class CurriculumDetail(db.Model):
     curriculum = db.relationship('Curriculum', back_populates='curriculum_details')
     subject = db.relationship('Subject', back_populates='curriculum_details')
     student_subjects = db.relationship('StudentSubject', back_populates='curriculum_detail', lazy='dynamic')
-    school_default_subjects = db.relationship('SchoolDefaultSubject', back_populates='curriculum_detail', lazy='dynamic')
-    
     # Composite unique constraint
     __table_args__ = (
         db.UniqueConstraint('curriculum_id', 'subject_id', 'grade_level', name='uix_curriculum_subject_grade'),
@@ -119,34 +117,4 @@ class CurriculumDetail(db.Model):
             'goals_description': self.goals_description,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
-        }
-
-class SchoolDefaultSubject(db.Model):
-    """SchoolDefaultSubject model for school-specific curriculum templates"""
-    __tablename__ = 'school_default_subjects'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    school_id = db.Column(db.Integer, db.ForeignKey('schools.id'), nullable=False)
-    curriculum_detail_id = db.Column(db.Integer, db.ForeignKey('curriculum_details.id'), nullable=False)
-    
-    # Relationships
-    school = db.relationship('School', back_populates='school_default_subjects')
-    curriculum_detail = db.relationship('CurriculumDetail', back_populates='school_default_subjects')
-    
-    # Composite unique constraint
-    __table_args__ = (
-        db.UniqueConstraint('school_id', 'curriculum_detail_id', name='uix_school_curriculum_detail'),
-    )
-    
-    def __repr__(self):
-        return f'<SchoolDefaultSubject {self.school.name if self.school else "Unknown"} - {self.curriculum_detail}>'
-    
-    def to_dict(self):
-        """Convert to dictionary"""
-        return {
-            'id': self.id,
-            'school_id': self.school_id,
-            'school_name': self.school.name if self.school else None,
-            'curriculum_detail_id': self.curriculum_detail_id,
-            'curriculum_detail': self.curriculum_detail.to_dict() if self.curriculum_detail else None
         }
