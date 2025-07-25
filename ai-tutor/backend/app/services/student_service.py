@@ -88,8 +88,59 @@ class StudentService:
             except Exception as curriculum_e:
                 print(f"Error getting curriculum stats: {curriculum_e}")
             
-            # Server status (always 'Running' for now since we're responding)
+            # System information
             server_status = "Running"
+            
+            # Environment detection
+            environment = os.environ.get('ENVIRONMENT', 'production')
+            if os.environ.get('RENDER'):
+                environment = 'production (Render)'
+            elif os.environ.get('DEVELOPMENT'):
+                environment = 'development'
+            
+            # Database information
+            database_info = {
+                'connection_status': 'connected',
+                'type': 'PostgreSQL',
+                'error': None
+            }
+            try:
+                # Test database connection
+                db.session.execute(db.text('SELECT 1'))
+                database_info['connection_status'] = 'connected'
+            except Exception as db_e:
+                database_info['connection_status'] = 'error'
+                database_info['error'] = str(db_e)
+            
+            # Data directory size calculation
+            data_size = "N/A"
+            try:
+                if os.path.exists('data'):
+                    total_size = 0
+                    for dirpath, dirnames, filenames in os.walk('data'):
+                        for filename in filenames:
+                            filepath = os.path.join(dirpath, filename)
+                            if os.path.exists(filepath):
+                                total_size += os.path.getsize(filepath)
+                    
+                    # Convert to human readable format
+                    if total_size < 1024:
+                        data_size = f"{total_size} B"
+                    elif total_size < 1024 * 1024:
+                        data_size = f"{total_size / 1024:.1f} KB"
+                    elif total_size < 1024 * 1024 * 1024:
+                        data_size = f"{total_size / (1024 * 1024):.1f} MB"
+                    else:
+                        data_size = f"{total_size / (1024 * 1024 * 1024):.1f} GB"
+            except Exception as size_e:
+                print(f"Error calculating data directory size: {size_e}")
+                data_size = "Error calculating"
+            
+            # Current timestamp
+            current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
+            
+            # Last backup (placeholder - would be implemented with actual backup system)
+            last_backup = "Not implemented"
             
             return {
                 # Student stats
@@ -110,7 +161,14 @@ class StudentService:
                 'curriculum_details_count': curriculum_details_count,
                 'default_curriculum': default_curriculum,
                 'default_curriculum_subjects': default_curriculum_subjects,
-                'students_with_default_curriculum': students_with_default_curriculum
+                'students_with_default_curriculum': students_with_default_curriculum,
+                
+                # System information for /admin/system page
+                'environment': environment,
+                'database': database_info,
+                'data_size': data_size,
+                'timestamp': current_timestamp,
+                'last_backup': last_backup
             }
             
         except Exception as e:
@@ -128,7 +186,16 @@ class StudentService:
                 'curriculum_details_count': 0,
                 'default_curriculum': None,
                 'default_curriculum_subjects': 0,
-                'students_with_default_curriculum': 0
+                'students_with_default_curriculum': 0,
+                'environment': 'Unknown',
+                'database': {
+                    'connection_status': 'error',
+                    'type': 'Unknown',
+                    'error': 'System error'
+                },
+                'data_size': 'Unknown',
+                'timestamp': 'Unknown',
+                'last_backup': 'Unknown'
             }
     
     def get_all_students(self) -> List[Any]:
