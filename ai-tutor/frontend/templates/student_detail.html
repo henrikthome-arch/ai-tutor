@@ -112,15 +112,15 @@
 {% endblock %}
 {% block content %}
 <div class="breadcrumb">
-    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / 
-    <a href="{{ url_for('admin_students') }}">👥 Students</a> / 
+    <a href="{{ url_for('main.admin_dashboard') }}">📊 Dashboard</a> /
+    <a href="{{ url_for('main.admin_students') }}">👥 Students</a> /
     <span>{{ student.name }}</span>
 </div>
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
     <h1 style="color: #2c3e50;">{{ student.name }}</h1>
     <div style="display: flex; gap: 1rem;">
-        <a href="{{ url_for('edit_student', student_id=student.id) }}" class="btn" style="background: #f39c12; text-decoration: none;">
+        <a href="{{ url_for('main.edit_student', student_id=student.id) }}" class="btn" style="background: #f39c12; text-decoration: none;">
             ✏️ Edit Student
         </a>
         <button class="btn btn-danger" onclick="deleteStudent('{{ student.id }}', '{{ student.name }}')">
@@ -695,7 +695,7 @@
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
         <h2>🕒 Recent Sessions</h2>
-        <a href="{{ url_for('view_student_sessions', student_id=student.id) }}" class="btn">
+        <a href="{{ url_for('main.view_student_sessions', student_id=student.id) }}" class="btn">
             📁 View All Sessions
         </a>
     </div>
@@ -732,7 +732,7 @@
                             </span>
                         </td>
                         <td>
-                            <a href="{{ url_for('view_session_detail', student_id=student.id, session_id=session.id) }}"
+                            <a href="{{ url_for('main.view_session_detail', student_id=student.id, session_id=session.id) }}"
                                class="btn"
                                style="padding: 4px 8px; font-size: 0.8rem;">
                                 👁️ View

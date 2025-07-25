@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="breadcrumb">
-    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> &gt;
+    <a href="{{ url_for('main.admin_dashboard') }}">📊 Dashboard</a> &gt;
     <span>🗄️ Database Browser</span>
 </div>
 
@@ -102,10 +102,10 @@
     </div>
     
     <div style="margin-top: 1rem;">
-        <a href="{{ url_for('admin_system') }}" class="btn">
+        <a href="{{ url_for('main.admin_system') }}" class="btn">
             ⚙️ System Settings
         </a>
-        <a href="{{ url_for('admin_system_logs') }}" class="btn" style="margin-left: 10px;">
+        <a href="{{ url_for('main.admin_system_logs') }}" class="btn" style="margin-left: 10px;">
             📋 View Logs
         </a>
     </div>
@@ -219,7 +219,7 @@ document.addEventListener('DOMContentLoaded', function() {
         formData.append('confirm', 'true');
         
         // Send reset request
-        fetch('{{ url_for("admin_database_reset") }}', {
+        fetch('{{ url_for("main.admin_database_reset") }}', {
             method: 'POST',
             body: formData
         })

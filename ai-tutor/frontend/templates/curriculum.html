@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="breadcrumb">
-    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> /
+    <a href="{{ url_for('main.admin_dashboard') }}">📊 Dashboard</a> /
     <span>📚 Curriculum</span>
 </div>
 
@@ -15,7 +15,7 @@
         <button class="btn btn-success" onclick="alert('Add curriculum functionality coming soon!')" disabled>
             ➕ Add Curriculum
         </button>
-        <a href="{{ url_for('admin_schools') }}" class="btn" style="background: #3498db;">
+        <a href="{{ url_for('main.admin_schools') }}" class="btn" style="background: #3498db;">
             🏫 Manage Schools
         </a>
     </div>
@@ -51,7 +51,7 @@
             <strong>{{ curriculum_stats.default_curriculum.name }}</strong> - {{ curriculum_stats.default_curriculum.description }}
         </p>
         <div style="margin-top: 0.5rem;">
-            <a href="{{ url_for('curriculum_details', curriculum_id=curriculum_stats.default_curriculum.id) }}" class="btn btn-small" style="background: #27ae60;">
+            <a href="{{ url_for('main.curriculum_details', curriculum_id=curriculum_stats.default_curriculum.id) }}" class="btn btn-small" style="background: #27ae60;">
                 📖 View Details
             </a>
             <!-- TODO: Add curriculum editing route -->
@@ -125,7 +125,7 @@
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <a href="{{ url_for('curriculum_details', curriculum_id=curriculum.id) }}" class="btn-small" title="View Details" style="background: #27ae60;">
+                        <a href="{{ url_for('main.curriculum_details', curriculum_id=curriculum.id) }}" class="btn-small" title="View Details" style="background: #27ae60;">
                             📖
                         </a>
                         <!-- TODO: Add curriculum editing and deletion routes -->

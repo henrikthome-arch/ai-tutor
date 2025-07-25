@@ -4,14 +4,14 @@
 
 {% block content %}
 <div class="breadcrumb">
-    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / 
-    <a href="{{ url_for('admin_students') }}">👥 Students</a> / 
+    <a href="{{ url_for('main.admin_dashboard') }}">📊 Dashboard</a> /
+    <a href="{{ url_for('main.admin_students') }}">👥 Students</a> /
     <span>➕ Add Student</span>
 </div>
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
     <h1 style="color: #2c3e50;">Add New Student</h1>
-    <a href="{{ url_for('admin_students') }}" class="btn" style="background: #95a5a6;">
+    <a href="{{ url_for('main.admin_students') }}" class="btn" style="background: #95a5a6;">
         ← Back to Students
     </a>
 </div>
@@ -115,7 +115,7 @@
         </div>
         
         <div style="border-top: 1px solid #eee; padding-top: 1.5rem; display: flex; gap: 1rem; justify-content: flex-end;">
-            <a href="{{ url_for('admin_students') }}" 
+            <a href="{{ url_for('main.admin_students') }}"
                class="btn" 
                style="background: #95a5a6; text-decoration: none;">
                 Cancel

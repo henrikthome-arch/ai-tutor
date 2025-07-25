@@ -4,13 +4,13 @@
 
 {% block content %}
 <div class="breadcrumb">
-    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / <span>👥 Students</span>
+    <a href="{{ url_for('main.admin_dashboard') }}">📊 Dashboard</a> / <span>👥 Students</span>
 </div>
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
     <h1 style="color: #2c3e50;">Student Management</h1>
     <div style="display: flex; gap: 1rem;">
-        <a href="{{ url_for('add_student') }}" class="btn btn-success">
+        <a href="{{ url_for('main.add_student') }}" class="btn btn-success">
             ➕ Add Student
         </a>
     </div>
@@ -98,13 +98,13 @@
                         </td>
                         <td>
                             <div style="display: flex; gap: 8px;">
-                                <a href="{{ url_for('admin_student_detail', student_id=student.id) }}" 
+                                <a href="{{ url_for('main.admin_student_detail', student_id=student.id) }}"
                                    class="btn" 
                                    style="padding: 6px 12px; font-size: 0.9rem;"
                                    title="View Details">
                                     👁️ View
                                 </a>
-                                <a href="{{ url_for('edit_student', student_id=student.id) }}"
+                                <a href="{{ url_for('main.edit_student', student_id=student.id) }}"
                                    class="btn"
                                    style="padding: 6px 12px; font-size: 0.9rem; background: #f39c12; text-decoration: none;"
                                    title="Edit Student">
