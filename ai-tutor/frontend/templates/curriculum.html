@@ -11,10 +11,7 @@
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
     <h1 style="color: #2c3e50;">Curriculum Management</h1>
     <div>
-        <!-- TODO: Add curriculum creation route -->
-        <button class="btn btn-success" onclick="alert('Add curriculum functionality coming soon!')" disabled>
-            ➕ Add Curriculum
-        </button>
+        <!-- Add curriculum functionality not yet implemented -->
         <a href="{{ url_for('main.admin_schools') }}" class="btn" style="background: #3498db;">
             🏫 Manage Schools
         </a>
@@ -149,10 +146,9 @@
         <p style="color: #7f8c8d; font-size: 0.9rem;">
             Start by running the database seeding to create default curriculums, or add a new curriculum manually.
         </p>
-        <!-- TODO: Add curriculum creation route -->
-        <button class="btn btn-success" onclick="alert('Add curriculum functionality coming soon!')" disabled>
-            ➕ Add First Curriculum
-        </button>
+        <p style="color: #7f8c8d; text-align: center;">
+            Create your first curriculum by using the database reset function with Cambridge Primary 2025 template.
+        </p>
     </div>
     {% endif %}
 </div>
