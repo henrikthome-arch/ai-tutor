@@ -250,6 +250,9 @@ SAMPLE_STUDENT_CONTEXT = {
 # Global processor instance
 session_processor = SessionPostProcessor()
 
+# Alias for backward compatibility
+SessionProcessor = SessionPostProcessor
+
 # Async function for testing
 async def test_sample_analysis():
     """Test the session processor with sample data"""
