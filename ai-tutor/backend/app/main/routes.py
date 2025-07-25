@@ -159,6 +159,7 @@ def admin_student_detail(student_id):
     
     return render_template('student_detail.html',
                          student=student,
+                         profile=profile,
                          phone=phone,
                          progress=progress,
                          recent_sessions=recent_sessions,
