@@ -22,8 +22,9 @@ class StudentService:
         pass
     
     def get_system_stats(self) -> Dict[str, Any]:
-        """Get system statistics"""
+        """Get system statistics for dashboard"""
         try:
+            # Student statistics
             total_students = Student.query.count()
             
             # Get recent activity count (last 7 days)
@@ -34,19 +35,100 @@ class StudentService:
             # Get students with phone numbers
             students_with_phone = Student.query.filter(Student.phone_number.isnot(None)).count()
             
+            # Session statistics
+            total_sessions = 0
+            sessions_today = 0
+            try:
+                from app.models.session import Session
+                total_sessions = Session.query.count()
+                
+                # Sessions today
+                today = datetime.now().date()
+                today_start = datetime.combine(today, datetime.min.time())
+                today_end = datetime.combine(today, datetime.max.time())
+                sessions_today = Session.query.filter(
+                    Session.start_time >= today_start,
+                    Session.start_time <= today_end
+                ).count()
+            except Exception as session_e:
+                print(f"Error getting session stats: {session_e}")
+            
+            # Curriculum statistics
+            total_curriculums = 0
+            curriculum_details_count = 0
+            default_curriculum = None
+            default_curriculum_subjects = 0
+            students_with_default_curriculum = 0
+            
+            try:
+                from app.models.curriculum import Curriculum, CurriculumDetail
+                total_curriculums = Curriculum.query.count()
+                curriculum_details_count = CurriculumDetail.query.count()
+                
+                # Get default curriculum
+                default_curriculum_obj = Curriculum.query.filter_by(is_default=True).first()
+                if default_curriculum_obj:
+                    default_curriculum = {
+                        'id': default_curriculum_obj.id,
+                        'name': default_curriculum_obj.name,
+                        'curriculum_type': default_curriculum_obj.curriculum_type,
+                        'grade_levels': default_curriculum_obj.grade_levels
+                    }
+                    
+                    # Count subjects for default curriculum
+                    default_curriculum_subjects = CurriculumDetail.query.filter_by(
+                        curriculum_id=default_curriculum_obj.id
+                    ).count()
+                    
+                    # Count students using default curriculum (approximation)
+                    students_with_default_curriculum = Student.query.join(Profile).filter(
+                        Profile.curriculum == default_curriculum_obj.name
+                    ).count() if hasattr(Student, 'profile') else 0
+                    
+            except Exception as curriculum_e:
+                print(f"Error getting curriculum stats: {curriculum_e}")
+            
+            # Server status (always 'Running' for now since we're responding)
+            server_status = "Running"
+            
             return {
+                # Student stats
                 'total_students': total_students,
                 'recent_students': recent_students,
                 'students_with_phone': students_with_phone,
-                'phone_mappings': students_with_phone
+                'phone_mappings': students_with_phone,
+                
+                # Session stats
+                'total_sessions': total_sessions,
+                'sessions_today': sessions_today,
+                
+                # Server status
+                'server_status': server_status,
+                
+                # Curriculum stats
+                'total_curriculums': total_curriculums,
+                'curriculum_details_count': curriculum_details_count,
+                'default_curriculum': default_curriculum,
+                'default_curriculum_subjects': default_curriculum_subjects,
+                'students_with_default_curriculum': students_with_default_curriculum
             }
+            
         except Exception as e:
             print(f"Error getting system stats: {e}")
+            # Return safe fallback values
             return {
                 'total_students': 0,
                 'recent_students': 0,
                 'students_with_phone': 0,
-                'phone_mappings': 0
+                'phone_mappings': 0,
+                'total_sessions': 0,
+                'sessions_today': 0,
+                'server_status': 'Unknown',
+                'total_curriculums': 0,
+                'curriculum_details_count': 0,
+                'default_curriculum': None,
+                'default_curriculum_subjects': 0,
+                'students_with_default_curriculum': 0
             }
     
     def get_all_students(self) -> List[Any]:
