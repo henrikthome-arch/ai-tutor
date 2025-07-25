@@ -39,6 +39,15 @@ def create_app(config_name=None):
     # Override config from environment variables
     app.config.from_envvar('APP_CONFIG_FILE', silent=True)
     
+    # Ensure SECRET_KEY is always set (required for sessions)
+    if not app.config.get('SECRET_KEY'):
+        # Generate a fallback secret key if none provided
+        import secrets
+        app.config['SECRET_KEY'] = secrets.token_hex(32)
+        print(f"⚠️  Using generated SECRET_KEY for session security")
+    else:
+        print(f"✅ SECRET_KEY loaded from configuration")
+    
     # Initialize extensions with app
     db.init_app(app)
     migrate.init_app(app, db)
