@@ -236,7 +236,12 @@
 </div>
 
 <div class="card" style="margin-top: 2rem;">
-    <h2>📋 Recent System Events</h2>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h2 style="margin: 0;">📋 Recent System Events</h2>
+        <button onclick="copySystemEvents()" class="btn" style="background: #6c757d; color: white; padding: 0.5rem 1rem; font-size: 0.9rem;">
+            📋 Copy Events
+        </button>
+    </div>
     {% if system_events %}
         <div style="max-height: 300px; overflow-y: auto;">
             <table class="table">
@@ -275,4 +280,51 @@
 </div>
 
 <!-- Phone number management functions removed - phone numbers are now managed directly through student profiles -->
+
+<script>
+function copySystemEvents() {
+    let copyText = "Recent System Events\n";
+    copyText += "====================\n\n";
+    
+    // Find the system events table
+    const table = document.querySelector('.table');
+    const noEventsDiv = document.querySelector('h4');
+    
+    if (table) {
+        // Extract data from table rows
+        const rows = table.querySelectorAll('tbody tr');
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 4) {
+                copyText += "Time: " + cells[0].textContent.trim() + "\n";
+                copyText += "Event: " + cells[1].textContent.trim() + "\n";
+                copyText += "User: " + cells[2].textContent.trim() + "\n";
+                copyText += "Status: " + cells[3].textContent.trim() + "\n";
+                copyText += "----------------------------------------\n";
+            }
+        });
+    } else if (noEventsDiv && noEventsDiv.textContent === 'No Recent Events') {
+        copyText += "No system events have been logged recently.\n";
+    } else {
+        copyText += "No system events have been logged recently.\n";
+    }
+    
+    navigator.clipboard.writeText(copyText).then(function() {
+        // Show success feedback
+        const button = document.querySelector('button[onclick="copySystemEvents()"]');
+        const originalText = button.innerHTML;
+        button.innerHTML = '✅ Copied!';
+        button.style.background = '#27ae60';
+        
+        setTimeout(function() {
+            button.innerHTML = originalText;
+            button.style.background = '#6c757d';
+        }, 2000);
+    }).catch(function(err) {
+        console.error('Could not copy text: ', err);
+        alert('Failed to copy system events to clipboard');
+    });
+}
+</script>
+
 {% endblock %}
