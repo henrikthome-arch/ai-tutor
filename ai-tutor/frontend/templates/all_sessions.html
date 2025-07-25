@@ -112,7 +112,7 @@
                     </td>
                     <td>
                         <div style="display: flex; gap: 0.5rem;">
-                            <a href="{{ url_for('main.view_session_detail', student_id=session.student_id, session_id=session.id) }}"
+                            <a href="{{ url_for('main.view_session_detail', student_id=session.student_id, session_file=session.file or (session.date + '_summary.json')) }}"
                                class="btn btn-sm" style="font-size: 12px; padding: 5px 10px;">
                                 View
                             </a>
