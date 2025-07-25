@@ -14,25 +14,25 @@ from flask import Blueprint, request, jsonify, current_app
 from flask import session
 
 # Import system components
-from backend.system_logger import system_logger, log_admin_action, log_webhook, log_ai_analysis, log_error, log_system
-from backend.vapi.client import vapi_client
+from system_logger import system_logger, log_admin_action, log_webhook, log_ai_analysis, log_error, log_system
+from vapi.client import vapi_client
 
 # Import auth components
 from app.auth.decorators import token_or_session_auth, require_token_scope
 
 # Import AI components
 try:
-    from backend.ai.session_processor import session_processor
-    from backend.ai.providers import provider_manager
+    from ai.session_processor import session_processor
+    from ai.providers import provider_manager
     AI_POC_AVAILABLE = True
 except ImportError as e:
     AI_POC_AVAILABLE = False
     print(f"⚠️  AI POC not available in API: {e}")
 
 # Import services and repositories
-from backend.app.services.student_service import StudentService
-from backend.app.services.session_service import SessionService
-from backend.app.services.ai_service import AIService
+from app.services.student_service import StudentService
+from app.services.session_service import SessionService
+from app.services.ai_service import AIService
 from app.services.mcp_interaction_service import MCPInteractionService
 
 # Import the blueprint from parent module
@@ -290,7 +290,7 @@ def save_vapi_session(call_id, student_id, phone, duration, user_transcript, ass
         # Analyze transcript and update student profile
         if user_transcript:
             try:
-                from backend.transcript_analyzer import TranscriptAnalyzer
+                from transcript_analyzer import TranscriptAnalyzer
                 analyzer = TranscriptAnalyzer()
                 # Use only the user transcript for profile extraction
                 extracted_info = analyzer.analyze_transcript(user_transcript)
@@ -438,7 +438,7 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
             # Always analyze transcript for profile information if there's content
             if len(transcript) > 100:  # Only analyze if there's meaningful content
                 try:
-                    from backend.transcript_analyzer import TranscriptAnalyzer
+                    from transcript_analyzer import TranscriptAnalyzer
                     analyzer = TranscriptAnalyzer()
                     log_webhook('transcript-analysis-start', f"Starting transcript analysis for profile extraction",
                                call_id=call_id, student_id=student_id,
@@ -527,7 +527,7 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
         # Always analyze transcript for profile information if there's content
         if student_id and combined_transcript.strip() and len(combined_transcript) > 100:
             try:
-                from backend.transcript_analyzer import TranscriptAnalyzer
+                from transcript_analyzer import TranscriptAnalyzer
                 analyzer = TranscriptAnalyzer()
                 log_webhook('transcript-analysis-start', f"Starting webhook transcript analysis for profile extraction",
                            call_id=call_id, student_id=student_id,

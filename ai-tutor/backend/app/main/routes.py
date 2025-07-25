@@ -12,24 +12,24 @@ from flask import Blueprint, render_template, session, redirect, request, flash,
 from flask import current_app
 
 # Import system components
-from backend.system_logger import system_logger, log_admin_action, log_webhook, log_ai_analysis, log_error, log_system
-from backend.vapi.client import vapi_client
+from system_logger import system_logger, log_admin_action, log_webhook, log_ai_analysis, log_error, log_system
+from vapi.client import vapi_client
 from app.services.token_service import TokenService
 
 # Import AI components
 try:
-    from backend.ai.session_processor import session_processor
-    from backend.ai.providers import provider_manager
-    from backend.ai.validator import validator
+    from ai.session_processor import session_processor
+    from ai.providers import provider_manager
+    from ai.validator import validator
     AI_POC_AVAILABLE = True
 except ImportError as e:
     AI_POC_AVAILABLE = False
     print(f"⚠️  AI POC not available: {e}")
 
 # Import services and repositories
-from backend.app.services.student_service import StudentService
-from backend.app.services.session_service import SessionService
-from backend.app.services.analytics_service import AnalyticsService
+from app.services.student_service import StudentService
+from app.services.session_service import SessionService
+from app.services.analytics_service import AnalyticsService
 from app.services.mcp_interaction_service import MCPInteractionService
 
 # Create blueprint
@@ -637,7 +637,7 @@ def test_sample_analysis():
     
     try:
         # Use the sample data from session_processor
-        from backend.ai.session_processor import SAMPLE_TRANSCRIPT, SAMPLE_STUDENT_CONTEXT
+        from ai.session_processor import SAMPLE_TRANSCRIPT, SAMPLE_STUDENT_CONTEXT
         
         # Run async analysis
         loop = asyncio.new_event_loop()
