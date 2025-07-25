@@ -12,6 +12,10 @@ class Config:
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'jwt-dev-key-please-change-in-production')
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
     
+    # Admin Authentication Configuration
+    ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
+    ADMIN_PASSWORD_HASH = os.getenv('ADMIN_PASSWORD_HASH')
+    
     # VAPI Configuration
     VAPI_API_KEY = os.getenv('VAPI_API_KEY')
     VAPI_SECRET = os.getenv('VAPI_SECRET')
@@ -30,6 +34,21 @@ class Config:
     
     # Logging Configuration
     LOG_RETENTION_DAYS = int(os.getenv('LOG_RETENTION_DAYS', 30))  # Days to keep logs in database
+    
+    @staticmethod
+    def init_app(app):
+        """Initialize application configuration"""
+        import hashlib
+        
+        # If ADMIN_PASSWORD_HASH is not set but ADMIN_PASSWORD is, hash it
+        if not app.config.get('ADMIN_PASSWORD_HASH') and os.getenv('ADMIN_PASSWORD'):
+            plain_password = os.getenv('ADMIN_PASSWORD')
+            app.config['ADMIN_PASSWORD_HASH'] = hashlib.sha256(plain_password.encode()).hexdigest()
+        
+        # Set default admin password hash for development if none provided
+        if not app.config.get('ADMIN_PASSWORD_HASH'):
+            # Default password: "admin123" (for development only)
+            app.config['ADMIN_PASSWORD_HASH'] = hashlib.sha256('admin123'.encode()).hexdigest()
 
 
 class DevelopmentConfig(Config):

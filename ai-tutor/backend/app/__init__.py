@@ -24,11 +24,17 @@ def create_app(config_name=None):
         config_name = os.getenv('FLASK_ENV', 'development')
     
     if config_name == 'production':
-        app.config.from_object('app.config.ProductionConfig')
+        from app.config import ProductionConfig
+        app.config.from_object(ProductionConfig)
+        ProductionConfig.init_app(app)
     elif config_name == 'testing':
-        app.config.from_object('app.config.TestingConfig')
+        from app.config import TestingConfig
+        app.config.from_object(TestingConfig)
+        TestingConfig.init_app(app)
     else:
-        app.config.from_object('app.config.DevelopmentConfig')
+        from app.config import DevelopmentConfig
+        app.config.from_object(DevelopmentConfig)
+        DevelopmentConfig.init_app(app)
     
     # Override config from environment variables
     app.config.from_envvar('APP_CONFIG_FILE', silent=True)
