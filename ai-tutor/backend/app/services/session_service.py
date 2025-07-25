@@ -191,11 +191,23 @@ class SessionService:
             # Calculate average duration
             avg_duration = db.session.query(db.func.avg(Session.duration_seconds)).scalar() or 0
             
+            # Get count of unique students with sessions
+            total_students = db.session.query(Session.student_id).distinct().count()
+            
+            # Count VAPI sessions (phone sessions)
+            vapi_sessions = Session.query.filter_by(session_type='phone').count()
+            
+            # Count sessions with analysis (has_summary=True)
+            with_analysis = Session.query.filter_by(has_summary=True).count()
+            
             return {
                 "total_sessions": total_sessions,
                 "sessions_today": sessions_today,
                 "average_duration": float(avg_duration),
-                "sessions_by_day": {}  # Could be implemented with more complex query
+                "sessions_by_day": {},  # Could be implemented with more complex query
+                "total_students": total_students,
+                "vapi_sessions": vapi_sessions,
+                "with_analysis": with_analysis
             }
         except Exception as e:
             print(f"Error getting session statistics: {e}")
@@ -203,7 +215,10 @@ class SessionService:
                 "total_sessions": 0,
                 "sessions_today": 0,
                 "average_duration": 0,
-                "sessions_by_day": {}
+                "sessions_by_day": {},
+                "total_students": 0,
+                "vapi_sessions": 0,
+                "with_analysis": 0
             }
     
     def get_session_details(self, student_id: str, session_file: str) -> tuple:
