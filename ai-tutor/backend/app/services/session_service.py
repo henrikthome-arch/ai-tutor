@@ -188,8 +188,8 @@ class SessionService:
                 db.func.date(Session.start_datetime) == today
             ).count()
             
-            # Calculate average duration
-            avg_duration = db.session.query(db.func.avg(Session.duration_seconds)).scalar() or 0
+            # Calculate average duration (field is 'duration', not 'duration_seconds')
+            avg_duration = db.session.query(db.func.avg(Session.duration)).scalar() or 0
             
             # Get count of unique students with sessions
             total_students = db.session.query(Session.student_id).distinct().count()
@@ -197,8 +197,8 @@ class SessionService:
             # Count VAPI sessions (phone sessions)
             vapi_sessions = Session.query.filter_by(session_type='phone').count()
             
-            # Count sessions with analysis (has_summary=True)
-            with_analysis = Session.query.filter_by(has_summary=True).count()
+            # Count sessions with analysis (sessions that have summary)
+            with_analysis = Session.query.filter(Session.summary.isnot(None)).filter(Session.summary != '').count()
             
             return {
                 "total_sessions": total_sessions,
