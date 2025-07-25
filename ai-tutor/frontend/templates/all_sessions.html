@@ -112,11 +112,11 @@
                     </td>
                     <td>
                         <div style="display: flex; gap: 0.5rem;">
-                            <a href="{{ url_for('view_session_detail', student_id=session.student_id, session_id=session.id) }}"
+                            <a href="{{ url_for('main.view_session_detail', student_id=session.student_id, session_id=session.id) }}"
                                class="btn btn-sm" style="font-size: 12px; padding: 5px 10px;">
                                 View
                             </a>
-                            <a href="{{ url_for('admin_student_detail', student_id=session.student_id) }}" 
+                            <a href="{{ url_for('main.admin_student_detail', student_id=session.student_id) }}"
                                class="btn btn-sm" style="font-size: 12px; padding: 5px 10px; background: #95a5a6;">
                                 Student
                             </a>
@@ -148,10 +148,10 @@
 <div class="card">
     <h3>Quick Actions</h3>
     <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-        <a href="{{ url_for('admin_students') }}" class="btn">👥 Manage Students</a>
-        <a href="{{ url_for('ai_analysis_dashboard') }}" class="btn">🤖 AI Analysis Dashboard</a>
-        <a href="{{ url_for('admin_database') }}" class="btn">📁 Browse Data</a>
-        <a href="{{ url_for('admin_system') }}" class="btn">⚙️ System Settings</a>
+        <a href="{{ url_for('main.admin_students') }}" class="btn">👥 Manage Students</a>
+        <a href="{{ url_for('main.ai_analysis_dashboard') }}" class="btn">🤖 AI Analysis Dashboard</a>
+        <a href="{{ url_for('main.admin_database') }}" class="btn">📁 Browse Data</a>
+        <a href="{{ url_for('main.admin_system') }}" class="btn">⚙️ System Settings</a>
     </div>
 </div>
 
