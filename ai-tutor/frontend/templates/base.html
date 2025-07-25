@@ -262,39 +262,39 @@
         <div class="container">
             <h1>🤖 AI Tutor Admin</h1>
             <nav>
-                <a href="{{ url_for('admin_dashboard') }}" 
-                   class="{% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
+                <a href="{{ url_for('main.admin_dashboard') }}"
+                   class="{% if request.endpoint == 'main.admin_dashboard' %}active{% endif %}">
                    📊 Dashboard
                 </a>
-                <a href="{{ url_for('admin_students') }}"
-                   class="{% if request.endpoint in ['admin_students', 'admin_student_detail'] %}active{% endif %}">
+                <a href="{{ url_for('main.admin_students') }}"
+                   class="{% if request.endpoint in ['main.admin_students', 'main.admin_student_detail'] %}active{% endif %}">
                    👥 Students
                 </a>
-                <a href="{{ url_for('admin_schools') }}"
-                   class="{% if request.endpoint in ['admin_schools', 'add_school', 'edit_school'] %}active{% endif %}">
+                <a href="{{ url_for('main.admin_schools') }}"
+                   class="{% if request.endpoint in ['main.admin_schools', 'main.add_school', 'main.edit_school'] %}active{% endif %}">
                    🏫 Schools
                 </a>
-                <a href="{{ url_for('admin_curriculum') }}"
-                   class="{% if request.endpoint in ['admin_curriculum', 'add_curriculum', 'edit_curriculum', 'school_curriculum'] %}active{% endif %}">
+                <a href="{{ url_for('main.admin_curriculum') }}"
+                   class="{% if request.endpoint in ['main.admin_curriculum', 'main.add_curriculum', 'main.edit_curriculum', 'main.school_curriculum'] %}active{% endif %}">
                    📚 Curriculum
                 </a>
-               <a href="{{ url_for('admin_all_sessions') }}"
-                  class="{% if request.endpoint in ['admin_all_sessions', 'view_student_sessions', 'view_session_detail'] %}active{% endif %}">
+               <a href="{{ url_for('main.admin_all_sessions') }}"
+                  class="{% if request.endpoint in ['main.admin_all_sessions', 'main.view_student_sessions', 'main.view_session_detail'] %}active{% endif %}">
                   🕒 Sessions
                </a>
-                <a href="{{ url_for('admin_tokens') }}"
-                   class="{% if request.endpoint in ['admin_tokens', 'generate_token', 'revoke_token'] %}active{% endif %}">
+                <a href="{{ url_for('main.admin_tokens') }}"
+                   class="{% if request.endpoint in ['main.admin_tokens', 'main.generate_token', 'main.revoke_token'] %}active{% endif %}">
                    🔑 Tokens
                 </a>
-                <a href="{{ url_for('ai_analysis_dashboard') }}"
-                   class="{% if request.endpoint in ['ai_analysis_dashboard', 'test_sample_analysis', 'analyze_student_session'] %}active{% endif %}">
+                <a href="{{ url_for('main.ai_analysis_dashboard') }}"
+                   class="{% if request.endpoint in ['main.ai_analysis_dashboard', 'main.test_sample_analysis', 'main.analyze_student_session'] %}active{% endif %}">
                    🤖 AI Analysis
                 </a>
-                <a href="{{ url_for('admin_system') }}"
-                   class="{% if request.endpoint == 'admin_system' %}active{% endif %}">
+                <a href="{{ url_for('main.admin_system') }}"
+                   class="{% if request.endpoint == 'main.admin_system' %}active{% endif %}">
                    ⚙️ System
                 </a>
-                <a href="{{ url_for('admin_logout') }}">🚪 Logout</a>
+                <a href="{{ url_for('main.admin_logout') }}">🚪 Logout</a>
             </nav>
         </div>
     </nav>
