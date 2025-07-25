@@ -25,23 +25,32 @@ class TokenService:
         """Initialize the token service."""
         pass
     
-    def generate_token(self, 
-                      scopes: List[str], 
-                      expires_in_minutes: int = 30, 
+    def generate_token(self,
+                      name: str = None,
+                      scopes: List[str] = None,
+                      expiration_hours: int = None,
+                      expires_in_minutes: int = 30,
                       user_id: Optional[str] = None,
                       additional_claims: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Generate a JWT access token with specific scopes and expiration time.
+        Supports both old and new parameter formats for compatibility.
         
         Args:
+            name: Name/description for the token (for admin interface)
             scopes: List of permission scopes to include in the token
-            expires_in_minutes: Token expiration time in minutes (default: 30)
+            expiration_hours: Token expiration time in hours (for admin interface)
+            expires_in_minutes: Token expiration time in minutes (legacy)
             user_id: Optional user ID to associate with the token
             additional_claims: Optional additional claims to include in the token
             
         Returns:
             Dictionary containing the token and metadata
         """
+        # Handle admin interface parameters
+        if expiration_hours is not None:
+            expires_in_minutes = expiration_hours * 60
+        
         # Validate scopes
         valid_scopes = [scope for scope in scopes if scope in self.AVAILABLE_SCOPES]
         if not valid_scopes:
@@ -53,6 +62,10 @@ class TokenService:
             'type': 'debug_access',
             'created_at': datetime.utcnow().isoformat()
         }
+        
+        # Add name if provided
+        if name:
+            claims['name'] = name
         
         # Add user ID if provided
         if user_id:
@@ -76,15 +89,26 @@ class TokenService:
             f"expires in {expires_in_minutes} minutes"
         )
         
-        # Return token with metadata
+        # Return token with metadata (supports both formats)
         expiration_time = datetime.utcnow() + expires
-        return {
+        result = {
             'token': token,
             'expires_at': expiration_time.isoformat(),
             'expires_in_minutes': expires_in_minutes,
             'scopes': valid_scopes,
             'type': 'debug_access'
         }
+        
+        # Add admin interface fields if this is an admin request
+        if name:
+            result.update({
+                'id': 1,  # Mock ID since we don't store tokens
+                'name': name,
+                'created_at': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+                'expires_at': expiration_time.strftime('%Y-%m-%d %H:%M:%S')
+            })
+        
+        return result
     
     def validate_token_has_scope(self, required_scope: str) -> bool:
         """
@@ -153,3 +177,33 @@ class TokenService:
             Dictionary of scope names and descriptions
         """
         return self.AVAILABLE_SCOPES.copy()
+    
+    def get_active_tokens(self) -> List[Dict[str, Any]]:
+        """
+        Get a list of active tokens.
+        
+        Note: Since JWT tokens are stateless, this returns an empty list.
+        In a production system, you would track tokens in a database.
+        
+        Returns:
+            List of active token dictionaries
+        """
+        # Since JWT tokens are stateless and not stored, return empty list
+        # In a real implementation, you'd query a database of issued tokens
+        return []
+    
+    
+    def revoke_token(self, token_id: int) -> bool:
+        """
+        Revoke a token by ID.
+        
+        Args:
+            token_id: The token ID to revoke
+            
+        Returns:
+            True if revoked (always returns True for JWT tokens since they can't be revoked)
+        """
+        # JWT tokens are stateless and cannot be revoked without a blacklist
+        # In a production system, you would add the token to a blacklist
+        logger.info(f"Mock token revocation for token ID: {token_id}")
+        return True

@@ -269,7 +269,7 @@ function resetStats() {
 
 // Auto-refresh stats every 30 seconds
 setInterval(function() {
-    fetch('{{ url_for("main.api_ai_stats") }}')
+    fetch('{{ url_for("api.api_ai_stats") }}')
     .then(response => response.json())
     .then(data => {
         // Update stats if needed (you could implement live updates here)
