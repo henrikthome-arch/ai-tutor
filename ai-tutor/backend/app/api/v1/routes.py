@@ -468,6 +468,50 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
                    session_file=session_file,
                    transcript_length=len(transcript) if transcript else 0)
         
+        # CRITICAL FIX: Create Session model record in database
+        try:
+            from datetime import datetime
+            from app import db
+            from app.models.session import Session
+            
+            # Parse start time from metadata or use current time
+            start_time_str = metadata.get('created_at')
+            if start_time_str:
+                try:
+                    # Try to parse ISO format timestamp
+                    start_datetime = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                except:
+                    start_datetime = datetime.now()
+            else:
+                start_datetime = datetime.now()
+            
+            # Create Session model record
+            session_record = Session(
+                student_id=int(student_id),
+                call_id=call_id,
+                session_type='phone',  # VAPI calls are phone sessions
+                start_datetime=start_datetime,
+                duration=effective_duration,  # Use effective duration
+                transcript=transcript[:10000] if transcript else None,  # Truncate very long transcripts
+                summary=metadata.get('analysis_summary', '')[:5000] if metadata.get('analysis_summary') else None
+            )
+            
+            db.session.add(session_record)
+            db.session.commit()
+            
+            log_webhook('session-db-created', f"Created Session DB record for call {call_id}",
+                       call_id=call_id,
+                       student_id=student_id,
+                       session_db_id=session_record.id,
+                       duration=effective_duration)
+            print(f"✅ Created Session DB record ID {session_record.id} for call {call_id}")
+            
+        except Exception as db_error:
+            db.session.rollback()
+            log_error('WEBHOOK', f"Error creating Session DB record for call {call_id}", db_error,
+                     call_id=call_id, student_id=student_id)
+            print(f"⚠️ Error creating Session DB record: {db_error}")
+        
     except Exception as e:
         log_error('WEBHOOK', f"Error saving API-driven session for call {call_id}", e,
                  call_id=call_id, student_id=student_id)
@@ -523,6 +567,38 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
         # Save using old method with the effective duration
         save_vapi_session(call_id, student_id, customer_phone, effective_duration,
                          user_transcript, assistant_transcript, message)
+        
+        # CRITICAL FIX: Create Session model record in database for webhook fallback
+        try:
+            from app import db
+            from app.models.session import Session
+            
+            # Create Session model record
+            session_record = Session(
+                student_id=int(student_id),
+                call_id=call_id,
+                session_type='phone',  # VAPI calls are phone sessions
+                start_datetime=datetime.now(),  # Use current time for webhook fallback
+                duration=effective_duration,
+                transcript=combined_transcript[:10000] if combined_transcript else None,  # Truncate very long transcripts
+                summary=None  # No summary available in webhook fallback
+            )
+            
+            db.session.add(session_record)
+            db.session.commit()
+            
+            log_webhook('session-db-created-fallback', f"Created Session DB record for webhook fallback call {call_id}",
+                       call_id=call_id,
+                       student_id=student_id,
+                       session_db_id=session_record.id,
+                       duration=effective_duration)
+            print(f"✅ Created Session DB record ID {session_record.id} for webhook fallback call {call_id}")
+            
+        except Exception as db_error:
+            db.session.rollback()
+            log_error('WEBHOOK', f"Error creating Session DB record for webhook fallback call {call_id}", db_error,
+                     call_id=call_id, student_id=student_id)
+            print(f"⚠️ Error creating Session DB record in webhook fallback: {db_error}")
         
         # Always analyze transcript for profile information if there's content
         if student_id and combined_transcript.strip() and len(combined_transcript) > 100:

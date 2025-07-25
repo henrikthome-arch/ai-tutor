@@ -121,30 +121,55 @@ def admin_student_detail(student_id):
     if not check_auth():
         return redirect(url_for('main.admin_login'))
     
-    student_data = student_service.get_student_data(student_id)
-    if not student_data:
-        flash(f'Student {student_id} not found', 'error')
+    # CRITICAL FIX: Get Student model directly instead of using old profile structure
+    try:
+        from app.models.student import Student
+        from app import db
+        
+        # Get student from database using Student model
+        student_model = db.session.query(Student).filter_by(id=int(student_id)).first()
+        if not student_model:
+            flash(f'Student {student_id} not found', 'error')
+            return redirect(url_for('main.admin_students'))
+        
+        # Get phone number (use model field or service as fallback)
+        phone = student_model.phone_number or student_service.get_student_phone(student_id)
+        
+        # Get sessions from session service (database sessions)
+        sessions = session_service.get_student_sessions(student_id)
+        
+        # Create student object for template using Student model fields
+        student = {
+            'id': student_id,
+            'first_name': student_model.first_name,
+            'last_name': student_model.last_name,
+            'name': student_model.full_name,  # Use full_name property
+            'age': student_model.age,  # Use age property
+            'grade': student_model.get_grade(),  # Use get_grade() method
+            'phone': phone,
+            'interests': student_model.interests or [],
+            'learning_preferences': student_model.learning_preferences or [],
+            'motivational_triggers': student_model.motivational_triggers or []
+        }
+        
+        # Legacy structure for backward compatibility
+        profile = {
+            'name': student_model.full_name,
+            'first_name': student_model.first_name,
+            'last_name': student_model.last_name,
+            'age': student_model.age,
+            'grade': student_model.get_grade(),
+            'interests': student_model.interests or [],
+            'learning_preferences': student_model.learning_preferences or [],
+            'motivational_triggers': student_model.motivational_triggers or []
+        }
+        progress = {}
+        assessment = {}
+        
+    except Exception as e:
+        print(f"❌ Error getting student {student_id}: {e}")
+        flash(f'Error loading student {student_id}: {str(e)}', 'error')
         return redirect(url_for('main.admin_students'))
-    
-    # Get phone number from the latest mapping
-    phone = student_service.get_student_phone(student_id)
-    
-    # Extract data for template
-    profile = student_data.get('profile', {})
-    progress = student_data.get('progress', {})
-    assessment = student_data.get('assessment', {})
-    sessions = student_data.get('sessions', [])
-    
-    # Create student object for template
-    student = {
-        'id': student_id,
-        'name': profile.get('name', 'Unknown'),
-        'age': profile.get('age', 'Unknown'),
-        'grade': profile.get('grade', 'Unknown'),
-        'phone': phone,
-        'interests': profile.get('interests', []),
-        'learning_preferences': profile.get('learning_preferences', [])
-    }
     
     # Process sessions for recent sessions display
     recent_sessions = []
