@@ -68,7 +68,7 @@
                 </p>
             </div>
             <div style="text-align: center;">
-                <a href="{{ url_for('curriculum_details', curriculum_id=stats.default_curriculum.id) }}"
+                <a href="{{ url_for('main.curriculum_details', curriculum_id=stats.default_curriculum.id) }}"
                    class="btn btn-success" style="margin-bottom: 0.5rem;">
                     📋 View Details
                 </a>
@@ -95,7 +95,7 @@
                 </p>
             </div>
             <div style="text-align: center;">
-                <a href="{{ url_for('admin_curriculum') }}" class="btn" style="background: #ffc107; color: #212529;">
+                <a href="{{ url_for('main.admin_curriculum') }}" class="btn" style="background: #ffc107; color: #212529;">
                     📚 Manage Curriculum
                 </a>
             </div>
