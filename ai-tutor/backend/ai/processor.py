@@ -8,7 +8,6 @@ from typing import Dict, Any, Optional, Tuple
 from app import db
 from app.models.session import Session
 from app.models.student import Student
-from app.models.profile import Profile
 from ai.providers import provider_manager
 
 logger = logging.getLogger(__name__)
@@ -41,16 +40,13 @@ class AIProcessor:
             logger.error(f"Student {session.student_id} not found")
             return {"error": "Student not found"}
         
-        # Get student profile
-        profile = Profile.query.filter_by(student_id=student.id).first()
-        
-        # Prepare context
+        # Prepare context using Student model directly (profile fields are now part of Student)
         context = {
             "student_name": student.full_name,
             "student_age": student.age,
             "student_grade": student.grade,
-            "interests": profile.interests if profile else [],
-            "learning_preferences": profile.learning_preferences if profile else [],
+            "interests": student.interests or [],
+            "learning_preferences": student.learning_preferences or [],
             "task": "session_analysis"
         }
         

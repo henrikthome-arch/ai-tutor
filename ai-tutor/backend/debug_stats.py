@@ -83,23 +83,18 @@ def debug_student_stats():
         if raw_count == 0:
             print("\n➕ Attempting to create test student...")
             try:
-                from app.models.profile import Profile
-                
+                # Profile fields are now part of Student model directly
                 test_student = Student(
                     first_name="Test",
                     last_name="Student",
                     student_type="International",
-                    phone_number="+1234567890"
+                    phone_number="+1234567890",
+                    grade=5,
+                    age=10,
+                    interests=["Math", "Science"],
+                    learning_preferences=["Visual", "Interactive"]
                 )
                 db.session.add(test_student)
-                db.session.flush()
-                
-                test_profile = Profile(
-                    student_id=test_student.id,
-                    grade="5",
-                    curriculum="Test Curriculum"
-                )
-                db.session.add(test_profile)
                 db.session.commit()
                 
                 print(f"✅ Created test student with ID: {test_student.id}")

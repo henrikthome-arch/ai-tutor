@@ -6,7 +6,6 @@ Check current database state for debugging
 from app import create_app, db
 from app.models.student import Student
 from app.models.session import Session
-from app.models.profile import Profile
 from app.models.curriculum import Curriculum, Subject, CurriculumDetail
 from app.models.assessment import StudentSubject
 from sqlalchemy import func, select
@@ -45,8 +44,9 @@ def main():
             students = db.session.execute(stmt).scalars().all()
             print(f'\nFirst 5 students:')
             for s in students:
-                profile_count = 1 if s.profile else 0
-                print(f'  ID: {s.id}, Name: "{s.first_name}" "{s.last_name}", Phone: {s.phone_number}, Profile: {profile_count}')
+                # Profile fields are now part of Student model directly
+                has_profile_data = bool(s.interests or s.learning_preferences or s.grade or s.age)
+                print(f'  ID: {s.id}, Name: "{s.first_name}" "{s.last_name}", Phone: {s.phone_number}, Profile Data: {has_profile_data}')
         else:
             print('\n❌ No students found in database - this explains "Total students = 0"')
             
