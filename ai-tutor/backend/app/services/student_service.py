@@ -47,8 +47,8 @@ class StudentService:
                 today_start = datetime.combine(today, datetime.min.time())
                 today_end = datetime.combine(today, datetime.max.time())
                 sessions_today = Session.query.filter(
-                    Session.start_time >= today_start,
-                    Session.start_time <= today_end
+                    Session.start_datetime >= today_start,
+                    Session.start_datetime <= today_end
                 ).count()
             except Exception as session_e:
                 print(f"Error getting session stats: {session_e}")
@@ -175,9 +175,9 @@ class StudentService:
                     if session_count > 0:
                         # Import Session model locally to avoid circular imports
                         from app.models.session import Session
-                        last_session = Session.query.filter_by(student_id=student.id).order_by(Session.start_time.desc()).first()
-                        if last_session and last_session.start_time:
-                            student_dict['last_session'] = last_session.start_time.strftime('%Y-%m-%d')
+                        last_session = Session.query.filter_by(student_id=student.id).order_by(Session.start_datetime.desc()).first()
+                        if last_session and last_session.start_datetime:
+                            student_dict['last_session'] = last_session.start_datetime.strftime('%Y-%m-%d')
                 except Exception as e:
                     print(f"Error calculating session stats for student {student.id}: {e}")
                     student_dict['session_count'] = 0
@@ -241,7 +241,7 @@ class StudentService:
             for session in student.sessions:
                 session_dict = session.to_dict() if hasattr(session, 'to_dict') else {
                     'id': session.id,
-                    'start_time': session.start_time.isoformat() if session.start_time else None,
+                    'start_datetime': session.start_datetime.isoformat() if session.start_datetime else None,
                     'duration_seconds': session.duration_seconds,
                     'session_type': session.session_type,
                     'transcript_file': session.transcript_file

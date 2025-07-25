@@ -95,7 +95,7 @@ class SessionService:
             if student_id:
                 query = query.filter_by(student_id=int(student_id))
             
-            sessions = query.order_by(Session.start_time.desc()).limit(limit).all()
+            sessions = query.order_by(Session.start_datetime.desc()).limit(limit).all()
             return [session.to_dict() for session in sessions] if hasattr(Session, 'to_dict') else []
         except Exception as e:
             print(f"Error getting recent sessions: {e}")
@@ -185,7 +185,7 @@ class SessionService:
             from datetime import date
             today = date.today()
             sessions_today = Session.query.filter(
-                db.func.date(Session.start_time) == today
+                db.func.date(Session.start_datetime) == today
             ).count()
             
             # Calculate average duration
