@@ -272,7 +272,7 @@ def student_memory_scopes(student_id):
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
-        from app.repositories.student_memory_repository import StudentMemoryRepository
+        from app.repositories import student_memory_repository
         from app.models.student_memory import MemoryScope
         from app import db
         
@@ -283,15 +283,12 @@ def student_memory_scopes(student_id):
                 'message': f'Student {student_id} not found'
             }), 404
         
-        # Get memory data using repository
-        memory_repo = StudentMemoryRepository(db.session)
-        
         # Get all scopes with their descriptions and current entries
         scopes_data = []
         
         for scope in MemoryScope:
-            # Get memory entries for this scope
-            memory_entries = memory_repo.get_many(int(student_id), scope)
+            # Get memory entries for this scope using the module functions
+            memory_entries = student_memory_repository.get_many(int(student_id), scope)
             
             # Create scope data
             scope_info = {

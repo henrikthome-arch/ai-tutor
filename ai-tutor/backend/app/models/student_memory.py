@@ -11,6 +11,15 @@ class MemoryScope(enum.Enum):
     personal_fact = "personal_fact"      # Personal information about the student (pet names, family, etc.)
     game_state = "game_state"            # Game progress and state information
     strategy_log = "strategy_log"        # Teaching strategies that worked or didn't work
+    
+    def get_description(self):
+        """Get human-readable description for memory scope"""
+        descriptions = {
+            'personal_fact': 'Personal information about the student (name, age, family, pets, etc.)',
+            'game_state': 'Current state of educational games and activities',
+            'strategy_log': 'Teaching strategies that work well for this student'
+        }
+        return descriptions.get(self.value, 'Unknown scope')
 
 class StudentMemory(db.Model):
     """
