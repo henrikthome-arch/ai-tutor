@@ -37,6 +37,7 @@ graph TD
         E --> H["SessionService"];
         F --> I["AIService"];
         F --> J["TokenService"];
+        F --> K["TutorAssessmentService"];
     end
 
     subgraph "Data Access Layer (DAL)"
@@ -115,6 +116,7 @@ graph TD
   - **VAPI Integration**: Webhook processing and call management
   - **Authentication**: Token-based and session-based security
   - **AI Integration**: Structured prompt management and analysis
+  - **AI Tutor Assessment**: Automated performance evaluation and prompt optimization
 
 #### 2.1.2. MCP Server (`mcp-server/`)
 - **Purpose**: Model Context Protocol server for external data access
@@ -147,6 +149,7 @@ graph TD
   - Session quality validation
   - Student profile enhancement from transcripts
   - Call type detection (new vs returning students)
+  - AI tutor performance assessment and prompt optimization
 
 ### 2.2. External Integrations
 
@@ -246,6 +249,8 @@ erDiagram
         int duration_seconds
         text transcript
         text summary
+        text tutor_assessment "AI-generated assessment of tutor performance"
+        text prompt_suggestions "AI-generated suggestions for prompt improvements"
         timestamp created_at
     }
 
@@ -465,9 +470,11 @@ POST /admin/api/mcp/cleanup       # Clean up old interactions
    - Identifies/creates student profile
    - Creates session record
    - Triggers AI post-processing
+   - Triggers AI tutor performance assessment (for tutoring sessions)
 7. AI analysis → Updates student assessment
-8. Session summary generated
-9. Data stored in PostgreSQL
+8. AI tutor assessment → Evaluates tutor performance and generates prompt suggestions
+9. Session summary generated
+10. Data stored in PostgreSQL
 ```
 
 ### 6.3. AI Prompt Management Flow
@@ -748,3 +755,165 @@ Grade	Subject	Mandatory	Details
 - **Default Curriculum**: Exactly one curriculum marked as `is_default=true`
 - **Subject Consistency**: All subjects referenced in curriculum_details must exist in subjects table
 - **Grade Validation**: Grade levels validated against system-supported ranges (1-12)
+
+## 11. AI Tutor Performance Assessment System
+
+### 11.1. Overview
+
+The AI Tutor Performance Assessment System provides automated evaluation of AI tutor effectiveness during tutoring sessions. This system analyzes session transcripts against evidence-based tutoring guidelines to generate performance assessments and actionable improvement suggestions.
+
+### 11.2. System Components
+
+#### 11.2.1. TutorAssessmentService
+- **Location**: [`ai-tutor/backend/app/services/tutor_assessment_service.py`](ai-tutor/backend/app/services/tutor_assessment_service.py)
+- **Purpose**: Orchestrates the complete tutor assessment workflow
+- **Integration**: Automatically triggered after tutoring session processing
+- **Responsibilities**:
+  - Session eligibility validation (skips welcome/introductory sessions)
+  - Data gathering from multiple sources
+  - AI model interaction for assessment generation
+  - Database storage of assessment results
+  - MCP interaction logging for monitoring
+
+#### 11.2.2. Assessment Data Sources
+The assessment system gathers data from four key sources:
+
+1. **Session Transcript**: Complete conversation between student and AI tutor
+2. **Tutoring Guidelines**: Evidence-based best practices from [`ai-tutor/backend/app/ai/resources/guidelines-for-ai-tutor.md`](ai-tutor/backend/app/ai/resources/guidelines-for-ai-tutor.md)
+3. **Student Profile**: Complete student context including demographics, interests, and learning preferences
+4. **AI Tutor Prompt**: Current prompt system from [`ai-tutor/docs/AI_ASSISTANT_PROMPT_SYSTEM.md`](ai-tutor/docs/AI_ASSISTANT_PROMPT_SYSTEM.md)
+
+#### 11.2.3. Evidence-Based Guidelines
+The assessment system evaluates tutor performance against comprehensive evidence-based strategies including:
+- **Storytelling and Narrative Learning**: Engagement through story-based teaching
+- **Gamification and Playful Learning**: Game elements to increase motivation
+- **Interactive Dialogue**: Socratic questioning and student engagement techniques
+- **Spaced Repetition**: Long-term retention optimization
+- **Novelty and Variety**: Attention maintenance strategies
+- **Scaffolding and Adaptive Challenge**: Zone of Proximal Development targeting
+- **Feedback and Positive Reinforcement**: Growth mindset and motivation support
+- **Age-Appropriate Strategies**: Developmental stage considerations
+- **Personalization**: Individual learning profile adaptation
+
+### 11.3. Assessment Workflow
+
+#### 11.3.1. Trigger Conditions
+```
+1. Session completion → Database record creation
+2. Session validation → Must have student_id (not welcome session)
+3. Transcript validation → Minimum 50 characters required
+4. Automatic trigger → TutorAssessmentService.assess_tutor_performance()
+```
+
+#### 11.3.2. Data Gathering Process
+```
+1. Session retrieval → Get session and student data from PostgreSQL
+2. Guidelines loading → Read tutoring best practices file
+3. Prompt loading → Read current AI tutor prompt system
+4. Context compilation → Combine all sources into assessment prompt
+5. Student profile compilation → Include demographics, interests, preferences
+```
+
+#### 11.3.3. AI Assessment Generation
+```
+1. Prompt construction → Create comprehensive assessment prompt
+2. AI model call → Send to OpenAI GPT-4 for analysis
+3. JSON response parsing → Extract structured assessment data
+4. Validation → Ensure required fields are present and valid
+5. Error handling → Log failures and implement fallback strategies
+```
+
+#### 11.3.4. Result Storage
+```
+1. Database update → Store assessment in sessions table
+2. Field mapping:
+   - tutor_assessment → Paragraph-based performance evaluation
+   - prompt_suggestions → Concrete improvement recommendations
+3. Transaction management → Ensure data consistency
+4. MCP logging → Track assessment completion for monitoring
+```
+
+### 11.4. Assessment Output Format
+
+#### 11.4.1. Tutor Assessment Field
+- **Content**: Comprehensive paragraph-based evaluation
+- **Coverage**: What went well and areas for improvement
+- **Evidence-Based**: References specific examples from transcript
+- **Constructive**: Balanced feedback highlighting strengths and growth areas
+
+#### 11.4.2. Prompt Suggestions Field
+- **Content**: Specific, actionable recommendations
+- **Target**: VAPI/chat prompt improvements
+- **Implementation-Focused**: Concrete changes that can be applied
+- **Context-Aware**: Based on observed student needs and session dynamics
+
+### 11.5. Database Schema Integration
+
+#### 11.5.1. Sessions Table Updates
+```sql
+ALTER TABLE sessions ADD COLUMN tutor_assessment TEXT;
+ALTER TABLE sessions ADD COLUMN prompt_suggestions TEXT;
+```
+
+#### 11.5.2. Data Access Patterns
+- **Admin Dashboard**: Assessment data displayed in session detail views
+- **API Access**: Available through session endpoints with proper authentication
+- **Reporting**: Aggregated assessment data for system improvement insights
+
+### 11.6. Admin Interface Integration
+
+#### 11.6.1. Session Detail View Enhancements
+- **Assessment Section**: Dedicated section for tutor performance evaluation
+- **Visual Design**: Color-coded sections with clear headings
+- **Copy Functionality**: Easy copying of assessment data
+- **Navigation**: Quick scroll-to functionality for large sessions
+- **Status Indicators**: Clear indication of assessment availability
+
+#### 11.6.2. Assessment Status Tracking
+- **Data Summary**: Assessment availability shown in session overview
+- **Quick Actions**: Direct navigation to assessment sections
+- **Progress Tracking**: Visual indicators of assessment completion
+- **Error Handling**: User-friendly messages for processing issues
+
+### 11.7. Monitoring and Observability
+
+#### 11.7.1. MCP Interaction Logging
+- **Assessment Start**: Log initiation of assessment process
+- **Data Gathering**: Track successful collection of all required sources
+- **AI Model Calls**: Log API calls with performance metrics
+- **Completion Status**: Track successful vs failed assessments
+- **Error Tracking**: Detailed logging of assessment failures
+
+#### 11.7.2. Performance Metrics
+- **Assessment Success Rate**: Percentage of successful assessments
+- **Processing Time**: Duration from trigger to completion
+- **Data Availability**: Success rate of data source retrieval
+- **AI Model Performance**: Response time and success rate
+
+### 11.8. Error Handling and Resilience
+
+#### 11.8.1. Graceful Degradation
+- **Missing Guidelines**: Assessment continues with reduced context
+- **AI Model Failures**: Detailed error logging without session impact
+- **Database Issues**: Transaction rollback with retry mechanisms
+- **File Access Errors**: Fallback strategies for missing resources
+
+#### 11.8.2. Session Impact Isolation
+- **Non-Blocking**: Assessment failures do not impact session processing
+- **Async Design**: Assessment runs independently of primary workflow
+- **Recovery Mechanisms**: Failed assessments can be retried manually
+- **Monitoring Integration**: Real-time error tracking and alerting
+
+### 11.9. Future Enhancements
+
+#### 11.9.1. Assessment Analytics
+- **Trend Analysis**: Track tutor performance improvements over time
+- **Pattern Recognition**: Identify common areas for improvement
+- **Comparative Analysis**: Benchmark against tutoring best practices
+- **Automated Recommendations**: System-level prompt optimization suggestions
+
+#### 11.9.2. Integration Expansion
+- **Real-Time Assessment**: Live session quality monitoring
+- **Multi-Modal Analysis**: Include voice tone and pacing analysis
+- **Student Feedback Integration**: Incorporate student satisfaction metrics
+- **Continuous Learning**: AI model fine-tuning based on assessment outcomes

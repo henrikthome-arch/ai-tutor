@@ -33,8 +33,9 @@ This document outlines the detailed requirements for the AI Tutor system, coveri
 -   **Admin Dashboard**: A secure, web-based admin dashboard for system management with database browser functionality.
 -   **API Layer**: A dedicated API layer (MCP Server) to serve data to all user interfaces.
 -   **MCP Interaction Logging**: Comprehensive logging system for all MCP server communications, tracking request/response pairs, performance metrics, and system health indicators for debugging and monitoring purposes.
--   **Production Testing Tools**: Built-in testing infrastructure for VAPI integration and system health monitoring.
--   **Log Management**: Comprehensive PostgreSQL-based logging system with automatic 30-day retention and categorized event tracking.
+- **Production Testing Tools**: Built-in testing infrastructure for VAPI integration and system health monitoring.
+- **Log Management**: Comprehensive PostgreSQL-based logging system with automatic 30-day retention and categorized event tracking.
+- **AI Tutor Performance Assessment**: Automated evaluation of AI tutor effectiveness using evidence-based tutoring guidelines to generate performance assessments and improvement recommendations.
 
 ### 1.2. Non-Functional Requirements
 
@@ -392,3 +393,150 @@ The system must provide a comprehensive default curriculum that is automatically
 - **Complete Export**: Export all curricula or individual curriculum selection
 - **Import History**: Track all curriculum imports with timestamps and success/failure status
 - **Data Integrity**: Exported data must be importable without modification
+
+## 7. AI Tutor Performance Assessment Requirements
+
+### 7.1. Functional Requirements
+
+#### 7.1.1. Automated Assessment Trigger
+- **Post-Session Processing**: System must automatically initiate tutor performance assessment after each completed tutoring session (excluding welcome/introductory sessions)
+- **Session Validation**: Assessment must only process sessions with valid student_id and sufficient transcript content (minimum 50 characters)
+- **Non-Blocking Operation**: Assessment process must not interfere with primary session processing or user experience
+- **Error Isolation**: Assessment failures must not impact session completion or data storage
+
+#### 7.1.2. Data Source Integration
+- **Session Transcript**: Complete conversation transcript between student and AI tutor
+- **Tutoring Guidelines**: Evidence-based best practices from dedicated guidelines file
+- **Student Profile**: Complete student context including demographics, interests, learning preferences, and historical data
+- **AI Tutor Prompt**: Current prompt system configuration used during the session
+- **Comprehensive Context**: All data sources must be successfully gathered before assessment generation
+
+#### 7.1.3. Evidence-Based Assessment Criteria
+The system must evaluate AI tutor performance against research-backed tutoring strategies:
+- **Storytelling and Narrative Learning**: Use of stories and examples to engage students
+- **Gamification Elements**: Implementation of game-like elements and motivational rewards
+- **Interactive Dialogue**: Socratic questioning, student engagement, and two-way conversation
+- **Spaced Repetition**: Strategic review and reinforcement of previously learned material
+- **Novelty and Variety**: Maintenance of student attention through varied activities and approaches
+- **Scaffolding and Adaptive Challenge**: Appropriate difficulty level and support provision
+- **Positive Reinforcement**: Encouragement, praise, and confidence-building techniques
+- **Age-Appropriate Strategies**: Developmental stage considerations and suitable communication style
+- **Personalization**: Adaptation to individual student interests, learning style, and needs
+
+#### 7.1.4. Assessment Output Requirements
+- **Structured JSON Response**: AI must provide assessment in predefined JSON format with two required fields
+- **Performance Evaluation**: Detailed paragraph(s) analyzing what went well and areas for improvement
+- **Actionable Recommendations**: Specific, implementable suggestions for prompt and approach improvements
+- **Evidence-Based Analysis**: Assessment must reference specific examples from the session transcript
+- **Constructive Feedback**: Balanced evaluation highlighting both strengths and growth opportunities
+
+### 7.2. Technical Requirements
+
+#### 7.2.1. Database Schema Updates
+- **Sessions Table Extension**: Add `tutor_assessment` and `prompt_suggestions` TEXT columns to sessions table
+- **Data Integrity**: Assessment data must be stored atomically with proper transaction management
+- **Null Handling**: Assessment fields must gracefully handle missing or failed assessments
+- **Migration Support**: Schema changes must be deployable without data loss
+
+#### 7.2.2. Service Architecture
+- **TutorAssessmentService**: Dedicated service class for assessment workflow orchestration
+- **Modular Design**: Clear separation of data gathering, AI interaction, and result storage
+- **Error Handling**: Comprehensive error catching with detailed logging and graceful degradation
+- **MCP Integration**: Full logging of assessment workflow for monitoring and debugging
+
+#### 7.2.3. AI Integration Requirements
+- **Model Selection**: Use GPT-4 or equivalent high-quality language model for assessment generation
+- **Prompt Engineering**: Comprehensive assessment prompt incorporating all data sources and evaluation criteria
+- **Response Validation**: JSON structure validation before database storage
+- **Timeout Handling**: Appropriate timeouts for AI model calls with fallback strategies
+- **Rate Limiting**: Respect AI provider rate limits and implement retry mechanisms
+
+#### 7.2.4. File Management
+- **Guidelines Storage**: Tutoring guidelines stored in organized file structure within application
+- **Resource Access**: Reliable file reading with proper error handling for missing resources
+- **Path Management**: Platform-independent file path handling for different deployment environments
+- **Version Control**: Guidelines and resources tracked in version control for change management
+
+### 7.3. User Interface Requirements
+
+#### 7.3.1. Admin Dashboard Integration
+- **Session Detail View**: Dedicated section for displaying tutor assessment results
+- **Visual Design**: Clear, professional presentation with color-coded sections and intuitive navigation
+- **Assessment Status**: Visual indicators showing assessment availability and processing status
+- **Copy Functionality**: Easy copying of assessment text for sharing and analysis
+- **Quick Navigation**: Scroll-to functionality for easy access to assessment content
+
+#### 7.3.2. Assessment Display Features
+- **Performance Evaluation Section**: Formatted display of AI-generated tutor assessment
+- **Improvement Suggestions Section**: Clear presentation of actionable recommendations
+- **Status Indicators**: Visual confirmation of assessment completion or processing state
+- **Responsive Design**: Proper display across different screen sizes and devices
+- **Accessibility**: Screen reader compatible and keyboard navigable
+
+#### 7.3.3. Data Export and Sharing
+- **Copy to Clipboard**: Individual and bulk copying of assessment data
+- **Print Support**: Printer-friendly formatting for assessment reports
+- **Integration with Existing Features**: Assessment data included in session data exports
+- **Search Integration**: Assessment content searchable within admin interface
+
+### 7.4. Performance and Reliability Requirements
+
+#### 7.4.1. Processing Performance
+- **Asynchronous Processing**: Assessment must not block session completion
+- **Reasonable Processing Time**: Complete assessment within 30 seconds under normal conditions
+- **Resource Management**: Efficient memory and CPU usage during assessment generation
+- **Concurrent Processing**: Support for multiple simultaneous assessments
+
+#### 7.4.2. Monitoring and Observability
+- **Success Rate Tracking**: Monitor percentage of successful assessments vs failures
+- **Performance Metrics**: Track assessment processing times and identify bottlenecks
+- **Error Pattern Analysis**: Identify common failure modes and implement preventive measures
+- **Real-time Status**: Live monitoring of assessment queue and processing status
+
+#### 7.4.3. Data Quality Assurance
+- **Input Validation**: Verify transcript quality and completeness before assessment
+- **Output Validation**: Ensure assessment quality and completeness before storage
+- **Fallback Mechanisms**: Graceful handling of incomplete or low-quality data
+- **Quality Metrics**: Track assessment relevance and usefulness over time
+
+### 7.5. Security and Privacy Requirements
+
+#### 7.5.1. Data Protection
+- **Sensitive Data Handling**: Secure processing of student conversation transcripts
+- **Access Control**: Assessment data access restricted to authorized administrators
+- **Data Retention**: Assessment data subject to same retention policies as session data
+- **GDPR Compliance**: Assessment processing must comply with privacy regulations
+
+#### 7.5.2. AI Provider Security
+- **Secure API Communication**: Encrypted communication with AI service providers
+- **Data Minimization**: Only necessary data sent to external AI services
+- **Provider Selection**: Use of reputable AI providers with appropriate data handling policies
+- **Audit Trail**: Complete logging of data sent to and received from AI providers
+
+### 7.6. Maintenance and Operations Requirements
+
+#### 7.6.1. System Administration
+- **Manual Retry**: Ability to manually trigger assessment for failed sessions
+- **Bulk Processing**: Support for batch assessment of historical sessions
+- **Configuration Management**: Adjustable assessment parameters and thresholds
+- **Health Monitoring**: Dashboard indicators for assessment system health
+
+#### 7.6.2. Continuous Improvement
+- **Assessment Analytics**: Analysis of assessment patterns to improve system prompts
+- **Feedback Integration**: Mechanism to incorporate assessment insights into system improvements
+- **Guidelines Updates**: Support for updating tutoring guidelines and assessment criteria
+- **Model Updates**: Ability to upgrade AI models while maintaining assessment consistency
+
+### 7.7. Integration Requirements
+
+#### 7.7.1. VAPI Workflow Integration
+- **Seamless Integration**: Assessment trigger integrated into existing VAPI webhook processing
+- **Session Type Detection**: Automatic determination of assessment eligibility based on session type
+- **Workflow Isolation**: Assessment processing must not interfere with existing session workflows
+- **Error Recovery**: Failed assessments must not impact primary session processing
+
+#### 7.7.2. API and MCP Integration
+- **Assessment Data Access**: Assessment results available through existing API endpoints
+- **MCP Server Support**: Assessment data accessible through MCP server for AI assistant access
+- **Authentication**: Assessment data access subject to existing authentication and authorization mechanisms
+- **Consistent Data Format**: Assessment data follows established API response patterns

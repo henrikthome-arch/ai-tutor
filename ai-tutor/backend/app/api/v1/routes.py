@@ -34,6 +34,7 @@ from app.services.student_service import StudentService
 from app.services.session_service import SessionService
 from app.services.ai_service import AIService
 from app.services.mcp_interaction_service import MCPInteractionService
+from app.services.tutor_assessment_service import TutorAssessmentService
 
 # Import the blueprint from parent module
 from app.api import bp as api
@@ -43,6 +44,7 @@ student_service = StudentService()
 session_service = SessionService()
 ai_service = AIService()
 mcp_interaction_service = MCPInteractionService()
+tutor_assessment_service = TutorAssessmentService()
 
 # Authentication helper (kept for backward compatibility)
 def check_auth():
@@ -699,6 +701,28 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
                        duration=effective_duration)
             print(f"✅ Created Session DB record ID {session_record.id} for call {call_id}")
             
+            # TUTOR ASSESSMENT: Trigger AI tutor performance assessment for tutoring sessions
+            try:
+                assessment_result = tutor_assessment_service.assess_tutor_performance(session_record.id)
+                if assessment_result.get('success'):
+                    if assessment_result.get('skipped'):
+                        log_webhook('tutor-assessment-skipped', f"Tutor assessment skipped: {assessment_result.get('reason')}",
+                                   call_id=call_id, session_db_id=session_record.id)
+                        print(f"📋 Tutor assessment skipped for session {session_record.id}: {assessment_result.get('reason')}")
+                    else:
+                        log_webhook('tutor-assessment-completed', f"Tutor assessment completed for session {session_record.id}",
+                                   call_id=call_id, session_db_id=session_record.id)
+                        print(f"✅ Tutor assessment completed for session {session_record.id}")
+                else:
+                    log_error('TUTOR_ASSESSMENT', f"Tutor assessment failed for session {session_record.id}: {assessment_result.get('error')}",
+                             ValueError(assessment_result.get('error', 'Unknown error')),
+                             call_id=call_id, session_db_id=session_record.id)
+                    print(f"⚠️ Tutor assessment failed for session {session_record.id}: {assessment_result.get('error')}")
+            except Exception as assessment_error:
+                log_error('TUTOR_ASSESSMENT', f"Error triggering tutor assessment for session {session_record.id}", assessment_error,
+                         call_id=call_id, session_db_id=session_record.id)
+                print(f"⚠️ Error triggering tutor assessment for session {session_record.id}: {assessment_error}")
+            
         except Exception as db_error:
             db.session.rollback()
             log_error('WEBHOOK', f"Error creating Session DB record for call {call_id}", db_error,
@@ -786,6 +810,28 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
                        session_db_id=session_record.id,
                        duration=effective_duration)
             print(f"✅ Created Session DB record ID {session_record.id} for webhook fallback call {call_id}")
+            
+            # TUTOR ASSESSMENT: Trigger AI tutor performance assessment for tutoring sessions
+            try:
+                assessment_result = tutor_assessment_service.assess_tutor_performance(session_record.id)
+                if assessment_result.get('success'):
+                    if assessment_result.get('skipped'):
+                        log_webhook('tutor-assessment-skipped', f"Tutor assessment skipped: {assessment_result.get('reason')}",
+                                   call_id=call_id, session_db_id=session_record.id)
+                        print(f"📋 Tutor assessment skipped for webhook fallback session {session_record.id}: {assessment_result.get('reason')}")
+                    else:
+                        log_webhook('tutor-assessment-completed', f"Tutor assessment completed for webhook fallback session {session_record.id}",
+                                   call_id=call_id, session_db_id=session_record.id)
+                        print(f"✅ Tutor assessment completed for webhook fallback session {session_record.id}")
+                else:
+                    log_error('TUTOR_ASSESSMENT', f"Tutor assessment failed for webhook fallback session {session_record.id}: {assessment_result.get('error')}",
+                             ValueError(assessment_result.get('error', 'Unknown error')),
+                             call_id=call_id, session_db_id=session_record.id)
+                    print(f"⚠️ Tutor assessment failed for webhook fallback session {session_record.id}: {assessment_result.get('error')}")
+            except Exception as assessment_error:
+                log_error('TUTOR_ASSESSMENT', f"Error triggering tutor assessment for webhook fallback session {session_record.id}", assessment_error,
+                         call_id=call_id, session_db_id=session_record.id)
+                print(f"⚠️ Error triggering tutor assessment for webhook fallback session {session_record.id}: {assessment_error}")
             
         except Exception as db_error:
             db.session.rollback()

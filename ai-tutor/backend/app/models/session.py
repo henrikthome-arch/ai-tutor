@@ -31,6 +31,10 @@ class Session(db.Model):
     ai_response_3 = db.Column(db.Text, nullable=True)  # Third AI processing step response
     processing_metadata = db.Column(db.JSON, nullable=True)  # Store processing metadata (provider, timestamps, etc.)
     
+    # AI Tutor Assessment Fields
+    tutor_assessment = db.Column(db.Text, nullable=True)  # AI-generated assessment of tutor performance
+    prompt_suggestions = db.Column(db.Text, nullable=True)  # AI-generated suggestions for prompt improvements
+    
     # Relationships
     student = db.relationship('Student', back_populates='sessions')
     metrics = db.relationship('SessionMetrics', back_populates='session', uselist=False)
@@ -68,7 +72,9 @@ class Session(db.Model):
             'transcript': self.transcript,
             'summary': self.summary,
             'ai_processing_steps': self.get_ai_processing_steps(),
-            'processing_metadata': self.processing_metadata
+            'processing_metadata': self.processing_metadata,
+            'tutor_assessment': self.tutor_assessment,
+            'prompt_suggestions': self.prompt_suggestions
         })
         return result
     
