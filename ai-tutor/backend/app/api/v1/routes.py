@@ -1446,7 +1446,7 @@ def cleanup_old_mcp_interactions():
 @api.route('/students/<int:student_id>')
 @token_or_session_auth(required_scope='students:read')
 def get_student_with_profile_and_memory(student_id):
-    """Get student details including current profile and memory data"""
+    """Get student details including current profile, memory data, and mastery map"""
     try:
         # Get basic student data
         student_data = student_service.get_student_data(str(student_id))
@@ -1459,6 +1459,9 @@ def get_student_with_profile_and_memory(student_id):
         # Get full context including profile and memory
         context = student_service.get_full_context(student_id)
         
+        # Get mastery map data
+        mastery_map = student_service.get_mastery_map(student_id)
+        
         # Combine all data
         response_data = {
             'status': 'success',
@@ -1466,7 +1469,8 @@ def get_student_with_profile_and_memory(student_id):
                 'student': student_data,
                 'current_profile': context.get('current_profile'),
                 'memory': context.get('memory', {}),
-                'recent_sessions': context.get('recent_sessions', [])
+                'recent_sessions': context.get('recent_sessions', []),
+                'mastery_map': mastery_map
             }
         }
         

@@ -13,6 +13,7 @@ from .token import Token
 from .mcp_interaction import MCPInteraction
 from .student_profile import StudentProfile
 from .student_memory import StudentMemory, MemoryScope
+from .mastery_tracking import CurriculumGoal, GoalKC, StudentGoalProgress, StudentKCProgress
 
 __all__ = [
     'Student',
@@ -27,5 +28,9 @@ __all__ = [
     'MCPInteraction',
     'StudentProfile',
     'StudentMemory',
-    'MemoryScope'
+    'MemoryScope',
+    'CurriculumGoal',
+    'GoalKC',
+    'StudentGoalProgress',
+    'StudentKCProgress'
 ]

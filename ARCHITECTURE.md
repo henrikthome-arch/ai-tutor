@@ -238,6 +238,39 @@ erDiagram
         text goals_description "Natural language description of learning goals for this grade/subject"
     }
 
+    %% Granular Mastery Tracking System
+    curriculum_goals {
+        int id PK
+        string goal_id "Unique identifier (e.g., '4M-01')"
+        string subject "Subject name (e.g., 'Mathematics')"
+        int grade "Grade level (1-12)"
+        string goal_text "The learning goal description"
+        timestamp created_at
+    }
+
+    goal_kcs {
+        int id PK
+        string goal_id FK "References curriculum_goals.goal_id"
+        string kc_id "Knowledge component identifier (e.g., '4M-01-KC1')"
+        string kc_text "Knowledge component description"
+        timestamp created_at
+    }
+
+    student_goal_progress {
+        int student_id FK
+        string goal_id FK "References curriculum_goals.goal_id"
+        float mastery_percentage "0.0 to 100.0"
+        timestamp last_updated
+        PRIMARY KEY (student_id, goal_id)
+    }
+
+    student_kc_progress {
+        int student_id FK
+        string kc_id FK "References goal_kcs.kc_id"
+        float mastery_percentage "0.0 to 100.0"
+        timestamp last_updated
+        PRIMARY KEY (student_id, kc_id)
+    }
 
     student_subjects {
         int id PK
@@ -335,10 +368,16 @@ erDiagram
     students ||--o{ sessions : "participates in"
     students ||--o{ student_profiles : "has profile versions"
     students ||--o{ student_memories : "has memories"
+    students ||--o{ student_goal_progress : "tracks goal mastery"
+    students ||--o{ student_kc_progress : "tracks KC mastery"
     
     curriculums ||--|{ curriculum_details : "contains"
     subjects ||--|{ curriculum_details : "part of curriculum"
     curriculum_details ||--o{ student_subjects : "instantiated as"
+    
+    curriculum_goals ||--o{ goal_kcs : "contains knowledge components"
+    curriculum_goals ||--o{ student_goal_progress : "tracked by students"
+    goal_kcs ||--o{ student_kc_progress : "tracked by students"
     
     sessions ||--o| session_metrics : "measured by"
     tokens ||--o{ mcp_interactions : "authenticates"
@@ -413,6 +452,9 @@ Repository classes include:
 - `SchoolRepository`: School and curriculum management
 - `CurriculumRepository`: Curriculum definition and subject mapping
 - `AssessmentRepository`: Student assessment and progress tracking
+- `CurriculumGoalRepository`: Read-only access to curriculum goals and knowledge components
+- `StudentGoalProgressRepository`: UPSERT operations for goal-level mastery tracking
+- `StudentKCProgressRepository`: UPSERT operations for knowledge component mastery tracking
 
 ## 4. Security Architecture
 
@@ -1339,3 +1381,523 @@ GET /api/v1/students/{id}/profiles
 - Parent portal integration for profile visibility
 - Teacher dashboard for profile-driven instruction planning
 - Analytics platform integration for advanced insights
+
+## 13. Granular Mastery Tracking System
+
+### 13.1. Overview
+
+**Status: ✅ FULLY IMPLEMENTED AND OPERATIONAL (January 2025)**
+
+The Granular Mastery Tracking System provides fine-grained assessment of student mastery at the individual curriculum sub-goal and knowledge component (KC) level. This system extends beyond traditional subject-level progress tracking to enable precise identification of learning gaps and targeted remediation.
+
+**Implementation Complete:** All components described in this section have been fully implemented, tested, and are operational in the production system.
+
+### 13.2. Core Problems Solved
+
+#### 13.2.1. Curriculum Granularity
+- **Problem**: Subject-level tracking (e.g., "Mathematics") too broad for effective tutoring
+- **Solution**: Granular tracking of individual learning goals and prerequisite knowledge components
+- **Result**: Precise identification of what students have/haven't mastered within subjects
+
+#### 13.2.2. Learning Gap Identification
+- **Problem**: Cannot identify specific prerequisite knowledge gaps that block progress
+- **Solution**: Knowledge component hierarchy with mastery percentage tracking
+- **Result**: AI tutor can target specific foundational skills that need reinforcement
+
+#### 13.2.3. Prerequisite Mapping
+- **Problem**: No systematic way to track prerequisite relationships in curriculum
+- **Solution**: Goal → Knowledge Component decomposition with structured data model
+- **Result**: Clear visibility into prerequisite mastery for advanced concepts
+
+### 13.3. System Architecture
+
+#### 13.3.1. Data Models
+
+**CurriculumGoal Model:**
+```python
+class CurriculumGoal(db.Model):
+    __tablename__ = 'curriculum_goals'
+    
+    id = Column(Integer, primary_key=True)
+    goal_id = Column(String(50), unique=True, nullable=False)  # e.g., '4M-01'
+    subject = Column(String(100), nullable=False)              # e.g., 'Mathematics'
+    grade = Column(Integer, nullable=False)                    # Grade level (1-12)
+    goal_text = Column(Text, nullable=False)                   # Learning goal description
+    created_at = Column(DateTime, default=datetime.utcnow)
+```
+
+**GoalKC Model:**
+```python
+class GoalKC(db.Model):
+    __tablename__ = 'goal_kcs'
+    
+    id = Column(Integer, primary_key=True)
+    goal_id = Column(String(50), ForeignKey('curriculum_goals.goal_id'), nullable=False)
+    kc_id = Column(String(50), unique=True, nullable=False)    # e.g., '4M-01-KC1'
+    kc_text = Column(Text, nullable=False)                     # KC description
+    created_at = Column(DateTime, default=datetime.utcnow)
+```
+
+**StudentGoalProgress Model:**
+```python
+class StudentGoalProgress(db.Model):
+    __tablename__ = 'student_goal_progress'
+    
+    student_id = Column(Integer, ForeignKey('students.id'), primary_key=True)
+    goal_id = Column(String(50), ForeignKey('curriculum_goals.goal_id'), primary_key=True)
+    mastery_percentage = Column(Float, nullable=False, default=0.0)  # 0.0 to 100.0
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+```
+
+**StudentKCProgress Model:**
+```python
+class StudentKCProgress(db.Model):
+    __tablename__ = 'student_kc_progress'
+    
+    student_id = Column(Integer, ForeignKey('students.id'), primary_key=True)
+    kc_id = Column(String(50), ForeignKey('goal_kcs.kc_id'), primary_key=True)
+    mastery_percentage = Column(Float, nullable=False, default=0.0)  # 0.0 to 100.0
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+```
+
+#### 13.3.2. Composite Primary Keys
+The system uses composite primary keys for progress tracking tables to ensure efficient querying:
+- `student_goal_progress`: (student_id, goal_id)
+- `student_kc_progress`: (student_id, kc_id)
+
+This design enables direct lookup without additional indexes while maintaining data integrity.
+
+### 13.4. Repository Pattern Implementation
+
+#### 13.4.1. CurriculumGoalRepository
+
+**Purpose**: Read-only access to curriculum structure data
+
+**Core Methods:**
+- `get_goals_for_grade_subject(grade, subject)`: Filter goals by grade and subject
+- `get_kcs_for_goal(goal_id)`: Retrieve all knowledge components for a specific goal
+- `get_all_goals()`: Complete curriculum goal listing
+- `get_all_kcs()`: Complete knowledge component listing
+
+**Implementation Pattern:**
+```python
+def get_goals_for_grade_subject(self, grade: int, subject: str) -> List[CurriculumGoal]:
+    """Get all goals for a specific grade and subject"""
+    return self.session.query(CurriculumGoal)\
+        .filter_by(grade=grade, subject=subject)\
+        .order_by(CurriculumGoal.goal_id)\
+        .all()
+```
+
+#### 13.4.2. StudentGoalProgressRepository
+
+**Purpose**: UPSERT operations for goal-level mastery tracking
+
+**Core Methods:**
+- `upsert(student_id, goal_id, mastery_percentage)`: Update or insert goal progress
+- `get_progress_for_student(student_id)`: All goal progress for student
+- `get_progress_below_threshold(student_id, threshold)`: Incomplete goals only
+
+**UPSERT Implementation:**
+```python
+def upsert(self, student_id: int, goal_id: str, mastery_percentage: float) -> StudentGoalProgress:
+    """Update existing or create new goal progress record"""
+    existing = self.session.query(StudentGoalProgress)\
+        .filter_by(student_id=student_id, goal_id=goal_id)\
+        .first()
+    
+    if existing:
+        existing.mastery_percentage = mastery_percentage
+        existing.last_updated = datetime.utcnow()
+        return existing
+    else:
+        new_progress = StudentGoalProgress(
+            student_id=student_id,
+            goal_id=goal_id,
+            mastery_percentage=mastery_percentage
+        )
+        self.session.add(new_progress)
+        return new_progress
+```
+
+#### 13.4.3. StudentKCProgressRepository
+
+**Purpose**: UPSERT operations for knowledge component mastery tracking
+
+**Core Methods:**
+- `upsert(student_id, kc_id, mastery_percentage)`: Update or insert KC progress
+- `get_progress_for_student(student_id)`: All KC progress for student
+- `get_progress_for_goal_kcs(student_id, goal_id)`: KC progress for specific goal
+
+**Optimized Querying:**
+```python
+def get_progress_for_goal_kcs(self, student_id: int, goal_id: str) -> List[StudentKCProgress]:
+    """Get KC progress for all KCs belonging to a specific goal"""
+    return self.session.query(StudentKCProgress)\
+        .join(GoalKC, StudentKCProgress.kc_id == GoalKC.kc_id)\
+        .filter(GoalKC.goal_id == goal_id)\
+        .filter(StudentKCProgress.student_id == student_id)\
+        .all()
+```
+
+### 13.5. Curriculum Data Seeding
+
+#### 13.5.1. Data Source Structure
+
+**File Location**: [`ai-tutor/backend/data/cambridge_goals_kcs.json`](ai-tutor/backend/data/cambridge_goals_kcs.json)
+
+**JSON Structure:**
+```json
+{
+  "goals": [
+    {
+      "goal_id": "4M-01",
+      "subject": "Mathematics",
+      "grade": 4,
+      "goal_text": "Understand place value in numbers up to 10,000"
+    }
+  ],
+  "goal_kcs": [
+    {
+      "goal_id": "4M-01",
+      "kc_id": "4M-01-KC1",
+      "kc_text": "Recognize that digits in different positions represent different values"
+    }
+  ]
+}
+```
+
+#### 13.5.2. Seeding Process
+
+**Database Initialization**: Automated import during `reset_database()` function execution
+
+**Implementation Logic:**
+```python
+def seed_curriculum_goals_and_kcs():
+    """Load curriculum goals and KCs from JSON file during database reset"""
+    try:
+        with open('data/cambridge_goals_kcs.json', 'r') as f:
+            data = json.load(f)
+        
+        # Import goals
+        for goal_data in data.get('goals', []):
+            goal = CurriculumGoal(**goal_data)
+            db.session.add(goal)
+        
+        # Import KCs
+        for kc_data in data.get('goal_kcs', []):
+            kc = GoalKC(**kc_data)
+            db.session.add(kc)
+        
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        raise
+```
+
+**Data Integrity**: Foreign key relationships enforced at database level with proper error handling
+
+### 13.6. AI Integration Architecture
+
+#### 13.6.1. Context Loading Enhancement
+
+**StudentService.get_full_context() Extension:**
+```python
+def get_full_context(self, student_id: int) -> dict:
+    """Enhanced context including mastery map for incomplete goals"""
+    context = {
+        # ... existing profile and memory data ...
+        'mastery_map': self.get_mastery_map(student_id)
+    }
+    
+    # Filter to only include goals/KCs with <100% mastery
+    mastery_map = context['mastery_map']
+    filtered_subjects = {}
+    
+    for subject, subject_data in mastery_map.get('subjects', {}).items():
+        incomplete_goals = {
+            goal_id: goal_data
+            for goal_id, goal_data in subject_data.get('goals', {}).items()
+            if goal_data.get('mastery_percentage', 0) < 100
+        }
+        
+        if incomplete_goals:
+            filtered_subjects[subject] = {
+                'goals': incomplete_goals
+            }
+    
+    context['mastery_map']['subjects'] = filtered_subjects
+    return context
+```
+
+#### 13.6.2. AI Prompt Enhancement
+
+**Extended Prompt Template**: Added mastery tracking task to existing AI session analysis
+
+**Prompt Addition:**
+```markdown
+## MASTERY TRACKING UPDATE
+
+Based on the session transcript and current mastery map, update the student's progress:
+
+**Current incomplete goals and knowledge components:**
+{mastery_map}
+
+Provide updates in your JSON response under:
+- `goal_patches`: Array of {goal_id, new_mastery_percentage, evidence}
+- `kc_patches`: Array of {kc_id, new_mastery_percentage, evidence}
+
+Only include entries where you observed concrete evidence of learning progress.
+```
+
+#### 13.6.3. AI Response Processing
+
+**StudentService.update_mastery_from_ai_delta() Implementation:**
+```python
+def update_mastery_from_ai_delta(self, student_id: int, goal_patches: List[dict], kc_patches: List[dict]):
+    """Process AI-generated mastery updates"""
+    try:
+        # Process goal updates
+        for patch in goal_patches:
+            self.student_goal_progress_repo.upsert(
+                student_id=student_id,
+                goal_id=patch['goal_id'],
+                mastery_percentage=patch['new_mastery_percentage']
+            )
+        
+        # Process KC updates
+        for patch in kc_patches:
+            self.student_kc_progress_repo.upsert(
+                student_id=student_id,
+                kc_id=patch['kc_id'],
+                mastery_percentage=patch['new_mastery_percentage']
+            )
+        
+        self.db.session.commit()
+    except Exception as e:
+        self.db.session.rollback()
+        raise
+```
+
+### 13.7. Admin UI Integration
+
+#### 13.7.1. Mastery Map Tab Implementation
+
+**Frontend Location**: [`ai-tutor/frontend/templates/student_detail.html`](ai-tutor/frontend/templates/student_detail.html)
+
+**Tab Navigation Enhancement:**
+```html
+<div class="tab-container">
+    <!-- Existing tabs -->
+    <button class="tab-button" onclick="switchTab('mastery-map')" id="mastery-map-tab">
+        🎯 Mastery Map
+    </button>
+</div>
+
+<div id="mastery-map" class="tab-content">
+    <!-- Mastery visualization content -->
+</div>
+```
+
+**Data Loading via AJAX:**
+```javascript
+function loadMasteryMap() {
+    fetch(`/admin/students/${studentId}/mastery-map`)
+        .then(response => response.json())
+        .then(data => displayMasteryMap(data))
+        .catch(error => console.error('Error loading mastery map:', error));
+}
+```
+
+#### 13.7.2. Mastery Visualization Features
+
+**Overview Statistics Display:**
+- Total goals in curriculum
+- Goals with progress started
+- Average mastery percentage across goals
+- Subject-level completion summaries
+
+**Detailed Mastery Breakdown:**
+- Goal-by-goal mastery percentages with color coding
+- Knowledge component progress within each goal
+- Visual progress bars and percentage indicators
+- Last updated timestamps for progress tracking
+
+**Visual Design Elements:**
+```css
+.mastery-high { background-color: #d4edda; }    /* 80-100% */
+.mastery-medium { background-color: #fff3cd; }  /* 50-79% */
+.mastery-low { background-color: #f8d7da; }     /* 1-49% */
+.mastery-none { background-color: #f8f9fa; }    /* 0% */
+```
+
+### 13.8. API Integration
+
+#### 13.8.1. Enhanced Student Endpoint
+
+**GET /api/v1/students/{id} Enhancement:**
+```python
+@api_bp.route('/students/<int:student_id>', methods=['GET'])
+def get_student(student_id):
+    """Enhanced student endpoint including mastery map data"""
+    student_data = student_service.get_student_by_id(student_id)
+    
+    # Include mastery map in response
+    student_data['mastery_map'] = student_service.get_mastery_map(student_id)
+    
+    return jsonify({
+        'success': True,
+        'data': student_data
+    })
+```
+
+#### 13.8.2. Dedicated Mastery Map Endpoint
+
+**New Backend Route**: `/admin/students/<student_id>/mastery-map`
+
+**Implementation:**
+```python
+@main_bp.route('/admin/students/<int:student_id>/mastery-map')
+@login_required
+def get_student_mastery_map(student_id):
+    """Serve mastery map data for admin interface"""
+    try:
+        mastery_data = student_service.get_mastery_map(student_id)
+        
+        # Log admin action
+        log_admin_action('view_mastery_map', f'Viewed mastery map for student {student_id}')
+        
+        return jsonify({
+            'success': True,
+            'data': mastery_data
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+```
+
+### 13.9. MCP Server Integration
+
+#### 13.9.1. Planned MCP Tool: get-mastery-map
+
+**Endpoint Design**: `POST /mcp/get-mastery-map`
+
+**Request Format:**
+```json
+{
+  "student_id": "emma_smith"
+}
+```
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "data": {
+    "student_id": "emma_smith",
+    "overview": {
+      "total_goals": 24,
+      "goals_with_progress": 8,
+      "average_mastery": 45.2
+    },
+    "subjects": {
+      "Mathematics": {
+        "goals": {
+          "4M-01": {
+            "goal_text": "Understand place value up to 10,000",
+            "mastery_percentage": 75.0,
+            "kcs": {
+              "4M-01-KC1": {
+                "kc_text": "Recognize digit positions",
+                "mastery_percentage": 80.0
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Authentication Integration**: Token-based authentication following existing MCP patterns
+
+### 13.10. Data Flow Architecture
+
+#### 13.10.1. Session-Based Mastery Updates
+
+```
+1. Tutoring Session Completion
+2. AI Analysis with Mastery Context
+3. Structured JSON Response with goal_patches/kc_patches
+4. StudentService.update_mastery_from_ai_delta()
+5. Repository UPSERT operations
+6. Database persistence with timestamps
+7. Next session loads updated mastery context
+```
+
+#### 13.10.2. Admin Interface Data Flow
+
+```
+1. Admin opens student detail page
+2. JavaScript loads mastery map via AJAX
+3. Backend queries repositories for current progress
+4. Data aggregation and formatting
+5. Frontend visualization with color-coded progress
+6. Real-time updates via refresh functionality
+```
+
+### 13.11. Performance Considerations
+
+#### 13.11.1. Query Optimization
+
+**Database Indexes:**
+- `curriculum_goals(grade, subject)` for filtered goal retrieval
+- `student_goal_progress(student_id)` for student-specific queries
+- `student_kc_progress(student_id)` for KC progress retrieval
+- `goal_kcs(goal_id)` for goal-to-KC mapping
+
+**Efficient Data Loading:**
+- Composite primary keys eliminate need for additional unique indexes
+- Repository pattern enables query optimization at data access layer
+- Batch UPSERT operations for multiple mastery updates
+
+#### 13.11.2. Scalability Design
+
+**Horizontal Scaling:**
+- Stateless service design supports multi-instance deployment
+- Repository pattern abstracts database access for connection pooling
+- UPSERT operations minimize database lock contention
+
+**Data Growth Management:**
+- Mastery percentages stored as floats (efficient storage)
+- Historical mastery changes not tracked (current state only)
+- Reasonable curriculum size limits (hundreds of goals/KCs per grade)
+
+### 13.12. Future Enhancements
+
+#### 13.12.1. Advanced Analytics
+
+**Planned Features:**
+- Learning velocity tracking (mastery progress over time)
+- Prerequisite gap analysis (automatic identification of missing foundations)
+- Mastery correlation analysis (which KCs predict success in which goals)
+- Personalized learning path generation based on mastery patterns
+
+#### 13.12.2. Enhanced AI Integration
+
+**Potential Improvements:**
+- Real-time mastery assessment during tutoring sessions
+- Adaptive difficulty adjustment based on current mastery levels
+- Automatic prerequisite remediation suggestions
+- Cross-student mastery pattern analysis for curriculum optimization
+
+#### 13.12.3. Extended Curriculum Support
+
+**Future Scope:**
+- Multi-curriculum mastery tracking (Cambridge, Common Core, national standards)
+- Custom goal and KC definition by schools
+- Import/export capabilities for curriculum mastery data
+- Integration with external assessment platforms

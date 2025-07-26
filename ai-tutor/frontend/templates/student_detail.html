@@ -303,6 +303,127 @@
        resize: vertical;
        min-height: 80px;
    }
+   
+   /* Mastery Map styles */
+   .mastery-overview {
+       display: grid;
+       grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+       gap: 1rem;
+       margin-bottom: 2rem;
+   }
+   .mastery-stat-card {
+       background: #f8f9fa;
+       padding: 1.5rem;
+       border-radius: 8px;
+       text-align: center;
+       border-left: 4px solid #3498db;
+   }
+   .mastery-stat-value {
+       font-size: 2rem;
+       font-weight: bold;
+       color: #2c3e50;
+       margin-bottom: 0.5rem;
+   }
+   .mastery-stat-label {
+       color: #666;
+       font-size: 0.9rem;
+   }
+   .mastery-subject-section {
+       margin-bottom: 2rem;
+       border: 1px solid #e9ecef;
+       border-radius: 8px;
+       padding: 1.5rem;
+       background: #f8f9fa;
+   }
+   .mastery-subject-header {
+       display: flex;
+       justify-content: space-between;
+       align-items: center;
+       margin-bottom: 1rem;
+   }
+   .mastery-subject-title {
+       font-size: 1.2rem;
+       font-weight: 600;
+       color: #2c3e50;
+   }
+   .mastery-percentage {
+       font-size: 1.1rem;
+       font-weight: bold;
+       padding: 4px 12px;
+       border-radius: 12px;
+       color: white;
+   }
+   .mastery-high { background: #27ae60; }
+   .mastery-medium { background: #f39c12; }
+   .mastery-low { background: #e74c3c; }
+   .mastery-none { background: #95a5a6; }
+   .mastery-goals-grid {
+       display: grid;
+       grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+       gap: 1rem;
+       margin-bottom: 1.5rem;
+   }
+   .mastery-goal-card {
+       background: white;
+       border: 1px solid #dee2e6;
+       border-radius: 6px;
+       padding: 1rem;
+       border-left: 4px solid #3498db;
+   }
+   .mastery-goal-header {
+       display: flex;
+       justify-content: space-between;
+       align-items: center;
+       margin-bottom: 0.5rem;
+   }
+   .mastery-goal-code {
+       font-weight: bold;
+       color: #2c3e50;
+   }
+   .mastery-goal-title {
+       font-size: 0.9rem;
+       color: #555;
+       margin-bottom: 0.5rem;
+   }
+   .mastery-kc-list {
+       margin-top: 0.75rem;
+   }
+   .mastery-kc-item {
+       display: flex;
+       justify-content: space-between;
+       align-items: center;
+       padding: 4px 8px;
+       margin: 2px 0;
+       background: #f1f3f4;
+       border-radius: 4px;
+       font-size: 0.8rem;
+   }
+   .mastery-kc-name {
+       color: #495057;
+   }
+   .mastery-kc-percentage {
+       font-weight: bold;
+       color: #666;
+   }
+   .mastery-toggle-buttons {
+       display: flex;
+       gap: 0.5rem;
+       margin-bottom: 1rem;
+   }
+   .mastery-view-toggle {
+       padding: 6px 12px;
+       border: 1px solid #dee2e6;
+       background: #f8f9fa;
+       color: #495057;
+       border-radius: 4px;
+       cursor: pointer;
+       font-size: 0.8rem;
+   }
+   .mastery-view-toggle.active {
+       background: #007bff;
+       color: white;
+       border-color: #007bff;
+   }
 </style>
 {% endblock %}
 {% block content %}
@@ -491,6 +612,9 @@
             <button class="tab-button" onclick="showTab('tutor-memory')" id="tab-tutor-memory">
                 🧠 Tutor Memory
             </button>
+            <button class="tab-button" onclick="showTab('mastery-map')" id="tab-mastery-map">
+                🎯 Mastery Map
+            </button>
         </nav>
     </div>
     
@@ -533,6 +657,27 @@
             <div style="text-align: center; padding: 2rem; color: #666;">
                 <div style="font-size: 2rem; margin-bottom: 1rem;">⏳</div>
                 <p>Loading tutor memory...</p>
+            </div>
+        </div>
+        
+        <!-- Mastery Map Tab -->
+        <div id="content-mastery-map" class="tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; margin-bottom: 1rem;">
+                <h3 style="margin: 0;">🎯 Curriculum Mastery Map</h3>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn" onclick="refreshMasteryMap()" style="background: #17a2b8; color: white; font-size: 0.8rem;">
+                        🔄 Refresh
+                    </button>
+                    <button class="btn" onclick="toggleMasteryView()" style="background: #6c757d; color: white; font-size: 0.8rem;">
+                        📊 Toggle View
+                    </button>
+                </div>
+            </div>
+            <div id="mastery-map-container">
+                <div style="text-align: center; padding: 2rem; color: #666;">
+                    <div style="font-size: 2rem; margin-bottom: 1rem;">⏳</div>
+                    <p>Loading mastery map...</p>
+                </div>
             </div>
         </div>
     </div>
@@ -1303,6 +1448,8 @@ function showTab(tabName) {
         loadProfileHistory();
     } else if (tabName === 'tutor-memory') {
         loadTutorMemory();
+    } else if (tabName === 'mastery-map') {
+        loadMasteryMap();
     }
 }
 
@@ -1597,6 +1744,225 @@ document.getElementById('memoryForm').addEventListener('submit', function(e) {
         alert('Failed to save memory entry');
     });
 });
+
+// Mastery Map Functions
+let currentMasteryView = 'overview'; // 'overview' or 'detailed'
+
+function loadMasteryMap() {
+    const container = document.getElementById('mastery-map-container');
+    container.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;"><div style="font-size: 2rem; margin-bottom: 1rem;">⏳</div><p>Loading mastery map...</p></div>';
+    
+    fetch(`/admin/students/{{ student.id }}/mastery-map`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayMasteryMap(data.data);
+            } else {
+                container.innerHTML = `<div style="text-align: center; padding: 2rem; color: #e74c3c;"><div style="font-size: 2rem; margin-bottom: 1rem;">❌</div><p>Error: ${data.message}</p></div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading mastery map:', error);
+            container.innerHTML = '<div style="text-align: center; padding: 2rem; color: #e74c3c;"><div style="font-size: 2rem; margin-bottom: 1rem;">❌</div><p>Failed to load mastery map</p></div>';
+        });
+}
+
+function displayMasteryMap(masteryData) {
+    const container = document.getElementById('mastery-map-container');
+    
+    if (!masteryData || (!masteryData.goal_mastery && !masteryData.kc_mastery)) {
+        container.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;"><div style="font-size: 2rem; margin-bottom: 1rem;">🎯</div><h4>No Mastery Data</h4><p>This student doesn\'t have any mastery tracking data yet.</p></div>';
+        return;
+    }
+    
+    let html = '';
+    
+    // Add view toggle buttons
+    html += `
+        <div class="mastery-toggle-buttons">
+            <button class="mastery-view-toggle ${currentMasteryView === 'overview' ? 'active' : ''}" onclick="switchMasteryView('overview')">
+                📊 Overview
+            </button>
+            <button class="mastery-view-toggle ${currentMasteryView === 'detailed' ? 'active' : ''}" onclick="switchMasteryView('detailed')">
+                📋 Detailed
+            </button>
+            <button class="mastery-view-toggle" onclick="exportMasteryData()">
+                📄 Export JSON
+            </button>
+        </div>
+    `;
+    
+    if (currentMasteryView === 'overview') {
+        html += displayMasteryOverview(masteryData);
+    } else {
+        html += displayDetailedMastery(masteryData);
+    }
+    
+    container.innerHTML = html;
+}
+
+function displayMasteryOverview(masteryData) {
+    const goalMastery = masteryData.goal_mastery || {};
+    const kcMastery = masteryData.kc_mastery || {};
+    
+    let html = `
+        <div class="mastery-overview">
+            <div class="mastery-stat-card">
+                <div class="mastery-stat-value">${goalMastery.overall_mastery_percentage || 0}%</div>
+                <div class="mastery-stat-label">Overall Goal Mastery</div>
+            </div>
+            <div class="mastery-stat-card">
+                <div class="mastery-stat-value">${goalMastery.total_goals_tracked || 0}</div>
+                <div class="mastery-stat-label">Goals Tracked</div>
+            </div>
+            <div class="mastery-stat-card">
+                <div class="mastery-stat-value">${kcMastery.overall_kc_mastery_percentage || 0}%</div>
+                <div class="mastery-stat-label">Knowledge Component Mastery</div>
+            </div>
+            <div class="mastery-stat-card">
+                <div class="mastery-stat-value">${kcMastery.total_kcs_tracked || 0}</div>
+                <div class="mastery-stat-label">KCs Tracked</div>
+            </div>
+        </div>
+    `;
+    
+    // Display mastery by subject
+    if (goalMastery.mastery_by_subject) {
+        Object.entries(goalMastery.mastery_by_subject).forEach(([subject, data]) => {
+            const percentage = Math.round(data.average_mastery_percentage || 0);
+            const masteryClass = getMasteryClass(percentage);
+            
+            html += `
+                <div class="mastery-subject-section">
+                    <div class="mastery-subject-header">
+                        <div class="mastery-subject-title">📚 ${subject}</div>
+                        <div class="mastery-percentage ${masteryClass}">${percentage}%</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; font-size: 0.9rem;">
+                        <div><strong>Goals:</strong> ${data.total_goals || 0}</div>
+                        <div><strong>Completed:</strong> ${data.completed_goals || 0}</div>
+                        <div><strong>In Progress:</strong> ${data.in_progress_goals || 0}</div>
+                        <div><strong>Not Started:</strong> ${data.not_started_goals || 0}</div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+    
+    return html;
+}
+
+function displayDetailedMastery(masteryData) {
+    let html = '';
+    const goalMastery = masteryData.goal_mastery || {};
+    
+    if (goalMastery.mastery_by_subject) {
+        Object.entries(goalMastery.mastery_by_subject).forEach(([subject, subjectData]) => {
+            const percentage = Math.round(subjectData.average_mastery_percentage || 0);
+            const masteryClass = getMasteryClass(percentage);
+            
+            html += `
+                <div class="mastery-subject-section">
+                    <div class="mastery-subject-header">
+                        <div class="mastery-subject-title">📚 ${subject}</div>
+                        <div class="mastery-percentage ${masteryClass}">${percentage}%</div>
+                    </div>
+                    <div class="mastery-goals-grid">
+            `;
+            
+            // Display individual goals for this subject
+            if (subjectData.goals) {
+                subjectData.goals.forEach(goal => {
+                    const goalPercentage = Math.round(goal.mastery_percentage || 0);
+                    const goalMasteryClass = getMasteryClass(goalPercentage);
+                    
+                    html += `
+                        <div class="mastery-goal-card">
+                            <div class="mastery-goal-header">
+                                <div class="mastery-goal-code">${goal.goal_code}</div>
+                                <div class="mastery-percentage ${goalMasteryClass}" style="font-size: 0.9rem;">${goalPercentage}%</div>
+                            </div>
+                            <div class="mastery-goal-title">${goal.title || 'No title'}</div>
+                            ${goal.knowledge_components ? displayKnowledgeComponents(goal.knowledge_components) : ''}
+                        </div>
+                    `;
+                });
+            }
+            
+            html += `
+                    </div>
+                </div>
+            `;
+        });
+    }
+    
+    return html;
+}
+
+function displayKnowledgeComponents(kcs) {
+    if (!kcs || kcs.length === 0) {
+        return '';
+    }
+    
+    let html = '<div class="mastery-kc-list">';
+    kcs.forEach(kc => {
+        const kcPercentage = Math.round(kc.mastery_percentage || 0);
+        html += `
+            <div class="mastery-kc-item">
+                <div class="mastery-kc-name">${kc.kc_name}</div>
+                <div class="mastery-kc-percentage">${kcPercentage}%</div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    return html;
+}
+
+function getMasteryClass(percentage) {
+    if (percentage >= 80) return 'mastery-high';
+    if (percentage >= 60) return 'mastery-medium';
+    if (percentage > 0) return 'mastery-low';
+    return 'mastery-none';
+}
+
+function switchMasteryView(view) {
+    currentMasteryView = view;
+    loadMasteryMap(); // Reload with new view
+}
+
+function refreshMasteryMap() {
+    loadMasteryMap();
+}
+
+function toggleMasteryView() {
+    currentMasteryView = currentMasteryView === 'overview' ? 'detailed' : 'overview';
+    loadMasteryMap();
+}
+
+function exportMasteryData() {
+    fetch(`/admin/students/{{ student.id }}/mastery-map`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const jsonStr = JSON.stringify(data.data, null, 2);
+                const blob = new Blob([jsonStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `student_{{ student.id }}_mastery_map.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } else {
+                alert('Failed to export mastery data');
+            }
+        })
+        .catch(error => {
+            console.error('Error exporting mastery data:', error);
+            alert('Failed to export mastery data');
+        });
+}
 
 // Close modal when clicking outside
 window.onclick = function(event) {

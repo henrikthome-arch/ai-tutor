@@ -581,7 +581,7 @@ class StudentService:
     
     def get_full_context(self, student_id: int) -> Dict[str, Any]:
         """
-        Get complete student context including profile, memories, and basic data
+        Get complete student context including profile, memories, mastery map, and basic data
         Used by AI tutor for personalized interactions
         
         Args:
@@ -604,6 +604,9 @@ class StudentService:
             
             # Get memories grouped by scope
             memories_by_scope = student_memory_repository.get_by_scope_grouped(student_id)
+            
+            # Get mastery map data (incomplete goals and KCs for AI awareness)
+            mastery_context = self._get_mastery_context(student_id)
             
             # Get session summaries (will be implemented in SessionService)
             session_summaries = []
@@ -645,11 +648,12 @@ class StudentService:
                 },
                 'current_profile': current_profile,
                 'memories': memories_by_scope,
+                'mastery_context': mastery_context,
                 'recent_sessions': session_summaries,
                 'context_timestamp': datetime.utcnow().isoformat()
             }
             
-            print(f"✅ Retrieved full context for student {student_id}")
+            print(f"✅ Retrieved full context for student {student_id} (including mastery data)")
             return context
             
         except Exception as e:
@@ -774,3 +778,175 @@ class StudentService:
         except Exception as e:
             print(f"Error getting profile history for student {student_id}: {e}")
             return []
+    
+    def _get_mastery_context(self, student_id: int) -> Dict[str, Any]:
+        """
+        Get mastery context for AI awareness (incomplete goals and KCs)
+        
+        Args:
+            student_id: The student ID
+            
+        Returns:
+            Dictionary with mastery context data
+        """
+        try:
+            from app.repositories.student_goal_progress_repository import StudentGoalProgressRepository
+            from app.repositories.student_kc_progress_repository import StudentKCProgressRepository
+            
+            # Initialize repositories
+            goal_progress_repo = StudentGoalProgressRepository(db.session)
+            kc_progress_repo = StudentKCProgressRepository(db.session)
+            
+            # Get incomplete goals (below 100% mastery)
+            incomplete_goals = goal_progress_repo.get_incomplete_goals(student_id, threshold=100.0)
+            
+            # Get incomplete knowledge components (below 100% mastery)
+            incomplete_kcs = kc_progress_repo.get_incomplete_kcs(student_id, threshold=100.0)
+            
+            # Limit the data for AI context (avoid overwhelming the prompt)
+            max_goals = 10
+            max_kcs = 15
+            
+            return {
+                'incomplete_goals': incomplete_goals[:max_goals],
+                'incomplete_knowledge_components': incomplete_kcs[:max_kcs],
+                'total_incomplete_goals': len(incomplete_goals),
+                'total_incomplete_kcs': len(incomplete_kcs),
+                'mastery_context_note': 'This shows goals and knowledge components where the student has not yet achieved 100% mastery'
+            }
+            
+        except Exception as e:
+            print(f"Error getting mastery context for student {student_id}: {e}")
+            return {
+                'incomplete_goals': [],
+                'incomplete_knowledge_components': [],
+                'total_incomplete_goals': 0,
+                'total_incomplete_kcs': 0,
+                'mastery_context_note': f'Error loading mastery data: {str(e)}'
+            }
+    
+    def update_mastery_from_ai_delta(self, student_id: int, mastery_delta: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Update student mastery progress based on AI-generated delta changes
+        
+        Args:
+            student_id: The student ID
+            mastery_delta: Dictionary containing mastery updates from AI analysis
+                          Example: {
+                              "goal_patches": [
+                                  {"goal_code": "4.NBT.A.1", "mastery_percentage": 75.0}
+                              ],
+                              "kc_patches": [
+                                  {"goal_code": "4.NBT.A.1", "kc_code": "place-value", "mastery_percentage": 85.0}
+                              ]
+                          }
+            
+        Returns:
+            Dictionary with update results
+        """
+        try:
+            from app.repositories.student_goal_progress_repository import StudentGoalProgressRepository
+            from app.repositories.student_kc_progress_repository import StudentKCProgressRepository
+            
+            # Initialize repositories
+            goal_progress_repo = StudentGoalProgressRepository(db.session)
+            kc_progress_repo = StudentKCProgressRepository(db.session)
+            
+            results = {
+                'updated_goals': [],
+                'updated_kcs': [],
+                'errors': []
+            }
+            
+            # Process goal patches
+            goal_patches = mastery_delta.get('goal_patches', [])
+            if goal_patches:
+                try:
+                    updated_goals = goal_progress_repo.update_from_ai_delta(student_id, goal_patches)
+                    results['updated_goals'] = [goal.to_dict() for goal in updated_goals]
+                    print(f"✅ Updated {len(updated_goals)} goal progress records from AI delta")
+                except Exception as goal_error:
+                    error_msg = f"Error updating goal progress: {str(goal_error)}"
+                    results['errors'].append(error_msg)
+                    print(f"❌ {error_msg}")
+            
+            # Process KC patches
+            kc_patches = mastery_delta.get('kc_patches', [])
+            if kc_patches:
+                try:
+                    updated_kcs = kc_progress_repo.update_from_ai_delta(student_id, kc_patches)
+                    results['updated_kcs'] = [kc.to_dict() for kc in updated_kcs]
+                    print(f"✅ Updated {len(updated_kcs)} KC progress records from AI delta")
+                except Exception as kc_error:
+                    error_msg = f"Error updating KC progress: {str(kc_error)}"
+                    results['errors'].append(error_msg)
+                    print(f"❌ {error_msg}")
+            
+            # Log summary
+            total_updates = len(results['updated_goals']) + len(results['updated_kcs'])
+            if total_updates > 0:
+                print(f"✅ Successfully updated {total_updates} mastery records for student {student_id}")
+            else:
+                print(f"ℹ️ No mastery updates for student {student_id}")
+            
+            return results
+            
+        except Exception as e:
+            error_msg = f"Error updating mastery from AI delta for student {student_id}: {str(e)}"
+            print(f"❌ {error_msg}")
+            return {
+                'updated_goals': [],
+                'updated_kcs': [],
+                'errors': [error_msg]
+            }
+    
+    def get_mastery_map(self, student_id: int) -> Dict[str, Any]:
+        """
+        Get comprehensive mastery map for a student (for admin UI and API)
+        
+        Args:
+            student_id: The student ID
+            
+        Returns:
+            Dictionary with complete mastery map
+        """
+        try:
+            from app.repositories.student_goal_progress_repository import StudentGoalProgressRepository
+            from app.repositories.student_kc_progress_repository import StudentKCProgressRepository
+            
+            # Initialize repositories
+            goal_progress_repo = StudentGoalProgressRepository(db.session)
+            kc_progress_repo = StudentKCProgressRepository(db.session)
+            
+            # Get goal mastery map
+            goal_mastery_map = goal_progress_repo.get_mastery_map(student_id)
+            
+            # Get KC mastery map
+            kc_mastery_map = kc_progress_repo.get_kc_mastery_map(student_id)
+            
+            # Combine both maps
+            return {
+                'student_id': student_id,
+                'goal_mastery': goal_mastery_map,
+                'kc_mastery': kc_mastery_map,
+                'generated_at': datetime.utcnow().isoformat()
+            }
+            
+        except Exception as e:
+            print(f"Error getting mastery map for student {student_id}: {e}")
+            return {
+                'student_id': student_id,
+                'goal_mastery': {
+                    'overall_mastery_percentage': 0.0,
+                    'total_goals_tracked': 0,
+                    'mastery_by_subject': {},
+                    'error': str(e)
+                },
+                'kc_mastery': {
+                    'overall_kc_mastery_percentage': 0.0,
+                    'total_kcs_tracked': 0,
+                    'kc_mastery_by_subject': {},
+                    'error': str(e)
+                },
+                'generated_at': datetime.utcnow().isoformat()
+            }

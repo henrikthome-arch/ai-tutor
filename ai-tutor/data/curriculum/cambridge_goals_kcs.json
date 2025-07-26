@@ -1,0 +1,264 @@
+{
+  "curriculum_name": "Cambridge Primary Mathematics Sample",
+  "description": "Sample curriculum goals and knowledge components for Cambridge Primary Mathematics",
+  "grade_levels": [3, 4, 5],
+  "subjects": ["Mathematics"],
+  "goals": [
+    {
+      "goal_code": "3.N.1",
+      "title": "Count, read and write numbers to 1000",
+      "description": "Students can count in steps of different sizes, read and write numbers to 1000 in numerals and words.",
+      "subject": "Mathematics",
+      "grade_level": 3,
+      "knowledge_components": [
+        {
+          "kc_code": "counting-patterns",
+          "kc_name": "Counting in patterns",
+          "description": "Ability to count in steps of 2s, 5s, 10s, 25s, 50s, and 100s"
+        },
+        {
+          "kc_code": "number-recognition-1000",
+          "kc_name": "Number recognition to 1000",
+          "description": "Recognition and reading of numerals from 1 to 1000"
+        },
+        {
+          "kc_code": "number-words",
+          "kc_name": "Number words",
+          "description": "Reading and writing numbers in word form up to 1000"
+        },
+        {
+          "kc_code": "place-value-hundreds",
+          "kc_name": "Place value to hundreds",
+          "description": "Understanding the value of digits in hundreds, tens, and units places"
+        }
+      ]
+    },
+    {
+      "goal_code": "3.N.2",
+      "title": "Order and compare numbers to 1000",
+      "description": "Students can order and compare numbers to 1000 using mathematical symbols.",
+      "subject": "Mathematics",
+      "grade_level": 3,
+      "knowledge_components": [
+        {
+          "kc_code": "number-comparison",
+          "kc_name": "Number comparison",
+          "description": "Comparing numbers using >, <, and = symbols"
+        },
+        {
+          "kc_code": "number-ordering",
+          "kc_name": "Number ordering",
+          "description": "Arranging numbers in ascending and descending order"
+        },
+        {
+          "kc_code": "place-value-comparison",
+          "kc_name": "Place value comparison",
+          "description": "Using place value knowledge to compare numbers"
+        }
+      ]
+    },
+    {
+      "goal_code": "3.N.3",
+      "title": "Add and subtract numbers to 1000",
+      "description": "Students can add and subtract numbers to 1000 using different methods.",
+      "subject": "Mathematics",
+      "grade_level": 3,
+      "knowledge_components": [
+        {
+          "kc_code": "mental-addition",
+          "kc_name": "Mental addition strategies",
+          "description": "Using mental strategies for addition including near doubles and bridging"
+        },
+        {
+          "kc_code": "mental-subtraction",
+          "kc_name": "Mental subtraction strategies",
+          "description": "Using mental strategies for subtraction including counting on and back"
+        },
+        {
+          "kc_code": "column-addition",
+          "kc_name": "Column addition",
+          "description": "Formal written method for addition with carrying"
+        },
+        {
+          "kc_code": "column-subtraction",
+          "kc_name": "Column subtraction",
+          "description": "Formal written method for subtraction with borrowing"
+        }
+      ]
+    },
+    {
+      "goal_code": "4.N.1",
+      "title": "Count, read and write numbers to 10000",
+      "description": "Students can count in steps of different sizes, read and write numbers to 10000 in numerals and words.",
+      "subject": "Mathematics",
+      "grade_level": 4,
+      "knowledge_components": [
+        {
+          "kc_code": "counting-larger-steps",
+          "kc_name": "Counting in larger steps",
+          "description": "Counting in steps including 3s, 4s, 6s, 7s, 8s, 9s, and 1000s"
+        },
+        {
+          "kc_code": "number-recognition-10000",
+          "kc_name": "Number recognition to 10000",
+          "description": "Recognition and reading of numerals from 1 to 10000"
+        },
+        {
+          "kc_code": "place-value-thousands",
+          "kc_name": "Place value to thousands",
+          "description": "Understanding the value of digits in thousands, hundreds, tens, and units"
+        },
+        {
+          "kc_code": "rounding-1000",
+          "kc_name": "Rounding to nearest 1000",
+          "description": "Rounding numbers to the nearest 10, 100, and 1000"
+        }
+      ]
+    },
+    {
+      "goal_code": "4.N.2",
+      "title": "Understand and use fractions",
+      "description": "Students understand fractions as parts of a whole and can perform basic operations with fractions.",
+      "subject": "Mathematics",
+      "grade_level": 4,
+      "knowledge_components": [
+        {
+          "kc_code": "fraction-concepts",
+          "kc_name": "Fraction concepts",
+          "description": "Understanding fractions as parts of a whole or set"
+        },
+        {
+          "kc_code": "equivalent-fractions",
+          "kc_name": "Equivalent fractions",
+          "description": "Finding and using equivalent fractions"
+        },
+        {
+          "kc_code": "fraction-comparison",
+          "kc_name": "Comparing fractions",
+          "description": "Comparing fractions with the same denominator"
+        },
+        {
+          "kc_code": "mixed-numbers",
+          "kc_name": "Mixed numbers",
+          "description": "Understanding and converting between improper fractions and mixed numbers"
+        }
+      ]
+    },
+    {
+      "goal_code": "4.N.3",
+      "title": "Multiply and divide by single digits",
+      "description": "Students can multiply and divide numbers by single digit numbers using various methods.",
+      "subject": "Mathematics",
+      "grade_level": 4,
+      "knowledge_components": [
+        {
+          "kc_code": "times-tables",
+          "kc_name": "Times tables knowledge",
+          "description": "Recall of multiplication facts up to 12 × 12"
+        },
+        {
+          "kc_code": "multiplication-methods",
+          "kc_name": "Multiplication methods",
+          "description": "Grid method, long multiplication, and other strategies"
+        },
+        {
+          "kc_code": "division-methods",
+          "kc_name": "Division methods",
+          "description": "Short division and chunking methods"
+        },
+        {
+          "kc_code": "remainders",
+          "kc_name": "Understanding remainders",
+          "description": "Finding and interpreting remainders in division"
+        }
+      ]
+    },
+    {
+      "goal_code": "5.N.1",
+      "title": "Work with numbers to 1000000",
+      "description": "Students can read, write, order and round whole numbers to 1000000.",
+      "subject": "Mathematics",
+      "grade_level": 5,
+      "knowledge_components": [
+        {
+          "kc_code": "large-number-recognition",
+          "kc_name": "Large number recognition",
+          "description": "Reading and writing numbers up to 1 million"
+        },
+        {
+          "kc_code": "place-value-millions",
+          "kc_name": "Place value to millions",
+          "description": "Understanding place value in 6-digit numbers"
+        },
+        {
+          "kc_code": "rounding-advanced",
+          "kc_name": "Advanced rounding",
+          "description": "Rounding to nearest 10, 100, 1000, 10000, and 100000"
+        },
+        {
+          "kc_code": "negative-numbers",
+          "kc_name": "Negative numbers",
+          "description": "Understanding and using negative numbers in context"
+        }
+      ]
+    },
+    {
+      "goal_code": "5.N.2",
+      "title": "Calculate with decimals",
+      "description": "Students can understand decimal notation and perform calculations with decimal numbers.",
+      "subject": "Mathematics",
+      "grade_level": 5,
+      "knowledge_components": [
+        {
+          "kc_code": "decimal-place-value",
+          "kc_name": "Decimal place value",
+          "description": "Understanding tenths and hundredths place values"
+        },
+        {
+          "kc_code": "decimal-comparison",
+          "kc_name": "Decimal comparison",
+          "description": "Ordering and comparing decimal numbers"
+        },
+        {
+          "kc_code": "decimal-addition",
+          "kc_name": "Decimal addition",
+          "description": "Adding decimal numbers with same number of decimal places"
+        },
+        {
+          "kc_code": "decimal-subtraction",
+          "kc_name": "Decimal subtraction",
+          "description": "Subtracting decimal numbers with same number of decimal places"
+        }
+      ]
+    },
+    {
+      "goal_code": "5.N.3",
+      "title": "Advanced multiplication and division",
+      "description": "Students can multiply and divide larger numbers including decimals.",
+      "subject": "Mathematics",
+      "grade_level": 5,
+      "knowledge_components": [
+        {
+          "kc_code": "multi-digit-multiplication",
+          "kc_name": "Multi-digit multiplication",
+          "description": "Multiplying 3-digit by 2-digit numbers"
+        },
+        {
+          "kc_code": "long-division",
+          "kc_name": "Long division",
+          "description": "Dividing 4-digit by 2-digit numbers"
+        },
+        {
+          "kc_code": "decimal-multiplication",
+          "kc_name": "Decimal multiplication",
+          "description": "Multiplying decimal numbers by whole numbers"
+        },
+        {
+          "kc_code": "decimal-division",
+          "kc_name": "Decimal division",
+          "description": "Dividing decimal numbers by whole numbers"
+        }
+      ]
+    }
+  ]
+}

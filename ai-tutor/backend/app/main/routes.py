@@ -324,6 +324,42 @@ def student_memory_scopes(student_id):
             'message': f'Failed to load memory scopes: {str(e)}'
         }), 500
 
+@main.route('/admin/students/<student_id>/mastery-map')
+def student_mastery_map(student_id):
+    """Get student mastery map for AJAX display"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        # Check if student exists
+        if not student_service.student_exists(student_id):
+            return jsonify({
+                'success': False,
+                'message': f'Student {student_id} not found'
+            }), 404
+        
+        # Get mastery map using StudentService
+        mastery_map = student_service.get_mastery_map(int(student_id))
+        
+        log_admin_action('view_student_mastery_map', session.get('admin_username', 'unknown'),
+                        student_id=student_id,
+                        goal_count=mastery_map.get('goal_mastery', {}).get('total_goals_tracked', 0),
+                        kc_count=mastery_map.get('kc_mastery', {}).get('total_kcs_tracked', 0))
+        
+        return jsonify({
+            'success': True,
+            'data': mastery_map
+        })
+        
+    except Exception as e:
+        log_error('ADMIN', f'Error getting mastery map for student {student_id}', e,
+                 student_id=student_id,
+                 admin_user=session.get('admin_username', 'unknown'))
+        return jsonify({
+            'success': False,
+            'message': f'Failed to load mastery map: {str(e)}'
+        }), 500
+
 # School management routes
 @main.route('/admin/schools')
 def admin_schools():
@@ -1380,6 +1416,7 @@ def reset_database():
         from app.models.school import School
         from app.models.system_log import SystemLog
         from app.models.token import Token
+        from app.models.mastery_tracking import CurriculumGoal, GoalKC, StudentGoalProgress, StudentKCProgress
         
         # Import requests for GitHub data fetching
         import requests
@@ -1576,22 +1613,116 @@ def reset_database():
         # Commit all changes
         db.session.commit()
         
+        # Load Cambridge Goals and Knowledge Components data
+        print("📚 Loading Cambridge Goals and Knowledge Components data...")
+        
+        goals_data = None
+        goals_file_path = "data/curriculum/cambridge_goals_kcs.json"
+        
+        try:
+            # Try to load local file first
+            if os.path.exists(goals_file_path):
+                print(f"📁 Loading goals data from local file: {goals_file_path}")
+                with open(goals_file_path, 'r', encoding='utf-8') as f:
+                    goals_data = json.load(f)
+            else:
+                # If local file doesn't exist, try GitHub
+                github_goals_url = "https://raw.githubusercontent.com/henrikthome-arch/ai-tutor/main/ai-tutor/data/curriculum/cambridge_goals_kcs.json"
+                print(f"🔍 Local file not found, fetching goals data from GitHub: {github_goals_url}")
+                
+                try:
+                    response = requests.get(github_goals_url, timeout=30)
+                    response.raise_for_status()
+                    goals_data = response.json()
+                    print(f"✅ Successfully downloaded goals data from GitHub")
+                except Exception as e:
+                    print(f"⚠️ Failed to download from GitHub: {e}, trying urllib...")
+                    try:
+                        with urllib.request.urlopen(github_goals_url, timeout=30) as response:
+                            goals_json_text = response.read().decode('utf-8')
+                            goals_data = json.loads(goals_json_text)
+                        print(f"✅ Successfully downloaded goals data with urllib")
+                    except Exception as e2:
+                        print(f"❌ Failed to download goals data: {e2}")
+                        # Continue without goals data
+                        goals_data = None
+        
+        except Exception as e:
+            print(f"❌ Error loading goals data: {e}")
+            goals_data = None
+        
+        # Process goals data if available
+        goals_count = 0
+        kcs_count = 0
+        
+        if goals_data and 'goals' in goals_data:
+            print(f"📖 Processing {len(goals_data['goals'])} curriculum goals...")
+            
+            for goal_data in goals_data['goals']:
+                try:
+                    # Create curriculum goal
+                    goal = CurriculumGoal(
+                        goal_code=goal_data['goal_code'],
+                        title=goal_data['title'],
+                        description=goal_data.get('description', ''),
+                        subject=goal_data['subject'],
+                        grade_level=goal_data['grade_level']
+                    )
+                    
+                    db.session.add(goal)
+                    db.session.flush()  # Get the goal ID
+                    goals_count += 1
+                    
+                    print(f"📝 Created goal: {goal.goal_code} - {goal.title}")
+                    
+                    # Create knowledge components for this goal
+                    if 'knowledge_components' in goal_data:
+                        for kc_data in goal_data['knowledge_components']:
+                            goal_kc = GoalKC(
+                                goal_id=goal.id,
+                                kc_code=kc_data['kc_code'],
+                                kc_name=kc_data['kc_name'],
+                                description=kc_data.get('description', '')
+                            )
+                            
+                            db.session.add(goal_kc)
+                            kcs_count += 1
+                            
+                        print(f"  ➕ Added {len(goal_data['knowledge_components'])} knowledge components")
+                    
+                except Exception as goal_error:
+                    print(f"⚠️ Error creating goal {goal_data.get('goal_code', 'unknown')}: {goal_error}")
+                    continue
+            
+            # Commit goals and KCs
+            db.session.commit()
+            print(f"✅ Successfully created {goals_count} goals and {kcs_count} knowledge components")
+        else:
+            print("ℹ️ No goals data found or loaded, skipping goals seeding")
+        
         log_admin_action('database_reset_complete', session.get('admin_username', 'unknown'),
                         curriculum_count=len(curriculum_details),
-                        subjects_count=len(subjects_dict))
+                        subjects_count=len(subjects_dict),
+                        goals_count=goals_count,
+                        kcs_count=kcs_count)
         
         return jsonify({
             'success': True,
-            'message': f'Database reset successfully. Created {len(subjects_dict)} subjects and {len(curriculum_details)} curriculum entries.',
+            'message': f'Database reset successfully. Created {len(subjects_dict)} subjects, {len(curriculum_details)} curriculum entries, {goals_count} goals, and {kcs_count} knowledge components.',
             'curriculum_id': cambridge_curriculum.id,
             'subjects_count': len(subjects_dict),
             'curriculum_details_count': len(curriculum_details),
+            'goals_count': goals_count,
+            'kcs_count': kcs_count,
             'results': {
                 'tables_dropped': True,
                 'tables_created': True,
                 'curriculum_loaded': True,
+                'goals_loaded': goals_count > 0,
                 'curriculum_details': len(curriculum_details),
-                'total_subjects': len(subjects_dict)
+                'total_subjects': len(subjects_dict),
+                'total_goals': goals_count,
+                'total_knowledge_components': kcs_count
             }
         })
         

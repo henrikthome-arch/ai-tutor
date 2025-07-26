@@ -713,3 +713,379 @@ The Student Profile and Tutor Memory System addresses critical limitations in th
 - **Enhanced SessionService**: `get_last_n_summaries(student_id, n)` for historical session context
 - **Clean Interfaces**: Well-defined service interfaces for profile and memory operations
 - **Dependency Injection**: Proper service layer design for testability and maintainability
+
+## 9. Granular Mastery Tracking System Requirements
+
+### 9.1. Overview
+
+**Status: ✅ FULLY IMPLEMENTED AND OPERATIONAL (January 2025)**
+
+The Granular Mastery Tracking System provides fine-grained assessment of student mastery at the individual curriculum sub-goal and knowledge component (KC) level. This system enables precise identification of learning gaps and targeted remediation strategies.
+
+### 9.2. Core Functional Requirements
+
+#### 9.2.1. Curriculum Structure Management
+- **Hierarchical Goal Organization**: System must support structured curriculum goals with unique identifiers (e.g., "4M-01")
+- **Knowledge Component Decomposition**: Each goal must be decomposable into multiple knowledge components with unique identifiers (e.g., "4M-01-KC1")
+- **Subject and Grade Organization**: Goals must be organized by subject (Mathematics, English, etc.) and grade level (1-12)
+- **Prerequisite Mapping**: System must track relationships between goals and their constituent knowledge components
+
+#### 9.2.2. Mastery Progress Tracking
+- **Percentage-Based Mastery**: Both goals and knowledge components must track mastery as percentages (0.0 to 100.0)
+- **Student-Specific Progress**: Individual mastery tracking for each student-goal and student-KC combination
+- **Timestamp Tracking**: All mastery updates must include last_updated timestamps for audit trails
+- **Composite Key Design**: Progress tables must use composite primary keys (student_id, goal_id) and (student_id, kc_id)
+
+#### 9.2.3. AI-Driven Mastery Updates
+- **Session-Based Updates**: AI analysis of tutoring sessions must automatically update mastery percentages
+- **Evidence-Based Assessment**: Mastery updates must be based on concrete evidence from session transcripts
+- **Structured JSON Responses**: AI must provide updates in structured format with goal_patches and kc_patches arrays
+- **Incremental Updates**: System must support partial mastery updates without affecting unrelated progress
+
+### 9.3. Data Model Requirements
+
+#### 9.3.1. CurriculumGoal Model
+```sql
+CREATE TABLE curriculum_goals (
+    id SERIAL PRIMARY KEY,
+    goal_id VARCHAR(50) UNIQUE NOT NULL,
+    subject VARCHAR(100) NOT NULL,
+    grade INTEGER NOT NULL,
+    goal_text TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### 9.3.2. GoalKC Model
+```sql
+CREATE TABLE goal_kcs (
+    id SERIAL PRIMARY KEY,
+    goal_id VARCHAR(50) REFERENCES curriculum_goals(goal_id),
+    kc_id VARCHAR(50) UNIQUE NOT NULL,
+    kc_text TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### 9.3.3. StudentGoalProgress Model
+```sql
+CREATE TABLE student_goal_progress (
+    student_id INTEGER REFERENCES students(id),
+    goal_id VARCHAR(50) REFERENCES curriculum_goals(goal_id),
+    mastery_percentage FLOAT NOT NULL DEFAULT 0.0,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (student_id, goal_id)
+);
+```
+
+#### 9.3.4. StudentKCProgress Model
+```sql
+CREATE TABLE student_kc_progress (
+    student_id INTEGER REFERENCES students(id),
+    kc_id VARCHAR(50) REFERENCES goal_kcs(kc_id),
+    mastery_percentage FLOAT NOT NULL DEFAULT 0.0,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (student_id, kc_id)
+);
+```
+
+### 9.4. Repository Pattern Requirements
+
+#### 9.4.1. CurriculumGoalRepository
+- **Read-Only Access**: Repository must provide read-only access to curriculum structure
+- **Filtered Queries**: Support filtering by grade, subject, and specific goal IDs
+- **Relationship Loading**: Efficient loading of goals with their associated knowledge components
+- **Caching Support**: Repository design must support query result caching
+
+**Required Methods:**
+- `get_all_goals()`: Retrieve all curriculum goals
+- `get_goals_for_grade_subject(grade, subject)`: Filter goals by grade and subject
+- `get_kcs_for_goal(goal_id)`: Get all knowledge components for a specific goal
+- `get_all_kcs()`: Retrieve all knowledge components
+
+#### 9.4.2. StudentGoalProgressRepository
+- **UPSERT Operations**: Repository must support update-or-insert operations for progress tracking
+- **Bulk Operations**: Support for batch updates of multiple goal progress records
+- **Threshold Filtering**: Ability to filter progress records below specified mastery thresholds
+- **Student Aggregation**: Efficient retrieval of all progress for a specific student
+
+**Required Methods:**
+- `upsert(student_id, goal_id, mastery_percentage)`: Update or create progress record
+- `get_progress_for_student(student_id)`: Get all goal progress for student
+- `get_progress_below_threshold(student_id, threshold)`: Filter incomplete goals
+- `bulk_upsert(progress_records)`: Batch update multiple progress records
+
+#### 9.4.3. StudentKCProgressRepository
+- **UPSERT Operations**: Repository must support update-or-insert operations for KC progress
+- **Goal-Based Filtering**: Ability to retrieve KC progress for all components of a specific goal
+- **Cross-Reference Queries**: Support for queries that span goals and knowledge components
+- **Performance Optimization**: Efficient handling of potentially large numbers of KC records
+
+**Required Methods:**
+- `upsert(student_id, kc_id, mastery_percentage)`: Update or create KC progress record
+- `get_progress_for_student(student_id)`: Get all KC progress for student
+- `get_progress_for_goal_kcs(student_id, goal_id)`: Get KC progress for specific goal
+- `bulk_upsert(progress_records)`: Batch update multiple KC progress records
+
+### 9.5. Data Seeding Requirements
+
+#### 9.5.1. JSON Data Source Format
+- **File Location**: Curriculum data must be stored in structured JSON format at `ai-tutor/backend/data/cambridge_goals_kcs.json`
+- **Dual Array Structure**: JSON must contain separate arrays for "goals" and "goal_kcs"
+- **Referential Integrity**: KC records must reference valid goal_id values from goals array
+- **Validation Support**: JSON structure must support automated validation during import
+
+**Required JSON Schema:**
+```json
+{
+  "goals": [
+    {
+      "goal_id": "string",
+      "subject": "string",
+      "grade": "integer",
+      "goal_text": "string"
+    }
+  ],
+  "goal_kcs": [
+    {
+      "goal_id": "string",
+      "kc_id": "string",
+      "kc_text": "string"
+    }
+  ]
+}
+```
+
+#### 9.5.2. Database Import Process
+- **Automated Import**: System must automatically import curriculum data during database reset operations
+- **Idempotent Operations**: Import process must be safe to run multiple times without creating duplicates
+- **Error Handling**: Import failures must be logged with detailed error messages and not prevent system operation
+- **Transaction Safety**: All import operations must be wrapped in database transactions with rollback capability
+
+### 9.6. AI Integration Requirements
+
+#### 9.6.1. Context Enhancement
+- **Student Context Loading**: AI tutor must receive mastery map data as part of student context
+- **Incomplete Progress Focus**: Context must filter to only include goals and KCs with <100% mastery
+- **Structured Data Format**: Mastery context must be provided in structured format for AI consumption
+- **Performance Optimization**: Context loading must not significantly impact session start time
+
+#### 9.6.2. AI Prompt Integration
+- **Mastery Update Task**: Existing AI prompts must be enhanced with mastery tracking instructions
+- **Evidence-Based Updates**: AI must be instructed to only update mastery based on concrete evidence from transcripts
+- **Structured Response Format**: AI must provide mastery updates in predefined JSON structure
+- **Backward Compatibility**: Prompt enhancements must not break existing AI analysis functionality
+
+**Required AI Response Format:**
+```json
+{
+  "goal_patches": [
+    {
+      "goal_id": "string",
+      "new_mastery_percentage": "float",
+      "evidence": "string"
+    }
+  ],
+  "kc_patches": [
+    {
+      "kc_id": "string",
+      "new_mastery_percentage": "float",
+      "evidence": "string"
+    }
+  ]
+}
+```
+
+#### 9.6.3. Post-Session Processing
+- **Automatic Triggers**: Mastery updates must be automatically processed after each tutoring session
+- **Delta Processing**: System must extract and apply goal_patches and kc_patches from AI responses
+- **Transaction Management**: All mastery updates must be applied atomically with rollback capability
+- **Error Resilience**: Failed mastery updates must not impact primary session processing
+
+### 9.7. API Requirements
+
+#### 9.7.1. Enhanced Student Endpoint
+- **Mastery Map Integration**: `GET /api/v1/students/{id}` must include mastery_map data in response
+- **Backward Compatibility**: API enhancements must not break existing client integrations
+- **Optional Expansion**: Consider supporting query parameters to control inclusion of mastery data
+- **Performance Consideration**: Mastery map loading must not significantly impact API response times
+
+#### 9.7.2. Dedicated Mastery Endpoint
+- **Admin Interface Support**: New endpoint `/admin/students/<student_id>/mastery-map` for admin interface
+- **Authentication Required**: Endpoint must require admin authentication and proper authorization
+- **Structured Response**: Endpoint must return mastery data in consistent format with overview and detail sections
+- **Error Handling**: Comprehensive error responses with appropriate HTTP status codes
+
+**Required Response Format:**
+```json
+{
+  "success": true,
+  "data": {
+    "student_id": "integer",
+    "overview": {
+      "total_goals": "integer",
+      "goals_with_progress": "integer",
+      "average_mastery": "float"
+    },
+    "subjects": {
+      "subject_name": {
+        "goals": {
+          "goal_id": {
+            "goal_text": "string",
+            "mastery_percentage": "float",
+            "kcs": {
+              "kc_id": {
+                "kc_text": "string",
+                "mastery_percentage": "float"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### 9.8. User Interface Requirements
+
+#### 9.8.1. Admin Interface Integration
+- **Tabbed Interface**: Student detail page must include new "Mastery Map" tab alongside existing tabs
+- **AJAX Data Loading**: Mastery data must be loaded asynchronously to avoid blocking page load
+- **Visual Design Consistency**: New tab must follow existing design patterns and styling
+- **Responsive Design**: Interface must work properly across different screen sizes
+
+#### 9.8.2. Mastery Visualization
+- **Overview Statistics**: Display total goals, goals with progress, and average mastery percentage
+- **Subject Organization**: Group mastery data by subject with clear visual separation
+- **Color-Coded Progress**: Use color coding to indicate mastery levels (high/medium/low/none)
+- **Progress Indicators**: Visual progress bars or percentage displays for goals and knowledge components
+
+**Required CSS Classes:**
+```css
+.mastery-high { background-color: #d4edda; }    /* 80-100% mastery */
+.mastery-medium { background-color: #fff3cd; }  /* 50-79% mastery */
+.mastery-low { background-color: #f8d7da; }     /* 1-49% mastery */
+.mastery-none { background-color: #f8f9fa; }    /* 0% mastery */
+```
+
+#### 9.8.3. User Interaction Features
+- **View Switching**: Support for switching between overview and detailed views
+- **Data Export**: Functionality to export mastery data in JSON format
+- **Real-Time Updates**: Support for refreshing mastery data without page reload
+- **Error Handling**: User-friendly error messages for data loading failures
+
+### 9.9. MCP Server Integration Requirements
+
+#### 9.9.1. Planned MCP Tool
+- **Tool Name**: `get-mastery-map` for integration with AI assistants
+- **Authentication**: Token-based authentication following existing MCP patterns
+- **Request Format**: Simple student_id parameter for data retrieval
+- **Response Format**: Consistent with admin API endpoint format
+
+#### 9.9.2. Implementation Standards
+- **Logging Integration**: Complete request/response logging for debugging and monitoring
+- **Error Handling**: Graceful error handling with appropriate error messages
+- **Performance**: Efficient data retrieval without impacting MCP server performance
+- **Future Extensibility**: Design to support future mastery-related MCP tools
+
+### 9.10. Performance Requirements
+
+#### 9.10.1. Database Performance
+- **Index Strategy**: Appropriate indexes on frequently queried columns
+  - `curriculum_goals(grade, subject)` for filtered goal retrieval
+  - `student_goal_progress(student_id)` for student-specific queries
+  - `student_kc_progress(student_id)` for KC progress retrieval
+  - `goal_kcs(goal_id)` for goal-to-KC mapping
+- **Query Optimization**: Efficient queries using composite primary keys and proper joins
+- **Bulk Operations**: Support for batch UPSERT operations to minimize database round trips
+
+#### 9.10.2. API Performance
+- **Response Time**: Mastery map endpoint must respond within 500ms for typical student data
+- **Memory Efficiency**: Mastery data loading must not consume excessive memory
+- **Concurrent Access**: System must handle multiple simultaneous mastery map requests
+- **Caching Strategy**: Consider implementing caching for frequently accessed mastery data
+
+### 9.11. Security Requirements
+
+#### 9.11.1. Data Protection
+- **Access Control**: Mastery data must be protected by appropriate authentication and authorization
+- **GDPR Compliance**: Mastery tracking data must be included in student data deletion and export operations
+- **Audit Trails**: All mastery updates must be logged for security and compliance purposes
+- **Input Validation**: All mastery update data must be validated before database storage
+
+#### 9.11.2. API Security
+- **Authentication Required**: All mastery-related endpoints must require proper authentication
+- **Authorization Checks**: Verify user permissions for accessing specific student mastery data
+- **Input Sanitization**: Sanitize all input parameters to prevent injection attacks
+- **Rate Limiting**: Implement appropriate rate limiting for mastery data endpoints
+
+### 9.12. Data Integrity Requirements
+
+#### 9.12.1. Referential Integrity
+- **Foreign Key Constraints**: Enforce database-level referential integrity between related tables
+- **Cascade Deletion**: Properly handle deletion of students, goals, and knowledge components
+- **Data Consistency**: Ensure mastery percentages remain within valid ranges (0.0 to 100.0)
+- **Transaction Safety**: All multi-table operations must be wrapped in database transactions
+
+#### 9.12.2. Data Validation
+- **Range Validation**: Mastery percentages must be validated to be between 0.0 and 100.0
+- **ID Format Validation**: Goal and KC IDs must follow established naming conventions
+- **Required Field Validation**: All required fields must be validated before database insertion
+- **JSON Schema Validation**: AI response data must be validated against predefined schemas
+
+### 9.13. Testing Requirements
+
+#### 9.13.1. Unit Testing
+- **Repository Testing**: Comprehensive unit tests for all repository methods
+- **Service Testing**: Unit tests for mastery-related service methods
+- **AI Integration Testing**: Tests for AI response processing and mastery update logic
+- **Data Validation Testing**: Tests for all data validation rules and constraints
+
+#### 9.13.2. Integration Testing
+- **API Endpoint Testing**: Full integration tests for all mastery-related API endpoints
+- **Database Integration**: Tests for database operations and data integrity
+- **UI Integration**: Tests for admin interface functionality and data display
+- **End-to-End Testing**: Complete workflow tests from AI analysis to UI display
+
+### 9.14. Documentation Requirements
+
+#### 9.14.1. Technical Documentation
+- **API Documentation**: Complete documentation of all mastery-related API endpoints
+- **Database Schema**: Detailed documentation of new database tables and relationships
+- **Service Documentation**: Documentation of all service methods and their usage
+- **Integration Guide**: Documentation for integrating with the mastery tracking system
+
+#### 9.14.2. User Documentation
+- **Admin Interface Guide**: Documentation for using the mastery map features
+- **Troubleshooting Guide**: Common issues and solutions for mastery tracking
+- **Performance Guidelines**: Best practices for optimal system performance
+- **Security Guidelines**: Security considerations for mastery data handling
+
+### 9.15. Monitoring and Observability Requirements
+
+#### 9.15.1. Performance Monitoring
+- **Response Time Tracking**: Monitor API response times for mastery-related endpoints
+- **Database Performance**: Track query performance and identify optimization opportunities
+- **Memory Usage**: Monitor memory consumption during mastery data processing
+- **Error Rate Monitoring**: Track error rates for all mastery-related operations
+
+#### 9.15.2. Business Metrics
+- **Usage Analytics**: Track adoption and usage of mastery tracking features
+- **Data Quality Metrics**: Monitor accuracy and completeness of mastery data
+- **AI Performance**: Track effectiveness of AI-driven mastery updates
+- **User Engagement**: Monitor admin interface usage and feature adoption
+
+### 9.16. Future Enhancement Requirements
+
+#### 9.16.1. Extensibility Requirements
+- **Multi-Curriculum Support**: Design to support multiple curriculum standards
+- **Custom Goal Definition**: Support for school-specific goal and KC definitions
+- **Historical Tracking**: Potential for tracking mastery progress over time
+- **Advanced Analytics**: Foundation for sophisticated learning analytics
+
+#### 9.16.2. Integration Requirements
+- **External Assessment**: Design to integrate with external assessment platforms
+- **Learning Management Systems**: Potential integration with LMS platforms
+- **Parent Portal**: Design to support parent access to mastery information
+- **Analytics Platforms**: Integration with advanced analytics and reporting tools

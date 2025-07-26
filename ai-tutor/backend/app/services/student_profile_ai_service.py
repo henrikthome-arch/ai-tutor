@@ -165,6 +165,7 @@ class StudentProfileAIService:
                 current_profile=json.dumps(student_context.get('current_profile', {}), indent=2),
                 existing_memories=json.dumps(student_context.get('memories', {}), indent=2),
                 recent_sessions=json.dumps(student_context.get('recent_sessions', []), indent=2),
+                mastery_context=json.dumps(student_context.get('mastery_context', {}), indent=2),
                 transcript=transcript
             )
             
@@ -221,7 +222,7 @@ class StudentProfileAIService:
     
     async def _apply_ai_updates(self, student_id: int, ai_response: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Apply AI-generated updates to student profile and memories
+        Apply AI-generated updates to student profile, memories, and mastery
         
         Args:
             student_id: The student ID
@@ -233,8 +234,10 @@ class StudentProfileAIService:
         results = {
             'profile_updated': False,
             'memories_updated': False,
+            'mastery_updated': False,
             'profile_result': None,
             'memory_results': [],
+            'mastery_results': None,
             'errors': []
         }
         
@@ -264,6 +267,27 @@ class StudentProfileAIService:
                         logger.info(f"✅ Updated {len(memory_results)} memories for student {student_id}")
                 except Exception as e:
                     error_msg = f"Memory update failed: {str(e)}"
+                    results['errors'].append(error_msg)
+                    logger.error(error_msg)
+            
+            # Apply mastery updates
+            mastery_updates = ai_response.get('mastery_updates', {})
+            if mastery_updates and (mastery_updates.get('goal_patches') or mastery_updates.get('kc_patches')):
+                try:
+                    mastery_results = self.student_service.update_mastery_from_ai_delta(student_id, mastery_updates)
+                    if mastery_results and (mastery_results.get('updated_goals') or mastery_results.get('updated_kcs')):
+                        results['mastery_updated'] = True
+                        results['mastery_results'] = mastery_results
+                        total_mastery_updates = len(mastery_results.get('updated_goals', [])) + len(mastery_results.get('updated_kcs', []))
+                        logger.info(f"✅ Updated {total_mastery_updates} mastery records for student {student_id}")
+                    
+                    # Log any mastery update errors
+                    if mastery_results and mastery_results.get('errors'):
+                        for error in mastery_results['errors']:
+                            results['errors'].append(f"Mastery update error: {error}")
+                            
+                except Exception as e:
+                    error_msg = f"Mastery update failed: {str(e)}"
                     results['errors'].append(error_msg)
                     logger.error(error_msg)
             
