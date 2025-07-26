@@ -137,7 +137,7 @@ graph TD
   - System logs and analytics
   - Curriculum and school data
 
-#### 2.1.4. AI Analysis System (`ai-tutor/backend/ai_poc/`)
+#### 2.1.4. AI Analysis System (`ai-tutor/backend/app/ai/`)
 - **Purpose**: Production AI-powered analysis of tutoring session transcripts with conditional prompt selection
 - **Framework**: Python with OpenAI/Anthropic API integration
 - **Status**: Production system (despite "poc" directory name - historical naming)
@@ -589,7 +589,7 @@ POST /admin/api/mcp/cleanup       # Clean up old interactions
 
 #### 6.5.2. Prompt Template Organization
 ```
-ai-tutor/backend/ai_poc/prompts/
+ai-tutor/backend/app/ai/prompts/
 ├── introductory_analysis.md     # New student profile creation
 ├── session_analysis.md          # General tutoring session analysis
 ├── math_analysis.md             # Mathematics-focused analysis

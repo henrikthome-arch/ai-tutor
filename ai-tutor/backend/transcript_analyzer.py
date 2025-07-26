@@ -14,12 +14,12 @@ from typing import Dict, Any, Optional
 from app import db
 
 # Import AI POC components
-from ai_poc.session_processor import session_processor
-from ai_poc.prompts import prompt_manager
-from ai_poc.providers import provider_manager
-from ai_poc.call_type_detector import default_prompt_selector, CallType
-from ai_poc.prompts_file_loader import file_prompt_manager
-from ai_poc.data_models import AIExtractedProfile, ValidationError
+from app.ai.session_processor import session_processor
+from app.ai.prompts import prompt_manager
+from app.ai.providers import provider_manager
+from app.ai.call_type_detector import default_prompt_selector, CallType
+from app.ai.prompts_file_loader import file_prompt_manager
+from app.ai.data_models import AIExtractedProfile, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class TranscriptAnalyzer:
     
     def _create_profile_extraction_prompt(self):
         """Create a custom prompt for profile information extraction"""
-        from ai_poc.prompts import PromptTemplate
+        from app.ai.prompts import PromptTemplate
         from datetime import datetime
         
         profile_prompt = PromptTemplate(
