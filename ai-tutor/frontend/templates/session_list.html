@@ -4,15 +4,15 @@
 
 {% block content %}
 <div class="breadcrumb">
-    <a href="{{ url_for('admin_dashboard') }}">📊 Dashboard</a> / 
-    <a href="{{ url_for('admin_students') }}">👥 Students</a> / 
-    <a href="{{ url_for('admin_student_detail', student_id=student_id) }}">{{ student.name }}</a> /
+    <a href="{{ url_for('main.admin_dashboard') }}">📊 Dashboard</a> /
+    <a href="{{ url_for('main.admin_students') }}">👥 Students</a> /
+    <a href="{{ url_for('main.admin_student_detail', student_id=student_id) }}">{{ student.name }}</a> /
     <span>🕒 Sessions</span>
 </div>
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
     <h1 style="color: #2c3e50;">{{ student.name }} - Session History</h1>
-    <a href="{{ url_for('admin_student_detail', student_id=student_id) }}" class="btn" style="background: #95a5a6;">
+    <a href="{{ url_for('main.admin_student_detail', student_id=student_id) }}" class="btn" style="background: #95a5a6;">
         ← Back to Student
     </a>
 </div>
@@ -89,14 +89,14 @@
                         </td>
                         <td>
                             <div style="display: flex; gap: 8px;">
-                                <a href="{{ url_for('view_session_detail', student_id=student_id, session_id=session.id) }}"
+                                <a href="{{ url_for('main.view_session_detail', student_id=student_id, session_file=session.file) }}"
                                    class="btn" 
                                    style="padding: 6px 12px; font-size: 0.9rem;"
                                    title="View Session Details">
                                     👁️ View
                                 </a>
                                 {% if session.has_transcript %}
-                                <a href="{{ url_for('admin_file_view', path='../data/students/' + student_id + '/sessions/' + session.file.replace('_session.json', '_transcript.txt').replace('_summary.json', '_transcript.txt')) }}" 
+                                <a href="{{ url_for('main.admin_file_view', path='../data/students/' + student_id + '/sessions/' + session.file.replace('_session.json', '_transcript.txt').replace('_summary.json', '_transcript.txt')) }}"
                                    class="btn" 
                                    style="padding: 6px 12px; font-size: 0.9rem; background: #3498db;"
                                    title="View Transcript">
