@@ -210,6 +210,120 @@ def admin_student_detail(student_id):
                          session_count=len(sessions),
                          last_session=recent_sessions[0]['date'] if recent_sessions else None)
 
+# Student Profile History and Memory Routes for AJAX
+@main.route('/admin/students/<student_id>/profile/history')
+def student_profile_history(student_id):
+    """Get student profile history for AJAX display"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        from app.repositories.student_profile_repository import StudentProfileRepository
+        from app import db
+        
+        # Check if student exists
+        if not student_service.student_exists(student_id):
+            return jsonify({
+                'success': False,
+                'message': f'Student {student_id} not found'
+            }), 404
+        
+        # Get profile history using repository
+        profile_repo = StudentProfileRepository(db.session)
+        profile_history = profile_repo.get_history(int(student_id))
+        
+        # Convert to JSON-serializable format
+        history_data = []
+        for profile in profile_history:
+            history_data.append({
+                'id': profile.id,
+                'student_id': profile.student_id,
+                'narrative': profile.narrative,
+                'traits': profile.traits,
+                'created_at': profile.created_at.isoformat() if profile.created_at else None,
+                'updated_at': profile.updated_at.isoformat() if profile.updated_at else None
+            })
+        
+        log_admin_action('view_student_profile_history', session.get('admin_username', 'unknown'),
+                        student_id=student_id,
+                        history_count=len(history_data))
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'student_id': student_id,
+                'profile_history': history_data
+            }
+        })
+        
+    except Exception as e:
+        log_error('ADMIN', f'Error getting profile history for student {student_id}', e,
+                 student_id=student_id,
+                 admin_user=session.get('admin_username', 'unknown'))
+        return jsonify({
+            'success': False,
+            'message': f'Failed to load profile history: {str(e)}'
+        }), 500
+
+@main.route('/admin/students/<student_id>/memory/scopes')
+def student_memory_scopes(student_id):
+    """Get student memory scopes and data for AJAX display"""
+    if not check_auth():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        from app.repositories.student_memory_repository import StudentMemoryRepository
+        from app.models.student_memory import MemoryScope
+        from app import db
+        
+        # Check if student exists
+        if not student_service.student_exists(student_id):
+            return jsonify({
+                'success': False,
+                'message': f'Student {student_id} not found'
+            }), 404
+        
+        # Get memory data using repository
+        memory_repo = StudentMemoryRepository(db.session)
+        
+        # Get all scopes with their descriptions and current entries
+        scopes_data = []
+        
+        for scope in MemoryScope:
+            # Get memory entries for this scope
+            memory_entries = memory_repo.get_many(int(student_id), scope)
+            
+            # Create scope data
+            scope_info = {
+                'name': scope.value,
+                'description': scope.get_description(),
+                'current_entries': len(memory_entries),
+                'entries': memory_entries
+            }
+            
+            scopes_data.append(scope_info)
+        
+        log_admin_action('view_student_memory_scopes', session.get('admin_username', 'unknown'),
+                        student_id=student_id,
+                        total_scopes=len(scopes_data))
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'student_id': student_id,
+                'scopes': scopes_data
+            }
+        })
+        
+    except Exception as e:
+        log_error('ADMIN', f'Error getting memory scopes for student {student_id}', e,
+                 student_id=student_id,
+                 admin_user=session.get('admin_username', 'unknown'))
+        return jsonify({
+            'success': False,
+            'message': f'Failed to load memory scopes: {str(e)}'
+        }), 500
+
 # School management routes
 @main.route('/admin/schools')
 def admin_schools():
@@ -1258,6 +1372,8 @@ def reset_database():
         from app import db
         from app.models.curriculum import Curriculum, Subject, CurriculumDetail
         from app.models.student import Student
+        from app.models.student_profile import StudentProfile
+        from app.models.student_memory import StudentMemory
         from app.models.assessment import StudentSubject
         from app.models.session import Session
         from app.models.analytics import SessionMetrics, DailyStats
@@ -1320,6 +1436,21 @@ def reset_database():
         print("🏗️ Creating fresh database schema...")
         db.create_all()
         print("✅ Fresh schema created successfully")
+        
+        # Create the student_profiles_current view for latest profiles
+        print("🔧 Creating student_profiles_current view...")
+        try:
+            db.session.execute(text("""
+                CREATE VIEW student_profiles_current AS
+                SELECT DISTINCT ON (student_id) *
+                FROM student_profiles
+                ORDER BY student_id, created_at DESC;
+            """))
+            db.session.commit()
+            print("✅ student_profiles_current view created successfully")
+        except Exception as view_error:
+            print(f"⚠️ Error creating student_profiles_current view: {view_error}")
+            db.session.rollback()
         
         # Load Cambridge Primary 2025 curriculum data
         print("📚 Loading Cambridge Primary 2025 curriculum data...")

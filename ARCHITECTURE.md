@@ -193,6 +193,26 @@ erDiagram
         timestamp updated_at
     }
 
+    %% Student Profile and Memory System
+    student_profiles {
+        int id PK
+        int student_id FK
+        text narrative "AI-generated narrative description of student"
+        jsonb traits "Structured student traits and characteristics"
+        timestamp created_at "Version timestamp for profile history"
+    }
+
+    student_memories {
+        int id PK
+        int student_id FK
+        string memory_key "Unique identifier for the memory item"
+        text memory_value "The stored memory content"
+        string scope "personal_fact|game_state|strategy_log"
+        timestamp expires_at "Optional expiration for temporary memories"
+        timestamp created_at
+        timestamp updated_at
+    }
+
     %% Curriculum System
     curriculums {
         int id PK
@@ -313,6 +333,8 @@ erDiagram
     
     students ||--o{ student_subjects : "enrolled in"
     students ||--o{ sessions : "participates in"
+    students ||--o{ student_profiles : "has profile versions"
+    students ||--o{ student_memories : "has memories"
     
     curriculums ||--|{ curriculum_details : "contains"
     subjects ||--|{ curriculum_details : "part of curriculum"
@@ -324,7 +346,7 @@ erDiagram
 
 ### 3.2. System Data Architecture Overview
 
-The database schema supports four primary functional areas:
+The database schema supports five primary functional areas:
 
 #### 3.2.1. Educational Structure Management
 -   **Schools & Students**: Core institutional relationships with basic student demographic data
@@ -337,15 +359,22 @@ The database schema supports four primary functional areas:
 -   **Progress Monitoring**: Dual-tracking system with numeric progress percentages and descriptive teacher assessments
 -   **Performance Metrics**: Session quality metrics, duration tracking, and satisfaction scoring
 
-#### 3.2.3. System Operations & Security
+#### 3.2.3. Student Profile and Memory Management
+-   **Versioned Profiles**: AI-generated student narratives with trait tracking and historical versioning
+-   **Scoped Memory System**: Key-value storage for personal facts, game states, and strategy logs with optional expiration
+-   **Current Profile View**: Optimized database view for latest student profile retrieval
+-   **Memory Categorization**: Enum-based scope system for organized memory management
+
+#### 3.2.4. System Operations & Security
 -   **Authentication Framework**: Secure token-based access control with scope-based permissions
 -   **Audit & Logging**: Comprehensive system event logging with categorized retention and real-time monitoring
 -   **MCP Interaction Monitoring**: Complete request/response logging for MCP server debugging and performance analysis
 -   **Analytics Infrastructure**: Daily statistics, usage patterns, and system performance tracking
 
-#### 3.2.4. AI Integration Architecture
--   **Session Context Loading**: Student context (curriculum, progress) provided to AI tutor
--   **Post-Session Processing**: AI analysis updates assessments and progress tracking
+#### 3.2.5. AI Integration Architecture
+-   **Session Context Loading**: Student context (curriculum, progress, profile, memories) provided to AI tutor
+-   **Post-Session Processing**: AI analysis updates assessments, profiles, and memory tracking
+-   **Intelligent Memory Management**: AI-driven profile updates and memory categorization
 
 #### 3.2.5. Key Workflows
 
@@ -917,3 +946,396 @@ ALTER TABLE sessions ADD COLUMN prompt_suggestions TEXT;
 - **Multi-Modal Analysis**: Include voice tone and pacing analysis
 - **Student Feedback Integration**: Incorporate student satisfaction metrics
 - **Continuous Learning**: AI model fine-tuning based on assessment outcomes
+
+## 12. Student Profile and Tutor Memory System
+
+### 12.1. Overview
+
+**Status: ✅ FULLY IMPLEMENTED AND OPERATIONAL (January 2025)**
+
+The Student Profile and Tutor Memory System addresses a critical limitation in the AI tutor's ability to store, version, and recall nuanced data about each student. This comprehensive system enables personalized tutoring experiences through persistent memory management and detailed student profiling.
+
+**Implementation Complete:** All components described in this section have been fully implemented, tested, and are operational in the production system.
+
+### 12.2. Core Problems Solved
+
+#### 12.2.1. Memory Persistence Issues
+- **Problem**: AI tutor repeatedly asks for information already provided ("What's your dog's name again?")
+- **Solution**: Persistent key-value memory storage with scoped categorization
+- **Result**: Seamless continuation of conversations with retained context
+
+#### 12.2.2. Profile Evolution Tracking
+- **Problem**: No historical record of student development and changing needs
+- **Solution**: Versioned student profiles with timestamp-based tracking
+- **Result**: Complete audit trail of student growth and adaptation
+
+#### 12.2.3. Structured Data Storage
+- **Problem**: Unstructured student information difficult to query and analyze
+- **Solution**: JSON-based trait storage with AI-generated narrative descriptions
+- **Result**: Rich, searchable student profiles with both structured and natural language data
+
+### 12.3. System Architecture
+
+#### 12.3.1. Data Models
+
+**StudentProfile Model:**
+```python
+class StudentProfile(db.Model):
+    id = Column(Integer, primary_key=True)
+    student_id = Column(Integer, ForeignKey('students.id'), nullable=False)
+    narrative = Column(Text)  # AI-generated description
+    traits = Column(JSON)     # Structured characteristics
+    created_at = Column(DateTime, default=datetime.utcnow)
+```
+
+**StudentMemory Model:**
+```python
+class StudentMemory(db.Model):
+    id = Column(Integer, primary_key=True)
+    student_id = Column(Integer, ForeignKey('students.id'), nullable=False)
+    memory_key = Column(String(255), nullable=False)
+    memory_value = Column(Text, nullable=False)
+    scope = Column(Enum(MemoryScope), nullable=False)
+    expires_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+```
+
+**Memory Scopes:**
+- **personal_fact**: Persistent personal information (pet names, family details, preferences)
+- **game_state**: Temporary game progress and achievements
+- **strategy_log**: Learning strategies and pedagogical approaches that work for the student
+
+#### 12.3.2. Database View Optimization
+
+**student_profiles_current View:**
+```sql
+CREATE VIEW student_profiles_current AS
+SELECT DISTINCT ON (student_id) *
+FROM student_profiles
+ORDER BY student_id, created_at DESC;
+```
+
+This view provides efficient access to the latest profile version for each student without complex queries.
+
+### 12.4. Repository Pattern Implementation
+
+#### 12.4.1. StudentProfileRepository
+
+**Core Methods:**
+- `get_current(student_id)`: Retrieve latest profile version
+- `add_version(student_id, narrative, traits)`: Create new profile version
+- `upsert_trait(student_id, trait_key, trait_value)`: Update specific trait in latest profile
+
+**Implementation Pattern:**
+```python
+def get_current(self, student_id: int) -> Optional[StudentProfile]:
+    """Get the current (latest) profile for a student"""
+    return self.session.query(StudentProfile)\
+        .filter_by(student_id=student_id)\
+        .order_by(StudentProfile.created_at.desc())\
+        .first()
+```
+
+#### 12.4.2. StudentMemoryRepository
+
+**Core Methods:**
+- `get_many(student_id, scope=None)`: Retrieve memories by scope
+- `set(student_id, key, value, scope, expires_at=None)`: UPSERT memory entry
+- `delete_key(student_id, key)`: Remove specific memory
+
+**UPSERT Implementation:**
+```python
+def set(self, student_id: int, key: str, value: str, scope: MemoryScope, expires_at: Optional[datetime] = None) -> StudentMemory:
+    """Set or update a memory entry using UPSERT logic"""
+    existing = self.session.query(StudentMemory)\
+        .filter_by(student_id=student_id, memory_key=key)\
+        .first()
+    
+    if existing:
+        existing.memory_value = value
+        existing.scope = scope
+        existing.expires_at = expires_at
+        existing.updated_at = datetime.utcnow()
+        return existing
+    else:
+        new_memory = StudentMemory(
+            student_id=student_id,
+            memory_key=key,
+            memory_value=value,
+            scope=scope,
+            expires_at=expires_at
+        )
+        self.session.add(new_memory)
+        return new_memory
+```
+
+### 12.5. AI-Driven Post-Session Updates
+
+#### 12.5.1. Workflow Integration
+
+**Trigger Points:**
+1. VAPI webhook completion
+2. Session transcript processing
+3. AI analysis completion
+
+**Update Process:**
+```
+1. Session End → Extract transcript and student context
+2. AI Analysis → Generate profile and memory deltas
+3. JSON Processing → Parse structured AI responses
+4. Database Updates → Apply profile and memory changes
+5. Versioning → Create new profile version if significant changes
+```
+
+#### 12.5.2. AI Prompt Structure
+
+**Prompt Components:**
+- Current student profile and memories
+- Session transcript
+- Specific instructions for delta extraction
+- JSON schema for structured responses
+
+**Expected AI Response Format:**
+```json
+{
+  "profile_updates": {
+    "narrative_changes": "Updated narrative description",
+    "trait_updates": {
+      "learning_style": "visual learner",
+      "confidence_level": "improving"
+    }
+  },
+  "memory_updates": {
+    "personal_fact": {
+      "pet_name": "Buddy",
+      "favorite_subject": "mathematics"
+    },
+    "strategy_log": {
+      "effective_encouragement": "responds well to puzzle analogies"
+    }
+  },
+  "should_create_new_profile_version": true
+}
+```
+
+### 12.6. Service Layer Integration
+
+#### 12.6.1. Enhanced StudentService
+
+**New Methods:**
+- `get_full_context(student_id)`: Complete student context including profile and memories
+- `update_profile_from_ai_delta(student_id, delta)`: Apply AI-generated updates
+- `get_memory_by_scope(student_id, scope)`: Filtered memory retrieval
+
+#### 12.6.2. Enhanced SessionService
+
+**New Methods:**
+- `get_last_n_summaries(student_id, n)`: Historical session context
+- `trigger_post_session_update(session_id)`: Initiate AI-driven updates
+
+### 12.7. Data Flow Architecture
+
+#### 12.7.1. Student Context Loading Flow
+```
+1. AI Tutor Session Start
+2. StudentService.get_full_context(student_id)
+3. Repository layer queries:
+   - Latest profile from student_profiles_current view
+   - Active memories grouped by scope
+   - Recent session summaries
+4. Context compilation for AI tutor
+5. Personalized interaction begins
+```
+
+#### 12.7.2. Post-Session Update Flow
+```
+1. Session completion → VAPI webhook
+2. Session storage → PostgreSQL sessions table
+3. AI update trigger → post_session_ai_update service
+4. Context gathering:
+   - Current profile and memories
+   - Session transcript
+   - Student demographic data
+5. AI analysis → Structured JSON response
+6. Delta processing:
+   - Profile updates → New version if significant changes
+   - Memory updates → UPSERT operations by scope
+7. Database persistence → Atomic transaction
+8. MCP interaction logging → Audit trail
+```
+
+### 12.8. Memory Management Strategies
+
+#### 12.8.1. Expiration Handling
+
+**Automatic Cleanup:**
+- Nightly Celery task `purge_expired_memory`
+- Configurable retention periods by scope
+- Graceful handling of expired memories during retrieval
+
+**Expiration Policies:**
+- **personal_fact**: No expiration (persistent)
+- **game_state**: 30-day expiration (configurable)
+- **strategy_log**: 365-day expiration (long-term learning insights)
+
+#### 12.8.2. Legacy Synchronization
+
+**Temporary Migration Support:**
+- Nightly Celery task `sync_legacy_arrays`
+- Keeps legacy `students.interests`, `students.learning_preferences` in sync
+- Gradual migration path from array-based to structured storage
+- Automatic deprecation timeline
+
+### 12.9. Admin Interface Enhancements
+
+#### 12.9.1. Student Detail Page Extensions
+
+**New Tabs:**
+- **Profile History**: Versioned list of student profile evolution
+- **Tutor Memory**: Scoped memory editor grouped by category
+
+**Profile History Features:**
+- Timeline view of profile changes
+- Diff visualization between versions
+- Export capabilities for parent/teacher review
+- Narrative evolution tracking
+
+**Tutor Memory Features:**
+- Scope-based grouping (personal_fact, game_state, strategy_log)
+- Real-time editing with immediate persistence
+- Expiration date management
+- Bulk operations for memory cleanup
+
+#### 12.9.2. Database Management Integration
+
+**Enhanced Database Views:**
+- Auto-discovery of new student_profiles and student_memories tables
+- Generic table viewer for profile and memory inspection
+- Performance metrics for profile versioning
+
+### 12.10. API Endpoint Extensions
+
+#### 12.10.1. New Memory Management Endpoints
+
+```
+PUT /api/v1/students/{id}/memory
+- Manual memory updates for testing and administration
+- Scope-based filtering and bulk operations
+- Authentication with memory:write scope
+
+GET /api/v1/students/{id}
+- Enhanced response including current_profile and memory data
+- Backward compatibility with existing integrations
+- Optional expansion parameters for detailed data
+```
+
+#### 12.10.2. Profile History Endpoints
+
+```
+GET /api/v1/students/{id}/profiles
+- Complete profile history with pagination
+- Filtering by date range and change significance
+- Export formats (JSON, CSV) for external analysis
+```
+
+### 12.11. Performance Considerations
+
+#### 12.11.1. Query Optimization
+
+**Database Indexes:**
+- `student_profiles(student_id, created_at DESC)` for current profile queries
+- `student_memories(student_id, scope)` for scoped memory retrieval
+- `student_memories(expires_at)` for cleanup operations
+
+**Caching Strategy:**
+- Current profile caching with invalidation on updates
+- Memory scope grouping for reduced query overhead
+- Precomputed student context for frequent AI interactions
+
+#### 12.11.2. Scalability Design
+
+**Horizontal Scaling:**
+- Stateless service design for multi-instance deployment
+- Database connection pooling for concurrent access
+- Asynchronous AI processing to prevent blocking
+
+**Data Growth Management:**
+- Profile version pruning for very active students
+- Memory archive strategies for long-term students
+- Configurable retention policies by deployment size
+
+### 12.12. Security and Privacy
+
+#### 12.12.1. Data Protection
+
+**GDPR Compliance:**
+- Complete student data deletion including all profile versions
+- Memory export capabilities for data portability
+- Audit trails for all profile and memory access
+
+**Access Control:**
+- API scope-based permissions for memory access
+- Admin role restrictions for sensitive profile data
+- Encrypted storage for personal facts and sensitive memories
+
+#### 12.12.2. Data Integrity
+
+**Transaction Management:**
+- Atomic updates for profile and memory changes
+- Rollback capabilities for failed AI updates
+- Consistent state maintenance across concurrent access
+
+**Validation Framework:**
+- JSON schema validation for profile traits
+- Memory scope enforcement at database level
+- Input sanitization for all user-provided content
+
+### 12.13. Monitoring and Observability
+
+#### 12.13.1. Performance Metrics
+
+**Key Indicators:**
+- Profile update frequency and success rate
+- Memory retrieval performance by scope
+- AI delta processing time and accuracy
+- Database view performance for current profile queries
+
+**Alerting Thresholds:**
+- Failed AI update attempts
+- Memory storage growth rate anomalies
+- Profile version creation frequency spikes
+
+#### 12.13.2. Usage Analytics
+
+**Business Intelligence:**
+- Student engagement correlation with memory persistence
+- Profile evolution patterns across different student demographics
+- Memory scope utilization analysis
+- AI update effectiveness tracking
+
+### 12.14. Future Enhancements
+
+#### 12.14.1. Advanced AI Integration
+
+**Planned Features:**
+- Real-time profile updates during session
+- Predictive memory suggestions based on conversation flow
+- Automatic memory categorization refinement
+- Cross-student pattern analysis for improved personalization
+
+#### 12.14.2. Extended Memory Types
+
+**Additional Scopes:**
+- **academic_progress**: Fine-grained subject mastery tracking
+- **social_interaction**: Communication preferences and social context
+- **parent_feedback**: Integrated family input and preferences
+- **peer_collaboration**: Group learning and social dynamics
+
+#### 12.14.3. Integration Opportunities
+
+**External Systems:**
+- Learning Management System (LMS) profile synchronization
+- Parent portal integration for profile visibility
+- Teacher dashboard for profile-driven instruction planning
+- Analytics platform integration for advanced insights

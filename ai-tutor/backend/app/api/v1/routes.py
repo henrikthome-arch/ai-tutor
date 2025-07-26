@@ -35,6 +35,7 @@ from app.services.session_service import SessionService
 from app.services.ai_service import AIService
 from app.services.mcp_interaction_service import MCPInteractionService
 from app.services.tutor_assessment_service import TutorAssessmentService
+from app.services.student_profile_ai_service import StudentProfileAIService
 
 # Import the blueprint from parent module
 from app.api import bp as api
@@ -45,6 +46,7 @@ session_service = SessionService()
 ai_service = AIService()
 mcp_interaction_service = MCPInteractionService()
 tutor_assessment_service = TutorAssessmentService()
+student_profile_ai_service = StudentProfileAIService()
 
 # Authentication helper (kept for backward compatibility)
 def check_auth():
@@ -680,6 +682,21 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
             else:
                 start_datetime = datetime.now()
             
+            # Ensure session summary exists using SessionService
+            session_summary = metadata.get('analysis_summary', '')
+            if not session_summary and transcript:
+                try:
+                    # Generate session summary if missing
+                    session_summary = session_service.ensure_session_summary(transcript, call_id)
+                    log_webhook('session-summary-generated', f"Generated session summary for call {call_id}",
+                               call_id=call_id, summary_length=len(session_summary) if session_summary else 0)
+                    print(f"📝 Generated session summary for call {call_id}")
+                except Exception as summary_error:
+                    log_error('SESSION_SUMMARY', f"Error generating session summary for call {call_id}", summary_error,
+                             call_id=call_id, student_id=student_id)
+                    print(f"⚠️ Error generating session summary: {summary_error}")
+                    session_summary = ''
+            
             # Create Session model record
             session_record = Session(
                 student_id=int(student_id),
@@ -688,7 +705,7 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
                 start_datetime=start_datetime,
                 duration=effective_duration,  # Use effective duration
                 transcript=transcript[:10000] if transcript else None,  # Truncate very long transcripts
-                summary=metadata.get('analysis_summary', '')[:5000] if metadata.get('analysis_summary') else None
+                summary=session_summary[:5000] if session_summary else None
             )
             
             db.session.add(session_record)
@@ -722,6 +739,33 @@ def save_api_driven_session(call_id: str, student_id: str, phone: str,
                 log_error('TUTOR_ASSESSMENT', f"Error triggering tutor assessment for session {session_record.id}", assessment_error,
                          call_id=call_id, session_db_id=session_record.id)
                 print(f"⚠️ Error triggering tutor assessment for session {session_record.id}: {assessment_error}")
+            
+            # STUDENT PROFILE & MEMORY UPDATE: Trigger AI-driven post-session updates
+            try:
+                log_webhook('student-profile-ai-update-start', f"Starting AI-driven profile and memory update for session {session_record.id}",
+                           call_id=call_id, session_db_id=session_record.id, student_id=student_id)
+                print(f"🧠 Starting AI-driven profile and memory update for session {session_record.id}")
+                
+                update_result = student_profile_ai_service.post_session_ai_update(session_record.id)
+                
+                if update_result.get('success'):
+                    log_webhook('student-profile-ai-update-completed', f"AI-driven profile and memory update completed for session {session_record.id}",
+                               call_id=call_id, session_db_id=session_record.id, student_id=student_id,
+                               profile_updated=update_result.get('profile_updated', False),
+                               memory_updated=update_result.get('memory_updated', False))
+                    print(f"✅ AI-driven profile and memory update completed for session {session_record.id}")
+                    print(f"   Profile updated: {update_result.get('profile_updated', False)}")
+                    print(f"   Memory updated: {update_result.get('memory_updated', False)}")
+                else:
+                    log_error('STUDENT_PROFILE_AI_UPDATE', f"AI-driven update failed for session {session_record.id}: {update_result.get('error')}",
+                             ValueError(update_result.get('error', 'Unknown error')),
+                             call_id=call_id, session_db_id=session_record.id, student_id=student_id)
+                    print(f"⚠️ AI-driven update failed for session {session_record.id}: {update_result.get('error')}")
+                    
+            except Exception as ai_update_error:
+                log_error('STUDENT_PROFILE_AI_UPDATE', f"Error triggering AI-driven update for session {session_record.id}", ai_update_error,
+                         call_id=call_id, session_db_id=session_record.id, student_id=student_id)
+                print(f"⚠️ Error triggering AI-driven update for session {session_record.id}: {ai_update_error}")
             
         except Exception as db_error:
             db.session.rollback()
@@ -790,6 +834,21 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
             from app import db
             from app.models.session import Session
             
+            # Ensure session summary exists for webhook fallback
+            session_summary = None
+            if combined_transcript:
+                try:
+                    # Generate session summary for webhook fallback
+                    session_summary = session_service.ensure_session_summary(combined_transcript, call_id)
+                    log_webhook('session-summary-generated-fallback', f"Generated session summary for webhook fallback call {call_id}",
+                               call_id=call_id, summary_length=len(session_summary) if session_summary else 0)
+                    print(f"📝 Generated session summary for webhook fallback call {call_id}")
+                except Exception as summary_error:
+                    log_error('SESSION_SUMMARY', f"Error generating session summary for webhook fallback call {call_id}", summary_error,
+                             call_id=call_id, student_id=student_id)
+                    print(f"⚠️ Error generating session summary for webhook fallback: {summary_error}")
+                    session_summary = None
+            
             # Create Session model record
             session_record = Session(
                 student_id=int(student_id),
@@ -798,7 +857,7 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
                 start_datetime=datetime.now(),  # Use current time for webhook fallback
                 duration=effective_duration,
                 transcript=combined_transcript[:10000] if combined_transcript else None,  # Truncate very long transcripts
-                summary=None  # No summary available in webhook fallback
+                summary=session_summary[:5000] if session_summary else None
             )
             
             db.session.add(session_record)
@@ -832,6 +891,33 @@ def handle_end_of_call_webhook_fallback(message: Dict[Any, Any]) -> None:
                 log_error('TUTOR_ASSESSMENT', f"Error triggering tutor assessment for webhook fallback session {session_record.id}", assessment_error,
                          call_id=call_id, session_db_id=session_record.id)
                 print(f"⚠️ Error triggering tutor assessment for webhook fallback session {session_record.id}: {assessment_error}")
+            
+            # STUDENT PROFILE & MEMORY UPDATE: Trigger AI-driven post-session updates for webhook fallback
+            try:
+                log_webhook('student-profile-ai-update-start-fallback', f"Starting AI-driven profile and memory update for webhook fallback session {session_record.id}",
+                           call_id=call_id, session_db_id=session_record.id, student_id=student_id)
+                print(f"🧠 Starting AI-driven profile and memory update for webhook fallback session {session_record.id}")
+                
+                update_result = student_profile_ai_service.post_session_ai_update(session_record.id)
+                
+                if update_result.get('success'):
+                    log_webhook('student-profile-ai-update-completed-fallback', f"AI-driven profile and memory update completed for webhook fallback session {session_record.id}",
+                               call_id=call_id, session_db_id=session_record.id, student_id=student_id,
+                               profile_updated=update_result.get('profile_updated', False),
+                               memory_updated=update_result.get('memory_updated', False))
+                    print(f"✅ AI-driven profile and memory update completed for webhook fallback session {session_record.id}")
+                    print(f"   Profile updated: {update_result.get('profile_updated', False)}")
+                    print(f"   Memory updated: {update_result.get('memory_updated', False)}")
+                else:
+                    log_error('STUDENT_PROFILE_AI_UPDATE', f"AI-driven update failed for webhook fallback session {session_record.id}: {update_result.get('error')}",
+                             ValueError(update_result.get('error', 'Unknown error')),
+                             call_id=call_id, session_db_id=session_record.id, student_id=student_id)
+                    print(f"⚠️ AI-driven update failed for webhook fallback session {session_record.id}: {update_result.get('error')}")
+                    
+            except Exception as ai_update_error:
+                log_error('STUDENT_PROFILE_AI_UPDATE', f"Error triggering AI-driven update for webhook fallback session {session_record.id}", ai_update_error,
+                         call_id=call_id, session_db_id=session_record.id, student_id=student_id)
+                print(f"⚠️ Error triggering AI-driven update for webhook fallback session {session_record.id}: {ai_update_error}")
             
         except Exception as db_error:
             db.session.rollback()
@@ -1355,3 +1441,276 @@ def cleanup_old_mcp_interactions():
             'status': 'error',
             'message': f"Failed to cleanup interactions: {str(e)}"
         }), 500
+
+# Student API Endpoints for Profile and Memory Management
+@api.route('/students/<int:student_id>')
+@token_or_session_auth(required_scope='students:read')
+def get_student_with_profile_and_memory(student_id):
+    """Get student details including current profile and memory data"""
+    try:
+        # Get basic student data
+        student_data = student_service.get_student_data(str(student_id))
+        if not student_data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Student not found'
+            }), 404
+        
+        # Get full context including profile and memory
+        context = student_service.get_full_context(student_id)
+        
+        # Combine all data
+        response_data = {
+            'status': 'success',
+            'data': {
+                'student': student_data,
+                'current_profile': context.get('current_profile'),
+                'memory': context.get('memory', {}),
+                'recent_sessions': context.get('recent_sessions', [])
+            }
+        }
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        log_error('API', f"Error retrieving student {student_id} with profile and memory: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Failed to retrieve student: {str(e)}"
+        }), 500
+
+@api.route('/students/<int:student_id>/memory', methods=['PUT'])
+@token_or_session_auth(required_scope='students:write')
+def update_student_memory(student_id):
+    """Update student memory entries manually"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'message': 'No JSON data provided'
+            }), 400
+        
+        # Validate student exists
+        student_data = student_service.get_student_data(str(student_id))
+        if not student_data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Student not found'
+            }), 404
+        
+        # Get memory updates from request
+        memory_updates = data.get('memory', {})
+        if not memory_updates:
+            return jsonify({
+                'status': 'error',
+                'message': 'No memory updates provided'
+            }), 400
+        
+        # Initialize response tracking
+        results = {
+            'updates_applied': 0,
+            'updates_failed': 0,
+            'details': []
+        }
+        
+        # Import MemoryScope enum for validation
+        from app.models.student_memory import MemoryScope
+        valid_scopes = [scope.value for scope in MemoryScope]
+        
+        # Process each scope's memory updates
+        for scope_name, scope_memories in memory_updates.items():
+            if scope_name not in valid_scopes:
+                results['updates_failed'] += 1
+                results['details'].append({
+                    'scope': scope_name,
+                    'status': 'error',
+                    'message': f'Invalid scope. Valid scopes: {valid_scopes}'
+                })
+                continue
+            
+            if not isinstance(scope_memories, dict):
+                results['updates_failed'] += 1
+                results['details'].append({
+                    'scope': scope_name,
+                    'status': 'error',
+                    'message': 'Scope memories must be a dictionary'
+                })
+                continue
+            
+            # Process each memory entry in this scope
+            for key, value in scope_memories.items():
+                try:
+                    # Handle deletion (null/None values)
+                    if value is None:
+                        success = student_service.delete_student_memory(student_id, key, scope_name)
+                        if success:
+                            results['updates_applied'] += 1
+                            results['details'].append({
+                                'scope': scope_name,
+                                'key': key,
+                                'action': 'deleted',
+                                'status': 'success'
+                            })
+                        else:
+                            results['updates_failed'] += 1
+                            results['details'].append({
+                                'scope': scope_name,
+                                'key': key,
+                                'action': 'delete',
+                                'status': 'error',
+                                'message': 'Key not found or deletion failed'
+                            })
+                    else:
+                        # Handle update/insert
+                        success = student_service.set_student_memory(student_id, key, value, scope_name)
+                        if success:
+                            results['updates_applied'] += 1
+                            results['details'].append({
+                                'scope': scope_name,
+                                'key': key,
+                                'value': value,
+                                'action': 'updated',
+                                'status': 'success'
+                            })
+                        else:
+                            results['updates_failed'] += 1
+                            results['details'].append({
+                                'scope': scope_name,
+                                'key': key,
+                                'action': 'update',
+                                'status': 'error',
+                                'message': 'Update failed'
+                            })
+                            
+                except Exception as update_error:
+                    results['updates_failed'] += 1
+                    results['details'].append({
+                        'scope': scope_name,
+                        'key': key,
+                        'action': 'update',
+                        'status': 'error',
+                        'message': str(update_error)
+                    })
+        
+        # Log the manual memory update
+        log_webhook('manual-memory-update', f"Manual memory update for student {student_id}",
+                   student_id=student_id,
+                   updates_applied=results['updates_applied'],
+                   updates_failed=results['updates_failed'])
+        
+        # Determine overall success
+        if results['updates_failed'] == 0:
+            status_code = 200
+            message = f"Successfully updated {results['updates_applied']} memory entries"
+        elif results['updates_applied'] > 0:
+            status_code = 207  # Multi-status
+            message = f"Partially successful: {results['updates_applied']} updated, {results['updates_failed']} failed"
+        else:
+            status_code = 400
+            message = f"All {results['updates_failed']} update attempts failed"
+        
+        return jsonify({
+            'status': 'success' if results['updates_failed'] == 0 else 'partial',
+            'message': message,
+            'student_id': student_id,
+            'results': results
+        }), status_code
+        
+    except Exception as e:
+        log_error('API', f"Error updating memory for student {student_id}: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Failed to update memory: {str(e)}"
+        }), 500
+
+@api.route('/students/<int:student_id>/profile/history')
+@token_or_session_auth(required_scope='students:read')
+def get_student_profile_history(student_id):
+    """Get student profile version history"""
+    try:
+        # Validate student exists
+        student_data = student_service.get_student_data(str(student_id))
+        if not student_data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Student not found'
+            }), 404
+        
+        # Get profile history from repository
+        from app.repositories.student_profile_repository import StudentProfileRepository
+        profile_repo = StudentProfileRepository()
+        
+        profile_history = profile_repo.get_profile_history(student_id)
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'student_id': student_id,
+                'profile_history': profile_history,
+                'count': len(profile_history)
+            }
+        })
+        
+    except Exception as e:
+        log_error('API', f"Error retrieving profile history for student {student_id}: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Failed to retrieve profile history: {str(e)}"
+        }), 500
+
+@api.route('/students/<int:student_id>/memory/scopes')
+@token_or_session_auth(required_scope='students:read')
+def get_student_memory_scopes(student_id):
+    """Get available memory scopes and their descriptions"""
+    try:
+        # Validate student exists
+        student_data = student_service.get_student_data(str(student_id))
+        if not student_data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Student not found'
+            }), 404
+        
+        # Import MemoryScope enum
+        from app.models.student_memory import MemoryScope
+        
+        # Get current memory grouped by scope
+        context = student_service.get_full_context(student_id)
+        current_memory = context.get('memory', {})
+        
+        # Build scope information
+        scopes = []
+        for scope in MemoryScope:
+            scope_info = {
+                'name': scope.value,
+                'description': get_memory_scope_description(scope.value),
+                'current_entries': len(current_memory.get(scope.value, {})),
+                'entries': current_memory.get(scope.value, {})
+            }
+            scopes.append(scope_info)
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'student_id': student_id,
+                'scopes': scopes,
+                'total_entries': sum(len(current_memory.get(scope.value, {})) for scope in MemoryScope)
+            }
+        })
+        
+    except Exception as e:
+        log_error('API', f"Error retrieving memory scopes for student {student_id}: {str(e)}", e)
+        return jsonify({
+            'status': 'error',
+            'message': f"Failed to retrieve memory scopes: {str(e)}"
+        }), 500
+
+def get_memory_scope_description(scope_name):
+    """Get human-readable description for memory scope"""
+    descriptions = {
+        'personal_fact': 'Personal information about the student (name, age, family, pets, etc.)',
+        'game_state': 'Current state of educational games and activities',
+        'strategy_log': 'Teaching strategies that work well for this student'
+    }
+    return descriptions.get(scope_name, 'Unknown scope')

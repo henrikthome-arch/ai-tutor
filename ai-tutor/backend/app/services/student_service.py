@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, date
 from types import SimpleNamespace
 
-from app.repositories import student_repository
+from app.repositories import student_repository, student_profile_repository, student_memory_repository
 from app.models.student import Student
 from app.models.school import School
 from app import db
@@ -578,3 +578,199 @@ class StudentService:
         except Exception as e:
             print(f"Error saving schools: {e}")
             return False
+    
+    def get_full_context(self, student_id: int) -> Dict[str, Any]:
+        """
+        Get complete student context including profile, memories, and basic data
+        Used by AI tutor for personalized interactions
+        
+        Args:
+            student_id: The student ID
+            
+        Returns:
+            Dictionary with complete student context
+        """
+        try:
+            # Get basic student data
+            student = Student.query.get(student_id)
+            if not student:
+                return {
+                    'error': 'Student not found',
+                    'student_id': student_id
+                }
+            
+            # Get current profile
+            current_profile = student_profile_repository.get_current(student_id)
+            
+            # Get memories grouped by scope
+            memories_by_scope = student_memory_repository.get_by_scope_grouped(student_id)
+            
+            # Get session summaries (will be implemented in SessionService)
+            session_summaries = []
+            try:
+                from app.models.session import Session
+                recent_sessions = Session.query.filter_by(student_id=student_id)\
+                                             .order_by(Session.start_datetime.desc())\
+                                             .limit(5).all()
+                session_summaries = [
+                    {
+                        'id': session.id,
+                        'date': session.start_datetime.isoformat() if session.start_datetime else None,
+                        'summary': session.summary,
+                        'duration_minutes': session.duration_seconds // 60 if session.duration_seconds else 0
+                    }
+                    for session in recent_sessions if session.summary
+                ]
+            except Exception as session_error:
+                print(f"Error getting session summaries for student {student_id}: {session_error}")
+            
+            # Build comprehensive context
+            context = {
+                'student_id': student_id,
+                'basic_info': {
+                    'name': student.full_name,
+                    'first_name': student.first_name,
+                    'last_name': student.last_name,
+                    'age': student.age,
+                    'grade': student.get_grade(),
+                    'phone': student.phone_number,
+                    'date_of_birth': student.date_of_birth.isoformat() if student.date_of_birth else None,
+                    'student_type': student.student_type,
+                    'created_at': student.created_at.isoformat() if student.created_at else None
+                },
+                'legacy_arrays': {
+                    'interests': student.interests or [],
+                    'learning_preferences': student.learning_preferences or [],
+                    'motivational_triggers': student.motivational_triggers or []
+                },
+                'current_profile': current_profile,
+                'memories': memories_by_scope,
+                'recent_sessions': session_summaries,
+                'context_timestamp': datetime.utcnow().isoformat()
+            }
+            
+            print(f"✅ Retrieved full context for student {student_id}")
+            return context
+            
+        except Exception as e:
+            print(f"Error getting full context for student {student_id}: {e}")
+            return {
+                'error': str(e),
+                'student_id': student_id,
+                'context_timestamp': datetime.utcnow().isoformat()
+            }
+    
+    def update_profile_from_ai_delta(self, student_id: int, profile_delta: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Update student profile based on AI-generated delta changes
+        
+        Args:
+            student_id: The student ID
+            profile_delta: Dictionary containing profile updates from AI analysis
+            
+        Returns:
+            Updated profile dictionary or None if no changes
+        """
+        try:
+            return student_profile_repository.update_from_ai_delta(student_id, profile_delta)
+        except Exception as e:
+            print(f"Error updating profile from AI delta for student {student_id}: {e}")
+            raise e
+    
+    def update_memories_from_ai_delta(self, student_id: int, memory_delta: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Update student memories based on AI-generated delta changes
+        
+        Args:
+            student_id: The student ID
+            memory_delta: Dictionary with scope as key and memory updates as value
+            
+        Returns:
+            List of updated memory dictionaries
+        """
+        try:
+            return student_memory_repository.update_from_ai_delta(student_id, memory_delta)
+        except Exception as e:
+            print(f"Error updating memories from AI delta for student {student_id}: {e}")
+            raise e
+    
+    def get_memory_by_scope(self, student_id: int, scope: str) -> List[Dict[str, Any]]:
+        """
+        Get student memories filtered by scope
+        
+        Args:
+            student_id: The student ID
+            scope: The memory scope to filter by
+            
+        Returns:
+            List of memory dictionaries for the specified scope
+        """
+        try:
+            from app.models.student_memory import MemoryScope
+            memory_scope = MemoryScope(scope)
+            return student_memory_repository.get_many(student_id, scope=memory_scope)
+        except ValueError:
+            print(f"Invalid memory scope: {scope}")
+            return []
+        except Exception as e:
+            print(f"Error getting memories by scope for student {student_id}: {e}")
+            return []
+    
+    def set_memory(self, student_id: int, memory_key: str, memory_value: str, scope: str, expires_at: Optional[datetime] = None) -> Dict[str, Any]:
+        """
+        Set a single memory for a student
+        
+        Args:
+            student_id: The student ID
+            memory_key: The memory key
+            memory_value: The memory value
+            scope: The memory scope
+            expires_at: Optional expiration datetime
+            
+        Returns:
+            The created/updated memory dictionary
+        """
+        try:
+            from app.models.student_memory import MemoryScope
+            memory_scope = MemoryScope(scope)
+            return student_memory_repository.set(student_id, memory_key, memory_value, memory_scope, expires_at)
+        except ValueError:
+            print(f"Invalid memory scope: {scope}")
+            raise ValueError(f"Invalid memory scope: {scope}")
+        except Exception as e:
+            print(f"Error setting memory for student {student_id}: {e}")
+            raise e
+    
+    def delete_memory(self, student_id: int, memory_key: str) -> bool:
+        """
+        Delete a specific memory for a student
+        
+        Args:
+            student_id: The student ID
+            memory_key: The memory key to delete
+            
+        Returns:
+            True if deleted, False if not found
+        """
+        try:
+            return student_memory_repository.delete_key(student_id, memory_key)
+        except Exception as e:
+            print(f"Error deleting memory for student {student_id}: {e}")
+            raise e
+    
+    def get_profile_history(self, student_id: int, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """
+        Get profile version history for a student
+        
+        Args:
+            student_id: The student ID
+            limit: Optional limit on number of versions
+            
+        Returns:
+            List of profile versions ordered by creation date (newest first)
+        """
+        try:
+            return student_profile_repository.get_all_versions(student_id, limit)
+        except Exception as e:
+            print(f"Error getting profile history for student {student_id}: {e}")
+            return []

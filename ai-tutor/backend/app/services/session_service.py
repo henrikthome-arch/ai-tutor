@@ -343,3 +343,155 @@ class SessionService:
         except Exception as e:
             print(f"Error enqueuing AI analysis for session {session_id}: {e}")
             return False
+    
+    def get_last_n_summaries(self, student_id: int, n: int = 5) -> List[Dict[str, Any]]:
+        """
+        Get the last N session summaries for a student for AI context
+        
+        Args:
+            student_id: The student ID
+            n: Number of summaries to retrieve (default: 5)
+            
+        Returns:
+            List of session summaries ordered by date (newest first)
+        """
+        try:
+            # Get recent sessions with summaries
+            sessions = Session.query.filter_by(student_id=student_id)\
+                                  .filter(Session.summary.isnot(None))\
+                                  .filter(Session.summary != '')\
+                                  .order_by(Session.start_datetime.desc())\
+                                  .limit(n).all()
+            
+            summaries = []
+            for session in sessions:
+                summary_data = {
+                    'id': session.id,
+                    'date': session.start_datetime.isoformat() if session.start_datetime else None,
+                    'summary': session.summary,
+                    'duration_minutes': session.duration_seconds // 60 if session.duration_seconds else 0,
+                    'session_type': session.session_type or 'phone',
+                    'created_at': session.created_at.isoformat() if session.created_at else None
+                }
+                summaries.append(summary_data)
+            
+            print(f"✅ Retrieved {len(summaries)} session summaries for student {student_id}")
+            return summaries
+            
+        except Exception as e:
+            print(f"Error getting last {n} summaries for student {student_id}: {e}")
+            return []
+    
+    def update_session_summary(self, session_id: int, summary: str) -> bool:
+        """
+        Update the summary for a session
+        
+        Args:
+            session_id: The session ID
+            summary: The session summary text
+            
+        Returns:
+            True if updated successfully, False otherwise
+        """
+        try:
+            session = Session.query.get(session_id)
+            if not session:
+                print(f"Session {session_id} not found")
+                return False
+            
+            session.summary = summary
+            db.session.commit()
+            
+            print(f"✅ Updated summary for session {session_id}")
+            return True
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error updating summary for session {session_id}: {e}")
+            return False
+    
+    def ensure_session_summary(self, session_id: int) -> bool:
+        """
+        Ensure a session has a summary, creating one if missing
+        Used by post-session processing to guarantee summary availability
+        
+        Args:
+            session_id: The session ID
+            
+        Returns:
+            True if summary exists or was created, False if failed
+        """
+        try:
+            session = Session.query.get(session_id)
+            if not session:
+                print(f"Session {session_id} not found")
+                return False
+            
+            # Check if summary already exists
+            if session.summary and session.summary.strip():
+                print(f"ℹ️ Session {session_id} already has summary")
+                return True
+            
+            # Generate summary from transcript if available
+            if session.transcript and session.transcript.strip():
+                # Create a basic summary from transcript
+                transcript_lines = session.transcript.split('\n')
+                # Take first few lines as a basic summary
+                summary_lines = transcript_lines[:3]
+                basic_summary = ' '.join(summary_lines).strip()
+                
+                if basic_summary:
+                    session.summary = f"Session summary (auto-generated): {basic_summary}"
+                    db.session.commit()
+                    print(f"✅ Created basic summary for session {session_id}")
+                    return True
+            
+            # Fallback: create minimal summary
+            session.summary = f"Session conducted on {session.start_datetime.strftime('%Y-%m-%d %H:%M') if session.start_datetime else 'unknown date'}"
+            db.session.commit()
+            print(f"✅ Created minimal summary for session {session_id}")
+            return True
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error ensuring summary for session {session_id}: {e}")
+            return False
+    
+    def get_sessions_needing_ai_update(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get sessions that need AI-driven profile/memory updates
+        Used for batch processing of sessions
+        
+        Args:
+            limit: Maximum number of sessions to return
+            
+        Returns:
+            List of session dictionaries that need AI processing
+        """
+        try:
+            # Get recent sessions with transcripts but potentially needing AI updates
+            sessions = Session.query.filter(Session.transcript.isnot(None))\
+                                  .filter(Session.transcript != '')\
+                                  .order_by(Session.start_datetime.desc())\
+                                  .limit(limit).all()
+            
+            session_data = []
+            for session in sessions:
+                if hasattr(session, 'to_dict'):
+                    session_data.append(session.to_dict())
+                else:
+                    session_data.append({
+                        'id': session.id,
+                        'student_id': session.student_id,
+                        'start_datetime': session.start_datetime.isoformat() if session.start_datetime else None,
+                        'transcript': session.transcript,
+                        'summary': session.summary,
+                        'session_type': session.session_type
+                    })
+            
+            print(f"✅ Found {len(session_data)} sessions needing AI updates")
+            return session_data
+            
+        except Exception as e:
+            print(f"Error getting sessions needing AI update: {e}")
+            return []

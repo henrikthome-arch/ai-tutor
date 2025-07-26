@@ -11,6 +11,8 @@ from .system_log import SystemLog
 from .analytics import SessionMetrics, DailyStats
 from .token import Token
 from .mcp_interaction import MCPInteraction
+from .student_profile import StudentProfile
+from .student_memory import StudentMemory, MemoryScope
 
 __all__ = [
     'Student',
@@ -22,5 +24,8 @@ __all__ = [
     'SessionMetrics',
     'DailyStats',
     'Token',
-    'MCPInteraction'
+    'MCPInteraction',
+    'StudentProfile',
+    'StudentMemory',
+    'MemoryScope'
 ]

@@ -540,3 +540,176 @@ The system must evaluate AI tutor performance against research-backed tutoring s
 - **MCP Server Support**: Assessment data accessible through MCP server for AI assistant access
 - **Authentication**: Assessment data access subject to existing authentication and authorization mechanisms
 - **Consistent Data Format**: Assessment data follows established API response patterns
+
+## 8. Student Profile and Tutor Memory System Requirements
+
+### 8.1. Overview and Core Problems
+
+**Status: ✅ FULLY IMPLEMENTED AND OPERATIONAL (January 2025)**
+
+The Student Profile and Tutor Memory System addresses critical limitations in the AI tutor's ability to store, version, and recall nuanced data about each student. This system is now fully operational and provides comprehensive memory persistence and profile management.
+
+#### 8.1.1. Core Problems Solved
+- **Memory Persistence**: Eliminate repeated questions by AI tutor ("What's your dog's name again?")
+- **Profile Evolution Tracking**: Maintain historical record of student development and changing needs
+- **Structured Data Storage**: Enable rich, searchable student profiles with both structured and natural language data
+- **Personalized Context**: Provide AI tutor with comprehensive student context for each session
+
+### 8.2. Data Model Requirements
+
+#### 8.2.1. Student Profile Management
+- **Versioned Profiles**: System must maintain complete history of student profile evolution with timestamps
+- **AI-Generated Narratives**: Store natural language descriptions of student characteristics and learning patterns
+- **Structured Traits**: JSON-based storage of student characteristics for queryability and analysis
+- **Current Profile View**: Optimized database view (`student_profiles_current`) for efficient latest profile retrieval
+- **Profile Versioning Logic**: Automatic creation of new profile versions when significant changes occur
+
+#### 8.2.2. Scoped Memory System
+- **Memory Categorization**: Three distinct memory scopes with different retention and usage patterns:
+  - `personal_fact`: Persistent personal information (pet names, family details, preferences)
+  - `game_state`: Temporary game progress and achievements with configurable expiration
+  - `strategy_log`: Learning strategies and pedagogical approaches that work for the student
+- **Key-Value Storage**: Flexible memory storage allowing arbitrary key-value pairs within each scope
+- **Expiration Management**: Optional expiration dates for temporary memories with automatic cleanup
+- **UPSERT Operations**: Efficient update-or-insert logic for memory entries
+
+### 8.3. Repository Pattern Requirements
+
+#### 8.3.1. StudentProfileRepository Implementation
+- **Current Profile Access**: `get_current(student_id)` method for efficient latest profile retrieval
+- **Profile Versioning**: `add_version(student_id, narrative, traits)` for creating new profile versions
+- **Trait Management**: `upsert_trait(student_id, trait_key, trait_value)` for granular profile updates
+- **History Retrieval**: `get_history(student_id)` for complete profile evolution tracking
+- **Transaction Safety**: All operations wrapped in database transactions with proper error handling
+
+#### 8.3.2. StudentMemoryRepository Implementation
+- **Scoped Retrieval**: `get_many(student_id, scope=None)` for filtered memory access by scope
+- **Memory Operations**: `set(student_id, key, value, scope, expires_at=None)` with UPSERT logic
+- **Memory Deletion**: `delete_key(student_id, key)` for individual memory removal
+- **Bulk Operations**: Efficient batch operations for multiple memory updates
+- **Expiration Handling**: Automatic filtering of expired memories during retrieval
+
+### 8.4. AI Integration Requirements
+
+#### 8.4.1. Post-Session Update Workflow
+- **Automatic Triggering**: AI analysis triggered after every completed tutoring session
+- **Context Compilation**: Gather current profile, memories, session transcript, and student demographics
+- **Structured AI Prompts**: Use dedicated prompt template (`post_session_update.md`) for consistent analysis
+- **JSON Delta Processing**: AI must provide structured updates in predefined JSON format
+- **Atomic Updates**: Profile and memory updates applied atomically with rollback capability
+
+#### 8.4.2. AI Response Format Requirements
+- **Profile Updates**: Structured changes to student narrative and traits
+- **Memory Updates**: Scoped memory changes with clear categorization
+- **Versioning Decisions**: AI-driven determination of when to create new profile versions
+- **Update Validation**: JSON schema validation before database application
+- **Error Recovery**: Graceful handling of malformed or incomplete AI responses
+
+### 8.5. Memory Management Requirements
+
+#### 8.5.1. Expiration and Cleanup
+- **Automatic Cleanup**: Nightly Celery task `purge_expired_memory` for expired memory removal
+- **Configurable Retention**: Different expiration policies by memory scope:
+  - `personal_fact`: No expiration (persistent)
+  - `game_state`: 30-day expiration (configurable)
+  - `strategy_log`: 365-day expiration (long-term insights)
+- **Graceful Expiration**: Expired memories filtered during retrieval without breaking functionality
+
+#### 8.5.2. Legacy Data Synchronization
+- **Migration Support**: Temporary synchronization with legacy `students.interests` and `students.learning_preferences` arrays
+- **Gradual Migration**: Nightly Celery task `sync_legacy_arrays` for backward compatibility
+- **Deprecation Timeline**: Planned phaseout of legacy array-based storage
+
+### 8.6. Admin Interface Requirements
+
+#### 8.6.1. Student Detail Page Enhancements
+- **Tabbed Interface**: Additional tabs for "Profile History" and "Tutor Memory" on student detail pages
+- **Profile History View**: Timeline display of profile evolution with version comparison capabilities
+- **Memory Editor**: Scope-based memory management interface with real-time editing
+- **Visual Design**: Professional, responsive interface with clear navigation and status indicators
+
+#### 8.6.2. Profile History Features
+- **Version Timeline**: Chronological display of profile changes with timestamps
+- **Current vs Historical**: Clear indication of current profile version vs historical versions
+- **Trait Display**: Formatted display of structured profile traits
+- **Export Capabilities**: Profile history export for parent/teacher review
+- **Refresh Functionality**: Manual refresh capability for latest data
+
+#### 8.6.3. Tutor Memory Features
+- **Scope Organization**: Memory entries grouped by scope with clear descriptions
+- **Real-Time Editing**: Add, edit, and delete memory entries with immediate persistence
+- **Modal Interface**: Professional modal dialogs for memory entry editing
+- **Bulk Operations**: Efficient management of multiple memory entries
+- **Status Indicators**: Visual feedback for memory operations and data loading
+
+### 8.7. API Requirements
+
+#### 8.7.1. Enhanced Student Endpoints
+- **Extended Student Details**: `GET /api/v1/students/{id}` must include current profile and memory data
+- **Memory Management**: `PUT /api/v1/students/{id}/memory` for manual memory updates with scope validation
+- **Profile History**: `GET /api/v1/students/{id}/profiles` for complete profile history access
+- **Backward Compatibility**: All API changes must maintain compatibility with existing integrations
+
+#### 8.7.2. Admin Interface Endpoints
+- **Profile History**: `GET /admin/students/{id}/profile/history` for admin interface data loading
+- **Memory Scopes**: `GET /admin/students/{id}/memory/scopes` for scoped memory management
+- **Authentication**: All admin endpoints require proper authentication and authorization
+- **Error Handling**: Comprehensive error responses with appropriate HTTP status codes
+
+### 8.8. Performance Requirements
+
+#### 8.8.1. Query Optimization
+- **Database Indexes**: Optimized indexes for profile and memory retrieval:
+  - `student_profiles(student_id, created_at DESC)` for current profile queries
+  - `student_memories(student_id, scope)` for scoped memory retrieval
+  - `student_memories(expires_at)` for cleanup operations
+- **Caching Strategy**: Current profile caching with invalidation on updates
+- **Efficient Views**: `student_profiles_current` view for optimized latest profile access
+
+#### 8.8.2. Scalability Design
+- **Stateless Services**: All service components designed for horizontal scaling
+- **Connection Pooling**: Database connection pooling for concurrent access
+- **Asynchronous Processing**: Non-blocking AI processing to prevent user-facing delays
+- **Data Growth Management**: Configurable retention policies and archive strategies
+
+### 8.9. Security and Privacy Requirements
+
+#### 8.9.1. Data Protection
+- **GDPR Compliance**: Complete student data deletion including all profile versions and memories
+- **Data Portability**: Memory and profile export capabilities for data portability requirements
+- **Access Control**: Scope-based API permissions for memory access
+- **Audit Trails**: Comprehensive logging of all profile and memory access operations
+
+#### 8.9.2. Data Integrity
+- **Transaction Management**: Atomic updates for profile and memory changes with rollback capability
+- **Validation Framework**: JSON schema validation for profile traits and memory data
+- **Input Sanitization**: Proper sanitization of all user-provided content
+- **Concurrent Access**: Consistent state maintenance across concurrent profile/memory updates
+
+### 8.10. Monitoring and Observability Requirements
+
+#### 8.10.1. Performance Metrics
+- **Profile Operations**: Track profile update frequency, success rate, and performance
+- **Memory Operations**: Monitor memory retrieval performance by scope and usage patterns
+- **AI Processing**: Track AI delta processing time and accuracy rates
+- **Database Performance**: Monitor view performance and query optimization effectiveness
+
+#### 8.10.2. Business Intelligence
+- **Student Engagement**: Correlation analysis between memory persistence and engagement
+- **Profile Evolution**: Pattern analysis of student development across demographics
+- **Memory Utilization**: Analysis of memory scope usage and effectiveness
+- **System Effectiveness**: Track AI update success rates and system improvement over time
+
+### 8.11. Integration Requirements
+
+#### 8.11.1. VAPI Workflow Integration
+- **Seamless Context Loading**: Student context (profile + memories) provided to AI tutor at session start
+- **Post-Session Updates**: Automatic profile and memory updates after session completion
+- **Error Isolation**: Profile/memory system failures must not impact primary tutoring functionality
+- **Performance**: Context loading must complete quickly to avoid session delays
+
+#### 8.11.2. Service Layer Integration
+- **Enhanced StudentService**: `get_full_context(student_id)` method for complete student context
+- **Enhanced SessionService**: `get_last_n_summaries(student_id, n)` for historical session context
+- **Clean Interfaces**: Well-defined service interfaces for profile and memory operations
+- **Dependency Injection**: Proper service layer design for testability and maintainability
