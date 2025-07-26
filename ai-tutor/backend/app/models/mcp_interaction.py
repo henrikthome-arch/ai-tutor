@@ -48,10 +48,13 @@ class MCPInteraction(db.Model):
     
     def complete_interaction(self, response_payload, http_status_code=None):
         """Complete the interaction with response data"""
-        self.response_timestamp = func.now()
+        self.response_timestamp = datetime.utcnow()
         self.response_payload = response_payload
         self.http_status_code = http_status_code
-        self.duration_ms = self.calculate_duration()
+        # Calculate duration before commit
+        if self.response_timestamp and self.request_timestamp:
+            delta = self.response_timestamp - self.request_timestamp
+            self.duration_ms = int(delta.total_seconds() * 1000)
         db.session.commit()
     
     def to_dict(self, include_payloads=True):

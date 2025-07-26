@@ -25,7 +25,7 @@ class StudentProfileAIService:
         self.session_service = SessionService()
         self.provider_manager = provider_manager
     
-    async def post_session_ai_update(self, session_id: int) -> Dict[str, Any]:
+    def post_session_ai_update(self, session_id: int) -> Dict[str, Any]:
         """
         Perform AI-driven profile and memory updates after a tutoring session
         
@@ -91,7 +91,7 @@ class StudentProfileAIService:
                 'session_id': session_id
             }
             
-            analysis = await self.provider_manager.analyze_session(session.transcript, ai_context)
+            analysis = self.provider_manager.analyze_session(session.transcript, ai_context)
             
             # Parse JSON response
             try:
@@ -113,7 +113,7 @@ class StudentProfileAIService:
                 }
             
             # Apply updates
-            update_results = await self._apply_ai_updates(session.student_id, ai_response)
+            update_results = self._apply_ai_updates(session.student_id, ai_response)
             
             # Ensure session has summary
             self.session_service.ensure_session_summary(session_id)
@@ -220,7 +220,7 @@ class StudentProfileAIService:
             cleaned = re.sub(r'\s+', ' ', cleaned)
             return json.loads(cleaned)
     
-    async def _apply_ai_updates(self, student_id: int, ai_response: Dict[str, Any]) -> Dict[str, Any]:
+    def _apply_ai_updates(self, student_id: int, ai_response: Dict[str, Any]) -> Dict[str, Any]:
         """
         Apply AI-generated updates to student profile, memories, and mastery
         
