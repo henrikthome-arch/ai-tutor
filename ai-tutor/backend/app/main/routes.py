@@ -144,6 +144,7 @@ def admin_student_detail(student_id):
             'first_name': student_model.first_name,
             'last_name': student_model.last_name,
             'name': student_model.full_name,  # Use full_name property
+            'date_of_birth': student_model.date_of_birth,  # Add date_of_birth field
             'age': student_model.age,  # Use age property
             'grade': student_model.get_grade(),  # Use get_grade() method
             'phone': phone,
@@ -157,6 +158,7 @@ def admin_student_detail(student_id):
             'name': student_model.full_name,
             'first_name': student_model.first_name,
             'last_name': student_model.last_name,
+            'date_of_birth': student_model.date_of_birth,  # Add date_of_birth field
             'age': student_model.age,
             'grade': student_model.get_grade(),
             'interests': student_model.interests or [],
