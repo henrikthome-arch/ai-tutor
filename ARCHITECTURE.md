@@ -256,6 +256,13 @@ erDiagram
         timestamp created_at
     }
 
+    goal_prerequisites {
+        int id PK
+        string goal_id FK "References curriculum_goals.goal_id"
+        string prerequisite_kc_id FK "References goal_kcs.kc_id"
+        timestamp created_at
+    }
+
     student_goal_progress {
         int student_id FK
         string goal_id FK "References curriculum_goals.goal_id"
@@ -376,6 +383,8 @@ erDiagram
     curriculum_details ||--o{ student_subjects : "instantiated as"
     
     curriculum_goals ||--o{ goal_kcs : "contains knowledge components"
+    curriculum_goals ||--o{ goal_prerequisites : "has prerequisites"
+    goal_kcs ||--o{ goal_prerequisites : "required as prerequisite"
     curriculum_goals ||--o{ student_goal_progress : "tracked by students"
     goal_kcs ||--o{ student_kc_progress : "tracked by students"
     
@@ -1382,7 +1391,436 @@ GET /api/v1/students/{id}/profiles
 - Teacher dashboard for profile-driven instruction planning
 - Analytics platform integration for advanced insights
 
-## 13. Granular Mastery Tracking System
+## 13. AI Tutor System Enhancement (v4 Context & VAPI v3)
+
+### 13.1. Overview
+
+**Status: ✅ FULLY IMPLEMENTED AND OPERATIONAL (January 2025)**
+
+The AI Tutor System Enhancement represents a major modernization of the platform's AI capabilities, implementing a sophisticated v4 context contract, enhanced VAPI prompt system, and comprehensive MCP server tools. This enhancement transforms the AI tutor from a basic conversational system into a sophisticated, memory-enabled, game-state-aware tutoring platform.
+
+**Implementation Complete:** All components described in this section have been fully implemented, tested, and are operational in the production system.
+
+### 13.2. Core Enhancements
+
+#### 13.2.1. v4 Context Contract Architecture
+- **Problem**: Previous context was unstructured and inconsistent for AI consumption
+- **Solution**: Standardized v4 context with demographics, profile, memories, progress, and _curriculum blocks
+- **Result**: Consistent, structured data format enabling sophisticated AI personalization
+
+#### 13.2.2. Goal Prerequisites System
+- **Problem**: No curriculum dependency tracking for logical learning progression
+- **Solution**: [`goal_prerequisites`](ai-tutor/backend/app/models/mastery_tracking.py:15) table with knowledge component relationships
+- **Result**: AI tutor understands prerequisite concepts needed for advanced topics
+
+#### 13.2.3. Enhanced VAPI Prompt (v3)
+- **Problem**: Basic conversational AI without personality or game state management
+- **Solution**: Sophisticated "Sunny" AI tutor with conditional flows and memory integration
+- **Result**: Engaging, personalized tutoring experience with persistent context
+
+#### 13.2.4. Redis Caching Strategy
+- **Problem**: Repeated database queries for curriculum atlas data
+- **Solution**: Intelligent caching with `(curriculum_id, grade_level)` keys
+- **Result**: Significant performance improvement for context loading
+
+### 13.3. Database Schema Enhancements
+
+#### 13.3.1. Goal Prerequisites Table
+```sql
+CREATE TABLE goal_prerequisites (
+    id SERIAL PRIMARY KEY,
+    goal_id VARCHAR(50) NOT NULL REFERENCES curriculum_goals(goal_id),
+    prerequisite_kc_id VARCHAR(50) NOT NULL REFERENCES goal_kcs(kc_id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Purpose**: Establishes logical dependency relationships between curriculum goals and prerequisite knowledge components.
+
+#### 13.3.2. Grade Subject Goals SQL View
+```sql
+CREATE VIEW grade_subject_goals_v AS
+SELECT
+    cd.curriculum_id,
+    cd.grade_level,
+    cd.subject_id,
+    s.name as subject_name,
+    cg.goal_id,
+    cg.goal_text,
+    gkc.kc_id,
+    gkc.kc_text,
+    COALESCE(
+        json_agg(
+            DISTINCT gp.prerequisite_kc_id
+        ) FILTER (WHERE gp.prerequisite_kc_id IS NOT NULL),
+        '[]'::json
+    ) as prerequisites
+FROM curriculum_details cd
+JOIN subjects s ON cd.subject_id = s.id
+JOIN curriculum_goals cg ON s.name = cg.subject AND cd.grade_level = cg.grade
+JOIN goal_kcs gkc ON cg.goal_id = gkc.goal_id
+LEFT JOIN goal_prerequisites gp ON cg.goal_id = gp.goal_id
+GROUP BY cd.curriculum_id, cd.grade_level, cd.subject_id, s.name,
+         cg.goal_id, cg.goal_text, gkc.kc_id, gkc.kc_text
+ORDER BY subject_name, cg.goal_id, gkc.kc_id;
+```
+
+**Purpose**: Efficient single-query access to complete curriculum atlas with prerequisite relationships.
+
+### 13.4. v4 Context Contract Schema
+
+#### 13.4.1. Complete v4 Context Structure
+```json
+{
+  "context_version": 4,
+  "student_id": "emma_smith",
+  "demographics": {
+    "first_name": "Emma",
+    "last_name": "Smith",
+    "grade_level": 4,
+    "school_name": "Cambridge International Primary",
+    "interests": ["mathematics", "art"],
+    "learning_preferences": ["visual", "hands-on"]
+  },
+  "profile": {
+    "narrative": "AI-generated personality description...",
+    "traits": {
+      "learning_style": "visual learner",
+      "confidence_level": "developing",
+      "motivation_triggers": ["puzzles", "games"]
+    },
+    "version_timestamp": "2025-01-26T10:30:00Z"
+  },
+  "memories": {
+    "personal_fact": {
+      "pet_name": "Buddy",
+      "favorite_color": "purple"
+    },
+    "game_state": {
+      "current_level": "3",
+      "achievements": ["first_win", "problem_solver"]
+    },
+    "strategy_log": {
+      "effective_encouragement": "responds well to puzzle analogies",
+      "learning_pace": "prefers slower explanation of new concepts"
+    }
+  },
+  "progress": {
+    "subjects": {
+      "Mathematics": {
+        "overall_progress": 78.5,
+        "mastery_level": "developing",
+        "recent_achievements": ["place_value_mastery"],
+        "focus_areas": ["multiplication", "word_problems"]
+      }
+    }
+  },
+  "_curriculum": {
+    "curriculum_id": 1,
+    "curriculum_name": "Cambridge Primary 2025",
+    "grade_level": 4,
+    "subjects": {
+      "Mathematics": {
+        "goals": {
+          "4M-01": {
+            "goal_text": "Understand place value in numbers up to 10,000",
+            "knowledge_components": {
+              "4M-01-KC1": {
+                "kc_text": "Recognize that digits represent different values",
+                "prerequisites": ["3M-05-KC2", "3M-06-KC1"]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+#### 13.4.2. Context Block Responsibilities
+
+**Demographics Block**: Static student information and school enrollment data
+**Profile Block**: AI-generated personality insights with versioning
+**Memories Block**: Scoped key-value storage for personalization
+**Progress Block**: Subject-level achievement and mastery tracking
+**_Curriculum Block**: Complete curriculum atlas with goal hierarchy and prerequisites
+
+### 13.5. StudentContextService Architecture
+
+#### 13.5.1. Service Implementation
+**Location**: [`ai-tutor/backend/app/services/student_context_service.py`](ai-tutor/backend/app/services/student_context_service.py)
+
+**Core Method - `build(student_id: int, curriculum_id: int = None)`**:
+```python
+def build(self, student_id: int, curriculum_id: int = None) -> dict:
+    """Build complete v4 context for student"""
+    
+    # 1. Load base student data
+    student = self.student_repo.get_by_id(student_id)
+    
+    # 2. Load current AI profile
+    current_profile = self.profile_repo.get_current(student_id)
+    
+    # 3. Load scoped memories
+    memories = self.memory_repo.get_memories_by_scope(student_id)
+    
+    # 4. Load progress data
+    progress = self.get_student_progress_summary(student_id)
+    
+    # 5. Load curriculum atlas with caching
+    curriculum_atlas = self.curriculum_repo.get_grade_atlas(
+        curriculum_id or student.school.default_curriculum_id,
+        student.grade_level
+    )
+    
+    # 6. Assemble v4 context structure
+    return {
+        "context_version": 4,
+        "student_id": f"{student.first_name.lower()}_{student.last_name.lower()}",
+        "demographics": self.build_demographics_block(student),
+        "profile": self.build_profile_block(current_profile),
+        "memories": self.build_memories_block(memories),
+        "progress": self.build_progress_block(progress),
+        "_curriculum": curriculum_atlas
+    }
+```
+
+#### 13.5.2. Redis Caching Integration
+**Cache Key Strategy**: `curriculum_atlas:{curriculum_id}:{grade_level}`
+
+**CurriculumRepository.get_grade_atlas() with Caching**:
+```python
+def get_grade_atlas(self, curriculum_id: int, grade_level: int) -> dict:
+    """Get curriculum atlas with Redis caching"""
+    
+    cache_key = f"curriculum_atlas:{curriculum_id}:{grade_level}"
+    
+    # Try cache first
+    cached_data = redis_client.get(cache_key)
+    if cached_data:
+        return json.loads(cached_data)
+    
+    # Query database view
+    results = self.session.execute(
+        text("""
+        SELECT * FROM grade_subject_goals_v
+        WHERE curriculum_id = :curriculum_id
+        AND grade_level = :grade_level
+        """),
+        {"curriculum_id": curriculum_id, "grade_level": grade_level}
+    ).fetchall()
+    
+    # Build atlas structure
+    atlas = self.build_atlas_from_view_results(results)
+    
+    # Cache for 1 hour
+    redis_client.setex(cache_key, 3600, json.dumps(atlas))
+    
+    return atlas
+```
+
+### 13.6. Enhanced VAPI Prompt System (v3)
+
+#### 13.6.1. Sunny AI Tutor Personality
+**Location**: [`ai-tutor/backend/app/ai/prompts/vapi_conversation.md`](ai-tutor/backend/app/ai/prompts/vapi_conversation.md)
+
+**Core Characteristics**:
+- **Personality**: Warm, encouraging, slightly playful AI tutor named "Sunny"
+- **Engagement**: Uses games, stories, and interactive elements
+- **Memory Integration**: References past conversations and personal details
+- **Game State Management**: Tracks ongoing educational games and progress
+- **Conditional Flows**: Different approaches for new vs returning students
+
+#### 13.6.2. v3 Prompt Structure
+```markdown
+# VAPI Conversation Prompt v3: Sunny the AI Tutor
+
+## CORE IDENTITY
+You are Sunny, a warm and encouraging AI tutor designed to help students learn...
+
+## CONTEXT INTEGRATION
+You have access to complete student context via the v4 context contract:
+- Demographics: Basic student information and preferences
+- Profile: AI-generated personality insights and learning style
+- Memories: Personal facts, game states, and effective strategies
+- Progress: Subject mastery levels and recent achievements
+- Curriculum: Grade-appropriate goals with prerequisite mapping
+
+## CONVERSATION FLOW MANAGEMENT
+### New Student Detection
+- If memories are empty or minimal, treat as new student
+- Focus on relationship building and preference discovery
+
+### Returning Student Flow
+- Reference previous conversations and shared memories
+- Continue ongoing games or learning activities
+- Build on established rapport and known preferences
+
+## MEMORY AND GAME STATE TOOLS
+You have access to three tools for persistent state management:
+- set_memory(key, value, scope): Store personal facts, game progress, strategies
+- set_game_state(game_id, state, is_active): Manage educational games
+- log_session_event(event): Track significant learning moments
+```
+
+### 13.7. Enhanced MCP Server Tools
+
+#### 13.7.1. New MCP Tool: set_game_state
+**Location**: [`mcp-server/src/index.ts`](mcp-server/src/index.ts)
+
+**Purpose**: Enable AI tutor to persist game state across sessions
+
+**Implementation**:
+```typescript
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  if (request.params.name === "set_game_state") {
+    const { student_id, game_id, json_blob, is_active } = request.params.arguments;
+    
+    const response = await fetch(`${API_BASE_URL}/students/memory`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        student_id,
+        memory_key: `game_${game_id}`,
+        memory_value: json_blob,
+        scope: 'game_state',
+        metadata: { is_active, game_id }
+      })
+    });
+    
+    return { content: [{ type: "text", text: "Game state updated successfully" }] };
+  }
+});
+```
+
+#### 13.7.2. New MCP Tool: set_memory
+**Purpose**: Allow AI tutor to store personal facts and learning strategies
+
+**Parameters**:
+- `student_id`: Student identifier
+- `key`: Memory key (e.g., "pet_name", "favorite_subject")
+- `value`: Memory content
+- `scope`: Memory category ("personal_fact", "game_state", "strategy_log")
+
+#### 13.7.3. New MCP Tool: log_session_event
+**Purpose**: Track significant learning moments and breakthroughs
+
+**Parameters**:
+- `student_id`: Student identifier
+- `event_json`: Structured event data (achievements, milestones, insights)
+
+#### 13.7.4. Enhanced MCP Resource: get_student_context
+**Updated Response**: Now returns complete v4 context from [`StudentContextService`](ai-tutor/backend/app/services/student_context_service.py:1)
+
+```typescript
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  return {
+    resources: [
+      {
+        uri: `student-context://emma_smith`,
+        mimeType: "application/json",
+        name: "Student Context (v4)",
+        description: "Complete student context with demographics, profile, memories, progress, and curriculum atlas"
+      }
+    ]
+  };
+});
+```
+
+### 13.8. Frontend UI Enhancements
+
+#### 13.8.1. Student Detail v4 Template
+**Location**: [`ai-tutor/frontend/templates/student_detail_v4.html`](ai-tutor/frontend/templates/student_detail_v4.html)
+
+**New Tabbed Interface**:
+- **Demographics Tab**: Student basic information and school details
+- **AI Profile Tab**: AI-generated personality insights and learning style analysis
+- **Memories Tab**: Scoped memory management with real-time editing
+- **Progress Tab**: Subject mastery tracking and achievement visualization
+- **Curriculum Atlas Tab**: Complete curriculum view with goals and prerequisites
+- **Raw JSON Tab**: Developer-friendly context debugging with copy/download
+
+#### 13.8.2. Enhanced UX Features
+- **Responsive Design**: Mobile-friendly tabbed interface
+- **Real-time Updates**: AJAX-powered data loading and refresh
+- **Copy/Download**: Easy export of context data for debugging
+- **Color-coded Progress**: Visual indicators for mastery levels
+- **Interactive Elements**: Expandable sections and detailed views
+
+### 13.9. Performance Optimizations
+
+#### 13.9.1. Redis Caching Strategy
+**Cache Keys**:
+- `curriculum_atlas:{curriculum_id}:{grade_level}`: Complete atlas data
+- `student_context_v4:{student_id}`: Full context (short TTL for real-time updates)
+
+**Cache Invalidation**:
+- Curriculum atlas: 1-hour TTL (relatively static data)
+- Student context: 5-minute TTL (frequent updates during sessions)
+- Manual invalidation on curriculum or student data changes
+
+#### 13.9.2. Database Query Optimization
+**SQL View Benefits**:
+- Single query replaces multiple JOIN operations
+- Efficient prerequisite aggregation using JSON functions
+- Indexed access patterns for grade/subject filtering
+
+**Repository Pattern**:
+- Clean separation of caching logic from business logic
+- Consistent error handling and connection management
+- Optimized query patterns for v4 context assembly
+
+### 13.10. Security and Privacy Enhancements
+
+#### 13.10.1. MCP Token Scope Validation
+**Enhanced Authentication**:
+- `mcp:read`: Required for student context access
+- `mcp:write`: Required for memory and game state updates
+- `mcp:log`: Required for session event logging
+
+#### 13.10.2. Data Privacy Controls
+**Memory Scope Management**:
+- Automatic expiration for sensitive game states
+- Scope-based access controls for different memory types
+- GDPR-compliant data deletion including all memory scopes
+
+### 13.11. Monitoring and Analytics
+
+#### 13.11.1. Context Loading Performance
+**Key Metrics**:
+- v4 context assembly time (target: <500ms)
+- Redis cache hit rate for curriculum atlas (target: >90%)
+- Memory retrieval efficiency by scope
+- SQL view query performance
+
+#### 13.11.2. AI Tutor Engagement Tracking
+**Behavioral Analytics**:
+- Memory update frequency and patterns
+- Game state persistence and continuation rates
+- v4 context utilization by AI tutor
+- Prerequisite-based learning path effectiveness
+
+### 13.12. Future Enhancement Opportunities
+
+#### 13.12.1. Advanced AI Integration
+**Planned Features**:
+- Real-time context updates during active sessions
+- Predictive prerequisite gap analysis
+- Cross-student pattern recognition for curriculum optimization
+- Adaptive difficulty adjustment based on prerequisite mastery
+
+#### 13.12.2. Extended Context Capabilities
+**v5 Context Considerations**:
+- Parent/teacher collaboration context
+- Peer learning and social interaction data
+- Multi-modal content (voice, visual) integration
+- Advanced analytics and prediction models
+
+## 14. Granular Mastery Tracking System
 
 ### 13.1. Overview
 

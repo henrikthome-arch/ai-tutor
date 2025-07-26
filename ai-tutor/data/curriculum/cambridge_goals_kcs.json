@@ -10,6 +10,7 @@
       "description": "Students can count in steps of different sizes, read and write numbers to 1000 in numerals and words.",
       "subject": "Mathematics",
       "grade_level": 3,
+      "prerequisites": [],
       "knowledge_components": [
         {
           "kc_code": "counting-patterns",
@@ -39,6 +40,7 @@
       "description": "Students can order and compare numbers to 1000 using mathematical symbols.",
       "subject": "Mathematics",
       "grade_level": 3,
+      "prerequisites": ["place-value-hundreds", "number-recognition-1000"],
       "knowledge_components": [
         {
           "kc_code": "number-comparison",
@@ -63,6 +65,7 @@
       "description": "Students can add and subtract numbers to 1000 using different methods.",
       "subject": "Mathematics",
       "grade_level": 3,
+      "prerequisites": ["place-value-hundreds", "number-recognition-1000", "counting-patterns"],
       "knowledge_components": [
         {
           "kc_code": "mental-addition",
@@ -92,6 +95,7 @@
       "description": "Students can count in steps of different sizes, read and write numbers to 10000 in numerals and words.",
       "subject": "Mathematics",
       "grade_level": 4,
+      "prerequisites": ["place-value-hundreds", "number-recognition-1000", "counting-patterns"],
       "knowledge_components": [
         {
           "kc_code": "counting-larger-steps",
@@ -121,6 +125,7 @@
       "description": "Students understand fractions as parts of a whole and can perform basic operations with fractions.",
       "subject": "Mathematics",
       "grade_level": 4,
+      "prerequisites": ["number-comparison", "place-value-hundreds"],
       "knowledge_components": [
         {
           "kc_code": "fraction-concepts",
@@ -150,6 +155,7 @@
       "description": "Students can multiply and divide numbers by single digit numbers using various methods.",
       "subject": "Mathematics",
       "grade_level": 4,
+      "prerequisites": ["mental-addition", "mental-subtraction", "counting-patterns", "place-value-hundreds"],
       "knowledge_components": [
         {
           "kc_code": "times-tables",
@@ -179,6 +185,7 @@
       "description": "Students can read, write, order and round whole numbers to 1000000.",
       "subject": "Mathematics",
       "grade_level": 5,
+      "prerequisites": ["place-value-thousands", "number-recognition-10000", "rounding-1000"],
       "knowledge_components": [
         {
           "kc_code": "large-number-recognition",
@@ -208,6 +215,7 @@
       "description": "Students can understand decimal notation and perform calculations with decimal numbers.",
       "subject": "Mathematics",
       "grade_level": 5,
+      "prerequisites": ["place-value-thousands", "fraction-concepts", "column-addition", "column-subtraction"],
       "knowledge_components": [
         {
           "kc_code": "decimal-place-value",
@@ -237,6 +245,7 @@
       "description": "Students can multiply and divide larger numbers including decimals.",
       "subject": "Mathematics",
       "grade_level": 5,
+      "prerequisites": ["times-tables", "multiplication-methods", "division-methods", "decimal-place-value"],
       "knowledge_components": [
         {
           "kc_code": "multi-digit-multiplication",

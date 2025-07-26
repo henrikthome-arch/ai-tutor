@@ -163,3 +163,41 @@ class StudentKCProgress(db.Model):
             'mastery_percentage': self.mastery_percentage,
             'last_updated': self.last_updated.isoformat() if self.last_updated else None
         }
+
+
+class GoalPrerequisite(db.Model):
+    """
+    Goal Prerequisites model representing prerequisite knowledge components for goals.
+    This establishes dependencies between goals and prerequisite knowledge components.
+    """
+    __tablename__ = 'goal_prerequisites'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    goal_id = db.Column(db.Integer, db.ForeignKey('curriculum_goals.id', ondelete='CASCADE'), nullable=False)
+    prerequisite_kc_code = db.Column(db.String(100), nullable=False)  # KC code that is prerequisite
+    prerequisite_goal_id = db.Column(db.Integer, db.ForeignKey('curriculum_goals.id', ondelete='CASCADE'), nullable=True)  # Goal that contains the prerequisite KC
+    created_at = db.Column(db.DateTime, server_default=func.now())
+    
+    # Ensure unique combinations of goal and prerequisite KC
+    __table_args__ = (
+        UniqueConstraint('goal_id', 'prerequisite_kc_code', name='uix_goal_prerequisite_kc'),
+    )
+    
+    # Relationships
+    goal = db.relationship('CurriculumGoal', foreign_keys=[goal_id], backref='prerequisites')
+    prerequisite_goal = db.relationship('CurriculumGoal', foreign_keys=[prerequisite_goal_id], backref='dependent_goals')
+    
+    def __repr__(self):
+        return f'<GoalPrerequisite goal_id={self.goal_id} prerequisite_kc={self.prerequisite_kc_code}>'
+    
+    def to_dict(self):
+        """Convert to dictionary"""
+        return {
+            'id': self.id,
+            'goal_id': self.goal_id,
+            'goal_code': self.goal.goal_code if self.goal else None,
+            'prerequisite_kc_code': self.prerequisite_kc_code,
+            'prerequisite_goal_id': self.prerequisite_goal_id,
+            'prerequisite_goal_code': self.prerequisite_goal.goal_code if self.prerequisite_goal else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }

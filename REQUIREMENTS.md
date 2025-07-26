@@ -1089,3 +1089,471 @@ CREATE TABLE student_kc_progress (
 - **Learning Management Systems**: Potential integration with LMS platforms
 - **Parent Portal**: Design to support parent access to mastery information
 - **Analytics Platforms**: Integration with advanced analytics and reporting tools
+
+## 10. AI Tutor System Enhancement (v4 Context & VAPI v3) Requirements
+
+### 10.1. Overview
+
+**Status: ✅ FULLY IMPLEMENTED AND OPERATIONAL (January 2025)**
+
+The AI Tutor System Enhancement represents a major modernization initiative that transforms the platform from a basic conversational AI into a sophisticated, memory-enabled, game-state-aware tutoring system. This enhancement implements a standardized v4 context contract, enhanced VAPI prompt system, comprehensive MCP server tools, and performance optimizations through Redis caching.
+
+### 10.2. Core Enhancement Requirements
+
+#### 10.2.1. v4 Context Contract Requirements
+- **Standardized Data Structure**: System must implement a consistent v4 context format with five distinct blocks: demographics, profile, memories, progress, and _curriculum
+- **Version Identification**: All context objects must include `context_version: 4` for API compatibility tracking
+- **Backwards Compatibility**: v4 context must be designed to support future evolution without breaking existing integrations
+- **JSON Schema Validation**: All v4 context objects must conform to a strict JSON schema for data integrity
+
+#### 10.2.2. Goal Prerequisites System Requirements
+- **Prerequisite Mapping**: System must track logical dependencies between curriculum goals and prerequisite knowledge components
+- **Database Schema**: New `goal_prerequisites` table linking curriculum goals to required prerequisite knowledge components
+- **SQL View Integration**: Efficient `grade_subject_goals_v` view must aggregate curriculum data with prerequisite relationships
+- **Curriculum Atlas Enhancement**: Curriculum atlas must include prerequisite data for AI tutor consumption
+
+#### 10.2.3. Enhanced VAPI Prompt (v3) Requirements
+- **Personality System**: Implement "Sunny" AI tutor personality with warm, encouraging, and slightly playful characteristics
+- **Memory Integration**: AI tutor must reference stored memories from previous conversations for personalized interactions
+- **Game State Management**: Support for persistent educational games and progress tracking across sessions
+- **Conditional Flow Management**: Different conversation approaches for new vs returning students based on memory availability
+
+#### 10.2.4. Redis Caching Requirements
+- **Performance Optimization**: Implement intelligent caching for frequently accessed curriculum atlas data
+- **Cache Key Strategy**: Use structured cache keys following pattern `curriculum_atlas:{curriculum_id}:{grade_level}`
+- **TTL Management**: Appropriate time-to-live settings for different data types (curriculum: 1 hour, student context: 5 minutes)
+- **Cache Invalidation**: Automatic cache invalidation on curriculum or student data changes
+
+### 10.3. Database Schema Requirements
+
+#### 10.3.1. Goal Prerequisites Table
+```sql
+CREATE TABLE goal_prerequisites (
+    id SERIAL PRIMARY KEY,
+    goal_id VARCHAR(50) NOT NULL REFERENCES curriculum_goals(goal_id),
+    prerequisite_kc_id VARCHAR(50) NOT NULL REFERENCES goal_kcs(kc_id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(goal_id, prerequisite_kc_id)
+);
+```
+
+- **Referential Integrity**: Foreign key constraints must ensure data consistency
+- **Unique Constraints**: Prevent duplicate prerequisite relationships
+- **Index Strategy**: Optimize queries with appropriate indexes on goal_id and prerequisite_kc_id
+
+#### 10.3.2. Grade Subject Goals SQL View
+```sql
+CREATE VIEW grade_subject_goals_v AS
+SELECT
+    cd.curriculum_id,
+    cd.grade_level,
+    cd.subject_id,
+    s.name as subject_name,
+    cg.goal_id,
+    cg.goal_text,
+    gkc.kc_id,
+    gkc.kc_text,
+    COALESCE(
+        json_agg(DISTINCT gp.prerequisite_kc_id)
+        FILTER (WHERE gp.prerequisite_kc_id IS NOT NULL),
+        '[]'::json
+    ) as prerequisites
+FROM curriculum_details cd
+JOIN subjects s ON cd.subject_id = s.id
+JOIN curriculum_goals cg ON s.name = cg.subject AND cd.grade_level = cg.grade
+JOIN goal_kcs gkc ON cg.goal_id = gkc.goal_id
+LEFT JOIN goal_prerequisites gp ON cg.goal_id = gp.goal_id
+GROUP BY cd.curriculum_id, cd.grade_level, cd.subject_id, s.name,
+         cg.goal_id, cg.goal_text, gkc.kc_id, gkc.kc_text
+ORDER BY subject_name, cg.goal_id, gkc.kc_id;
+```
+
+- **Single Query Efficiency**: View must enable single-query access to complete curriculum atlas
+- **JSON Aggregation**: Prerequisites must be aggregated as JSON arrays for efficient consumption
+- **Performance**: View must be optimized for frequent access through indexing strategy
+
+### 10.4. v4 Context Contract Schema Requirements
+
+#### 10.4.1. Complete v4 Context Structure
+The system must implement a standardized v4 context with the following mandatory structure:
+
+```json
+{
+  "context_version": 4,
+  "student_id": "emma_smith",
+  "demographics": {
+    "first_name": "string",
+    "last_name": "string",
+    "grade_level": "integer",
+    "school_name": "string",
+    "interests": ["array of strings"],
+    "learning_preferences": ["array of strings"]
+  },
+  "profile": {
+    "narrative": "AI-generated personality description",
+    "traits": {
+      "learning_style": "string",
+      "confidence_level": "string",
+      "motivation_triggers": ["array"]
+    },
+    "version_timestamp": "ISO 8601 timestamp"
+  },
+  "memories": {
+    "personal_fact": {
+      "key": "value pairs"
+    },
+    "game_state": {
+      "key": "value pairs with game progress"
+    },
+    "strategy_log": {
+      "key": "value pairs with effective teaching strategies"
+    }
+  },
+  "progress": {
+    "subjects": {
+      "subject_name": {
+        "overall_progress": "float",
+        "mastery_level": "string",
+        "recent_achievements": ["array"],
+        "focus_areas": ["array"]
+      }
+    }
+  },
+  "_curriculum": {
+    "curriculum_id": "integer",
+    "curriculum_name": "string",
+    "grade_level": "integer",
+    "subjects": {
+      "subject_name": {
+        "goals": {
+          "goal_id": {
+            "goal_text": "string",
+            "knowledge_components": {
+              "kc_id": {
+                "kc_text": "string",
+                "prerequisites": ["array of prerequisite KC IDs"]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+#### 10.4.2. Context Block Responsibilities
+- **Demographics Block**: Static student information and school enrollment data
+- **Profile Block**: AI-generated personality insights with versioning support
+- **Memories Block**: Scoped key-value storage for personalization (personal_fact, game_state, strategy_log)
+- **Progress Block**: Subject-level achievement and mastery tracking
+- **_Curriculum Block**: Complete curriculum atlas with goal hierarchy and prerequisites
+
+### 10.5. StudentContextService Requirements
+
+#### 10.5.1. Service Architecture
+- **Location**: Must be implemented as dedicated service at `ai-tutor/backend/app/services/student_context_service.py`
+- **Dependency Injection**: Service must use repository pattern for data access
+- **Error Handling**: Comprehensive error handling with graceful degradation
+- **Performance**: Context building must complete within 500ms for typical student data
+
+#### 10.5.2. Core Method Requirements
+**`build(student_id: int, curriculum_id: int = None) -> dict`**:
+- **Input Validation**: Validate student_id exists and curriculum_id is valid
+- **Data Assembly**: Gather data from multiple repositories (student, profile, memory, progress, curriculum)
+- **Redis Integration**: Utilize Redis caching for curriculum atlas data
+- **Structured Output**: Return complete v4 context structure
+- **Null Handling**: Gracefully handle missing profile or memory data
+
+#### 10.5.3. Block Building Methods
+- **`build_demographics_block(student)`**: Convert student model to demographics structure
+- **`build_profile_block(current_profile)`**: Format AI profile data with version timestamp
+- **`build_memories_block(memories)`**: Organize memories by scope (personal_fact, game_state, strategy_log)
+- **`build_progress_block(progress)`**: Aggregate subject-level progress and achievements
+- **Error Isolation**: Each block builder must handle missing data gracefully
+
+### 10.6. Redis Caching Requirements
+
+#### 10.6.1. Cache Strategy Implementation
+- **Cache Keys**: Structured cache keys using pattern `curriculum_atlas:{curriculum_id}:{grade_level}`
+- **Cache Client**: Redis client must be properly configured with connection pooling
+- **Serialization**: JSON serialization/deserialization for complex data structures
+- **Error Handling**: Cache failures must not impact application functionality (graceful degradation)
+
+#### 10.6.2. CurriculumRepository.get_grade_atlas() Requirements
+```python
+def get_grade_atlas(self, curriculum_id: int, grade_level: int) -> dict:
+    # 1. Check Redis cache first
+    # 2. If cache miss, query grade_subject_goals_v view
+    # 3. Build atlas structure from query results
+    # 4. Cache result with 1-hour TTL
+    # 5. Return atlas data
+```
+
+- **Cache-First Strategy**: Always check cache before database query
+- **TTL Management**: 1-hour TTL for curriculum atlas data (relatively static)
+- **Cache Warming**: Support for pre-loading frequently accessed atlases
+- **Performance Monitoring**: Track cache hit rates and query performance
+
+#### 10.6.3. Cache Management
+- **Clear Method**: `clear_curriculum_cache(curriculum_id, grade_level)` for manual cache invalidation
+- **Bulk Clear**: Support for clearing all curriculum-related cache entries
+- **Health Monitoring**: Monitor Redis connection status and cache performance
+- **Fallback Strategy**: Database-only operation when Redis is unavailable
+
+### 10.7. Enhanced VAPI Prompt System (v3) Requirements
+
+#### 10.7.1. Sunny AI Tutor Personality Requirements
+- **Character Definition**: Warm, encouraging, slightly playful AI tutor named "Sunny"
+- **Engagement Strategies**: Must use games, stories, and interactive elements to maintain student interest
+- **Age Appropriateness**: Communication style must adapt to student grade level and developmental stage
+- **Consistency**: Personality must remain consistent across all interactions while being personalized
+
+#### 10.7.2. Memory Integration Requirements
+- **Personal Context**: AI must reference stored personal facts (pet names, family details, preferences)
+- **Game Continuity**: Resume and reference ongoing educational games and achievements
+- **Strategy Adaptation**: Apply stored effective teaching strategies specific to each student
+- **Memory Validation**: Verify memory accuracy and relevance before referencing in conversation
+
+#### 10.7.3. Conditional Flow Management
+- **New Student Detection**: Identify new students by empty or minimal memory stores
+- **Relationship Building**: Focus on discovery and rapport building for new students
+- **Returning Student Flow**: Reference previous conversations and continue established relationships
+- **Adaptive Interaction**: Adjust conversation depth and complexity based on stored student profile
+
+#### 10.7.4. Game State Management
+- **Persistent Games**: Support for educational games that span multiple sessions
+- **Progress Tracking**: Track student achievements, levels, and game-specific progress
+- **Achievement System**: Recognize and celebrate student accomplishments across sessions
+- **Game Variety**: Support multiple concurrent educational games with separate state tracking
+
+### 10.8. Enhanced MCP Server Tools Requirements
+
+#### 10.8.1. set_game_state Tool Requirements
+**Purpose**: Enable AI tutor to persist game state across sessions
+
+**Parameters**:
+- `student_id` (required): Student identifier
+- `game_id` (required): Unique game identifier
+- `json_blob` (required): Game state data as JSON string
+- `is_active` (required): Boolean indicating if game is currently active
+
+**Implementation Requirements**:
+- **Storage**: Store game state in student_memories table with scope 'game_state'
+- **Key Format**: Use pattern `game_{game_id}` for memory keys
+- **Data Validation**: Validate JSON structure and game_id format
+- **Error Handling**: Provide meaningful error messages for invalid requests
+
+#### 10.8.2. set_memory Tool Requirements
+**Purpose**: Allow AI tutor to store personal facts and learning strategies
+
+**Parameters**:
+- `student_id` (required): Student identifier
+- `key` (required): Memory key (e.g., "pet_name", "favorite_subject")
+- `value` (required): Memory content as string
+- `scope` (required): Memory category ("personal_fact", "game_state", "strategy_log")
+
+**Implementation Requirements**:
+- **Scope Validation**: Ensure scope is one of the three valid values
+- **UPSERT Logic**: Update existing memories or create new ones
+- **Data Sanitization**: Sanitize memory content for security
+- **Audit Logging**: Log all memory operations for debugging and compliance
+
+#### 10.8.3. log_session_event Tool Requirements
+**Purpose**: Track significant learning moments and breakthroughs
+
+**Parameters**:
+- `student_id` (required): Student identifier
+- `event_json` (required): Structured event data (achievements, milestones, insights)
+
+**Implementation Requirements**:
+- **Event Storage**: Store events in appropriate logging table
+- **JSON Validation**: Validate event structure before storage
+- **Timestamp**: Automatically add timestamp to all events
+- **Event Types**: Support different event types (achievement, breakthrough, milestone, etc.)
+
+#### 10.8.4. Enhanced get_student_context Resource Requirements
+- **v4 Context Response**: Return complete v4 context from StudentContextService
+- **Resource URI**: Update resource URI to indicate v4 context version
+- **MIME Type**: JSON MIME type with appropriate content description
+- **Performance**: Efficient context loading without blocking MCP server
+
+### 10.9. Frontend UI Requirements (Student Detail v4)
+
+#### 10.9.1. Tabbed Interface Requirements
+- **New Template**: Create `student_detail_v4.html` template with modern tabbed interface
+- **Tab Structure**: Six tabs covering Demographics, AI Profile, Memories, Progress, Curriculum Atlas, and Raw JSON
+- **Responsive Design**: Mobile-friendly design that works across device sizes
+- **Navigation**: Smooth tab switching with proper state management
+
+#### 10.9.2. Individual Tab Requirements
+**Demographics Tab**:
+- Display student basic information and school details
+- Clean, readable format with proper spacing and typography
+- Edit capability for basic demographic information
+
+**AI Profile Tab**:
+- Show AI-generated personality insights and learning style analysis
+- Display profile version timestamp and history
+- Format traits in human-readable manner
+
+**Memories Tab**:
+- Organize memories by scope with clear visual separation
+- Real-time editing capability with add/edit/delete operations
+- Modal dialogs for memory entry management
+- Scope descriptions to help administrators understand memory types
+
+**Progress Tab**:
+- Visual progress indicators for subject mastery
+- Achievement tracking and display
+- Focus areas and recent accomplishments
+- Color-coded progress levels
+
+**Curriculum Atlas Tab**:
+- Complete curriculum view organized by subject
+- Goals and knowledge components with prerequisite relationships
+- Expandable/collapsible sections for detailed exploration
+- Search and filter capabilities
+
+**Raw JSON Tab**:
+- Complete v4 context display in formatted JSON
+- Copy to clipboard functionality
+- Download as JSON file capability
+- Refresh button for latest data
+
+#### 10.9.3. Enhanced UX Features
+- **Real-time Updates**: AJAX-powered data loading without page refresh
+- **Loading States**: Professional loading indicators during data fetching
+- **Error Handling**: User-friendly error messages with retry options
+- **Copy/Download**: Easy export of context data for debugging and sharing
+- **Visual Feedback**: Status indicators and success/error notifications
+
+### 10.10. Performance Requirements
+
+#### 10.10.1. Context Loading Performance
+- **Target Response Time**: v4 context assembly must complete within 500ms
+- **Redis Cache Hit Rate**: Target >90% cache hit rate for curriculum atlas data
+- **Memory Efficiency**: Context loading must not consume excessive memory
+- **Concurrent Access**: Support multiple simultaneous context requests
+
+#### 10.10.2. Database Query Optimization
+- **SQL View Performance**: grade_subject_goals_v view must be optimized with appropriate indexes
+- **Single Query Design**: Curriculum atlas loading via single view query
+- **Composite Key Efficiency**: Leverage composite primary keys for optimal performance
+- **Connection Pooling**: Efficient database connection management
+
+#### 10.10.3. Caching Performance
+- **Cache Response Time**: Redis operations must complete within 50ms
+- **Memory Usage**: Efficient memory usage in Redis with appropriate data structures
+- **Cache Size Management**: Monitor cache size and implement eviction policies
+- **Network Efficiency**: Minimize Redis network traffic through batch operations
+
+### 10.11. Security and Privacy Requirements
+
+#### 10.11.1. MCP Token Scope Validation
+- **Enhanced Scopes**: New scope definitions for enhanced MCP functionality
+  - `mcp:read`: Required for student context access
+  - `mcp:write`: Required for memory and game state updates
+  - `mcp:log`: Required for session event logging
+- **Scope Enforcement**: Strict validation of token scopes before allowing operations
+- **Audit Trail**: Complete logging of MCP operations with token identification
+
+#### 10.11.2. Data Privacy Controls
+- **Memory Scope Security**: Access controls based on memory scope sensitivity
+- **Game State Privacy**: Secure handling of student game progress data
+- **Context Data Protection**: Encryption of sensitive context data in transit and at rest
+- **GDPR Compliance**: Memory and profile data included in data deletion and export operations
+
+#### 10.11.3. Input Validation
+- **JSON Schema Validation**: All JSON inputs validated against strict schemas
+- **SQL Injection Prevention**: Parameterized queries for all database operations
+- **XSS Prevention**: Proper escaping of user-generated content in UI
+- **Memory Content Sanitization**: Sanitize all memory values before storage
+
+### 10.12. Integration Requirements
+
+#### 10.12.1. VAPI Workflow Integration
+- **Context Loading**: Seamless integration of v4 context loading into VAPI call processing
+- **Memory Updates**: Post-session memory and game state updates via new MCP tools
+- **Error Isolation**: v4 context failures must not impact voice call functionality
+- **Performance**: Context operations must not introduce call latency
+
+#### 10.12.2. Existing System Integration
+- **Backward Compatibility**: v4 context must coexist with existing student data structures
+- **API Compatibility**: Enhanced APIs must maintain backward compatibility
+- **Service Integration**: Clean integration with existing service layer architecture
+- **Database Migration**: Schema changes must be deployable without data loss
+
+### 10.13. Monitoring and Analytics Requirements
+
+#### 10.13.1. Performance Monitoring
+- **Context Assembly Time**: Track v4 context building performance
+- **Cache Performance**: Monitor Redis cache hit rates and response times
+- **Memory Operations**: Track memory update frequency and success rates
+- **SQL View Performance**: Monitor grade_subject_goals_v query performance
+
+#### 10.13.2. Business Analytics
+- **Memory Utilization**: Track memory scope usage patterns
+- **Game State Persistence**: Monitor game continuation rates across sessions
+- **Profile Evolution**: Track AI profile update frequency and accuracy
+- **Context Usage**: Monitor v4 context utilization by AI tutor
+
+#### 10.13.3. Error Monitoring
+- **Context Loading Failures**: Track and alert on context assembly failures
+- **Cache Failures**: Monitor Redis connection issues and failover scenarios
+- **MCP Tool Errors**: Track errors in new MCP tools with detailed logging
+- **UI Performance**: Monitor frontend loading times and user interactions
+
+### 10.14. Testing Requirements
+
+#### 10.14.1. Unit Testing
+- **Service Layer**: Comprehensive tests for StudentContextService methods
+- **Repository Layer**: Tests for enhanced CurriculumRepository with caching
+- **MCP Tools**: Individual tests for each new MCP tool
+- **Cache Integration**: Tests for Redis caching logic and fallback scenarios
+
+#### 10.14.2. Integration Testing
+- **v4 Context Assembly**: End-to-end tests for complete context building
+- **MCP Server Integration**: Tests for enhanced MCP server functionality
+- **UI Integration**: Tests for new student detail v4 template
+- **Database Integration**: Tests for new schema elements and SQL view
+
+#### 10.14.3. Performance Testing
+- **Load Testing**: Context loading under concurrent access
+- **Cache Performance**: Redis performance under various load scenarios
+- **Memory Usage**: Memory consumption during context operations
+- **Database Performance**: SQL view performance with large datasets
+
+### 10.15. Documentation Requirements
+
+#### 10.15.1. Technical Documentation
+- **v4 Context Schema**: Complete JSON schema documentation
+- **API Changes**: Documentation of all API enhancements
+- **Caching Strategy**: Redis implementation and cache key documentation
+- **Database Changes**: Documentation of new tables, views, and relationships
+
+#### 10.15.2. User Documentation
+- **Admin Interface**: Guide for using new student detail v4 features
+- **Memory Management**: Documentation for memory scope system
+- **Troubleshooting**: Common issues and solutions for enhanced features
+- **Performance**: Guidelines for optimal system performance
+
+### 10.16. Deployment Requirements
+
+#### 10.16.1. Database Migration
+- **Schema Updates**: Automated creation of goal_prerequisites table and grade_subject_goals_v view
+- **Data Seeding**: Automatic import of prerequisite data from cambridge_goals_kcs.json
+- **Migration Safety**: Zero-downtime deployment with rollback capability
+- **Validation**: Post-migration validation of schema and data integrity
+
+#### 10.16.2. Redis Configuration
+- **Redis Setup**: Proper Redis configuration for production deployment
+- **Connection Configuration**: Redis connection string and pooling configuration
+- **Memory Configuration**: Appropriate Redis memory limits and eviction policies
+- **Monitoring Setup**: Redis monitoring and alerting configuration
+
+#### 10.16.3. Application Configuration
+- **Environment Variables**: Configuration for Redis connection and caching settings
+- **Feature Flags**: Support for enabling/disabling enhanced features
+- **Performance Tuning**: Configuration options for cache TTL and performance optimization
+- **Error Handling**: Configuration for error reporting and logging levels

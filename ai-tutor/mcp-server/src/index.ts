@@ -402,60 +402,100 @@ app.post('/mcp/get-recent-sessions', async (req, res) => {
   }
 });
 
-// MCP Tool: Get comprehensive student data
-app.post('/mcp/get-student-context', async (req, res) => {
+// MCP Tool: Get comprehensive student data (v4 context)
+app.post('/mcp/get-student-context', createLoggedEndpoint('/mcp/get-student-context', async (req, res) => {
+  const { student_id } = req.body;
+  
+  if (!student_id) {
+    return res.status(400).json({ error: 'student_id is required' });
+  }
+
   try {
-    const { student_id } = req.body;
-    
-    if (!student_id) {
-      return res.status(400).json({ error: 'student_id is required' });
+    // Call the Flask API to get the v4 context from StudentContextService
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(`${FLASK_API_URL}/api/v1/student-context/${student_id}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    } as any);
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return res.status(404).json({
+          success: false,
+          error: `Student not found: ${student_id}`
+        });
+      }
+      
+      const errorText = await response.text();
+      throw new Error(`Flask API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
-    // Get all the student data in one call
-    const profile = await readJsonFile(`students/${student_id}/profile.json`);
-    const progress = await readJsonFile(`students/${student_id}/progress.json`);
+    const apiResponse: any = await response.json();
     
-    // Get recent sessions
-    const sessionFiles = await listFiles(`students/${student_id}/sessions`);
-    const recentSummaryFiles = sessionFiles
-      .filter(file => file.endsWith('_summary.json'))
-      .sort((a, b) => b.localeCompare(a))
-      .slice(0, 3);
-
-    const recentSessions = [];
-    for (const file of recentSummaryFiles) {
-      const sessionDate = file.replace('_summary.json', '');
-      const summary = await readJsonFile(`students/${student_id}/sessions/${file}`);
-      recentSessions.push({
-        date: sessionDate,
-        summary: summary
-      });
+    if (!apiResponse.success) {
+      throw new Error(apiResponse.error || 'Flask API returned unsuccessful response');
     }
 
-    // Get curriculum data based on student's grade
-    const curriculum = await readJsonFile('curriculum/international_school_greece.json');
-    const gradeData = curriculum.grades?.[profile.grade];
-    
+    // Return the v4 context directly from the Flask API
     res.json({
       success: true,
-      data: {
-        profile,
-        progress,
-        recent_sessions: recentSessions,
-        curriculum_context: {
-          grade_subjects: gradeData,
-          school_type: curriculum.school_type,
-          curriculum_system: curriculum.curriculum_system
-        }
-      }
+      data: apiResponse.data
     });
+
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    console.error(`Error fetching v4 context for student ${student_id}:`, error);
+    
+    // Fallback to legacy behavior if Flask API is unavailable
+    try {
+      const profile = await readJsonFile(`students/${student_id}/profile.json`);
+      const progress = await readJsonFile(`students/${student_id}/progress.json`);
+      
+      // Get recent sessions
+      const sessionFiles = await listFiles(`students/${student_id}/sessions`);
+      const recentSummaryFiles = sessionFiles
+        .filter(file => file.endsWith('_summary.json'))
+        .sort((a, b) => b.localeCompare(a))
+        .slice(0, 3);
+
+      const recentSessions = [];
+      for (const file of recentSummaryFiles) {
+        const sessionDate = file.replace('_summary.json', '');
+        const summary = await readJsonFile(`students/${student_id}/sessions/${file}`);
+        recentSessions.push({
+          date: sessionDate,
+          summary: summary
+        });
+      }
+
+      // Get curriculum data based on student's grade
+      const curriculum = await readJsonFile('curriculum/international_school_greece.json');
+      const gradeData = curriculum.grades?.[profile.grade];
+      
+      res.json({
+        success: true,
+        data: {
+          context_version: 3, // Legacy version
+          profile,
+          progress,
+          recent_sessions: recentSessions,
+          curriculum_context: {
+            grade_subjects: gradeData,
+            school_type: curriculum.school_type,
+            curriculum_system: curriculum.curriculum_system
+          },
+          _fallback_note: 'Using legacy context due to Flask API unavailability'
+        }
+      });
+    } catch (fallbackError) {
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   }
-});
+}));
 
 // MCP Tool: Get comprehensive VAPI context by phone number
 app.post('/mcp/get-vapi-context', async (req, res) => {
@@ -648,6 +688,152 @@ app.post('/mcp/get-school-info', async (req, res) => {
     });
   }
 });
+
+// MCP Tool: Set game state
+app.post('/mcp/set-game-state', createLoggedEndpoint('/mcp/set-game-state', async (req, res) => {
+  const { student_id, game_id, json_blob, is_active } = req.body;
+  
+  if (!student_id || !game_id || json_blob === undefined) {
+    return res.status(400).json({
+      success: false,
+      error: 'student_id, game_id, and json_blob are required'
+    });
+  }
+
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(`${FLASK_API_URL}/api/v1/students/${student_id}/game-state`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        game_id,
+        json_blob,
+        is_active: is_active !== undefined ? is_active : true
+      })
+    } as any);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Flask API error: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const apiResponse: any = await response.json();
+    
+    res.json({
+      success: true,
+      data: apiResponse.data || { message: 'Game state updated successfully' }
+    });
+
+  } catch (error) {
+    console.error(`Error setting game state for student ${student_id}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}));
+
+// MCP Tool: Set memory
+app.post('/mcp/set-memory', createLoggedEndpoint('/mcp/set-memory', async (req, res) => {
+  const { student_id, key, value, scope } = req.body;
+  
+  if (!student_id || !key || value === undefined) {
+    return res.status(400).json({
+      success: false,
+      error: 'student_id, key, and value are required'
+    });
+  }
+
+  // Validate scope if provided
+  const validScopes = ['personal_fact', 'game_state', 'strategy_log'];
+  if (scope && !validScopes.includes(scope)) {
+    return res.status(400).json({
+      success: false,
+      error: `Invalid scope. Must be one of: ${validScopes.join(', ')}`
+    });
+  }
+
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(`${FLASK_API_URL}/api/v1/students/${student_id}/memory`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        key,
+        value,
+        scope: scope || 'personal_fact' // Default scope
+      })
+    } as any);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Flask API error: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const apiResponse: any = await response.json();
+    
+    res.json({
+      success: true,
+      data: apiResponse.data || { message: 'Memory updated successfully' }
+    });
+
+  } catch (error) {
+    console.error(`Error setting memory for student ${student_id}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}));
+
+// MCP Tool: Log session event
+app.post('/mcp/log-session-event', createLoggedEndpoint('/mcp/log-session-event', async (req, res) => {
+  const { student_id, event_json } = req.body;
+  
+  if (!student_id || !event_json) {
+    return res.status(400).json({
+      success: false,
+      error: 'student_id and event_json are required'
+    });
+  }
+
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(`${FLASK_API_URL}/api/v1/students/${student_id}/session-events`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        event_data: event_json,
+        timestamp: new Date().toISOString()
+      })
+    } as any);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Flask API error: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const apiResponse: any = await response.json();
+    
+    res.json({
+      success: true,
+      data: apiResponse.data || { message: 'Session event logged successfully' }
+    });
+
+  } catch (error) {
+    console.error(`Error logging session event for student ${student_id}:`, error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -894,6 +1080,77 @@ app.get('/mcp/tools', (req, res) => {
               description: 'Maximum number of log entries to retrieve (default: 100)'
             }
           }
+        }
+      },
+      {
+        name: 'set-game-state',
+        description: 'Set or update game state data for a student. Used by VAPI to persist game progress and state.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            student_id: {
+              type: 'string',
+              description: 'The unique identifier for the student'
+            },
+            game_id: {
+              type: 'string',
+              description: 'Identifier for the specific game or activity'
+            },
+            json_blob: {
+              type: 'object',
+              description: 'JSON object containing the game state data'
+            },
+            is_active: {
+              type: 'boolean',
+              description: 'Whether this game state is currently active (default: true)'
+            }
+          },
+          required: ['student_id', 'game_id', 'json_blob']
+        }
+      },
+      {
+        name: 'set-memory',
+        description: 'Set or update a memory item for a student with scoped storage. Used by VAPI to remember facts, strategies, and game state.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            student_id: {
+              type: 'string',
+              description: 'The unique identifier for the student'
+            },
+            key: {
+              type: 'string',
+              description: 'The memory key/identifier'
+            },
+            value: {
+              type: 'string',
+              description: 'The memory value to store'
+            },
+            scope: {
+              type: 'string',
+              description: 'Memory scope: "personal_fact", "game_state", or "strategy_log" (default: "personal_fact")',
+              enum: ['personal_fact', 'game_state', 'strategy_log']
+            }
+          },
+          required: ['student_id', 'key', 'value']
+        }
+      },
+      {
+        name: 'log-session-event',
+        description: 'Log a session event for tracking and analysis. Used by VAPI to record important session moments.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            student_id: {
+              type: 'string',
+              description: 'The unique identifier for the student'
+            },
+            event_json: {
+              type: 'object',
+              description: 'JSON object containing the event data to log'
+            }
+          },
+          required: ['student_id', 'event_json']
         }
       }
     ]

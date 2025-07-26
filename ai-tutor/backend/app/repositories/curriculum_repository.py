@@ -3,11 +3,22 @@ Curriculum repository for database operations
 """
 
 from typing import Dict, List, Optional, Any
-from sqlalchemy import and_
+from sqlalchemy import and_, text
+import json
+import redis
 
 from app import db
 from app.models.curriculum import Curriculum, Subject, CurriculumDetail
 # Note: SchoolDefaultSubject removed - was documented but never implemented
+
+# Redis client for caching (initialize if available)
+try:
+    redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+    redis_client.ping()  # Test connection
+    REDIS_AVAILABLE = True
+except:
+    redis_client = None
+    REDIS_AVAILABLE = False
 
 def get_all() -> List[Dict[str, Any]]:
     """
@@ -484,3 +495,148 @@ def create_subject(subject_data: Dict[str, Any]) -> Dict[str, Any]:
         db.session.rollback()
         print(f"Error creating subject: {e}")
         raise e
+
+
+def get_grade_atlas(curriculum_id: int, grade_level: int) -> Dict[str, Any]:
+    """
+    Get comprehensive curriculum atlas for a specific grade level using the grade_subject_goals_v view.
+    This method provides caching for performance optimization.
+    
+    Args:
+        curriculum_id: The curriculum ID
+        grade_level: The grade level
+        
+    Returns:
+        Dictionary containing the curriculum atlas with subjects, goals, knowledge components, and prerequisites
+    """
+    # Create cache key
+    cache_key = f"curriculum_atlas:{curriculum_id}:{grade_level}"
+    
+    # Try to get from cache first
+    if REDIS_AVAILABLE and redis_client:
+        try:
+            cached_data = redis_client.get(cache_key)
+            if cached_data:
+                return json.loads(cached_data)
+        except Exception as e:
+            print(f"Redis cache read error: {e}")
+    
+    try:
+        # Query the grade_subject_goals_v view
+        query = text("""
+            SELECT
+                curriculum_id,
+                subject_id,
+                subject_name,
+                subject_category,
+                grade_level,
+                goal_id,
+                goal_code,
+                goal_title,
+                goal_description,
+                kc_code,
+                kc_name,
+                kc_description,
+                prerequisite_kcs
+            FROM grade_subject_goals_v
+            WHERE curriculum_id = :curriculum_id AND grade_level = :grade_level
+            ORDER BY subject_name, goal_code, kc_code
+        """)
+        
+        result = db.session.execute(query, {
+            'curriculum_id': curriculum_id,
+            'grade_level': grade_level
+        })
+        
+        # Process results into structured atlas
+        atlas = {
+            'curriculum_id': curriculum_id,
+            'grade_level': grade_level,
+            'subjects': {}
+        }
+        
+        for row in result:
+            subject_name = row.subject_name
+            subject_id = row.subject_id
+            subject_category = row.subject_category
+            goal_code = row.goal_code
+            goal_id = row.goal_id
+            goal_title = row.goal_title
+            goal_description = row.goal_description
+            kc_code = row.kc_code
+            kc_name = row.kc_name
+            kc_description = row.kc_description
+            prerequisite_kcs = row.prerequisite_kcs if row.prerequisite_kcs else []
+            
+            # Initialize subject if not exists
+            if subject_name not in atlas['subjects']:
+                atlas['subjects'][subject_name] = {
+                    'subject_id': subject_id,
+                    'subject_name': subject_name,
+                    'subject_category': subject_category,
+                    'goals': {}
+                }
+            
+            # Initialize goal if not exists
+            if goal_code not in atlas['subjects'][subject_name]['goals']:
+                atlas['subjects'][subject_name]['goals'][goal_code] = {
+                    'goal_id': goal_id,
+                    'goal_code': goal_code,
+                    'goal_title': goal_title,
+                    'goal_description': goal_description,
+                    'knowledge_components': {},
+                    'prerequisites': prerequisite_kcs
+                }
+            
+            # Add knowledge component
+            atlas['subjects'][subject_name]['goals'][goal_code]['knowledge_components'][kc_code] = {
+                'kc_code': kc_code,
+                'kc_name': kc_name,
+                'kc_description': kc_description
+            }
+        
+        # Cache the result if Redis is available
+        if REDIS_AVAILABLE and redis_client:
+            try:
+                # Cache for 1 hour (3600 seconds)
+                redis_client.setex(cache_key, 3600, json.dumps(atlas))
+            except Exception as e:
+                print(f"Redis cache write error: {e}")
+        
+        return atlas
+        
+    except Exception as e:
+        print(f"Error getting grade atlas: {e}")
+        # Return empty atlas structure on error
+        return {
+            'curriculum_id': curriculum_id,
+            'grade_level': grade_level,
+            'subjects': {},
+            'error': str(e)
+        }
+
+
+def clear_curriculum_cache(curriculum_id: int, grade_level: int = None):
+    """
+    Clear curriculum atlas cache for specific curriculum and grade level.
+    
+    Args:
+        curriculum_id: The curriculum ID
+        grade_level: Optional specific grade level to clear (if None, clears all grades for curriculum)
+    """
+    if not REDIS_AVAILABLE or not redis_client:
+        return
+    
+    try:
+        if grade_level is not None:
+            # Clear specific grade level
+            cache_key = f"curriculum_atlas:{curriculum_id}:{grade_level}"
+            redis_client.delete(cache_key)
+        else:
+            # Clear all grade levels for this curriculum
+            pattern = f"curriculum_atlas:{curriculum_id}:*"
+            keys = redis_client.keys(pattern)
+            if keys:
+                redis_client.delete(*keys)
+    except Exception as e:
+        print(f"Error clearing curriculum cache: {e}")

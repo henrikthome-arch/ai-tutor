@@ -1416,7 +1416,7 @@ def reset_database():
         from app.models.school import School
         from app.models.system_log import SystemLog
         from app.models.token import Token
-        from app.models.mastery_tracking import CurriculumGoal, GoalKC, StudentGoalProgress, StudentKCProgress
+        from app.models.mastery_tracking import CurriculumGoal, GoalKC, StudentGoalProgress, StudentKCProgress, GoalPrerequisite
         
         # Import requests for GitHub data fetching
         import requests
@@ -1487,6 +1487,48 @@ def reset_database():
             print("✅ student_profiles_current view created successfully")
         except Exception as view_error:
             print(f"⚠️ Error creating student_profiles_current view: {view_error}")
+            db.session.rollback()
+        
+        # Create the grade_subject_goals_v view for curriculum atlas
+        print("🔧 Creating grade_subject_goals_v view...")
+        try:
+            db.session.execute(text("""
+                CREATE VIEW grade_subject_goals_v AS
+                SELECT
+                    cd.curriculum_id,
+                    cd.subject_id,
+                    s.name as subject_name,
+                    s.category as subject_category,
+                    cd.grade_level,
+                    cg.id as goal_id,
+                    cg.goal_code,
+                    cg.title as goal_title,
+                    cg.description as goal_description,
+                    gkc.kc_code,
+                    gkc.kc_name,
+                    gkc.description as kc_description,
+                    COALESCE(
+                        ARRAY_AGG(
+                            DISTINCT gp.prerequisite_kc_code
+                            ORDER BY gp.prerequisite_kc_code
+                        ) FILTER (WHERE gp.prerequisite_kc_code IS NOT NULL),
+                        ARRAY[]::text[]
+                    ) as prerequisite_kcs
+                FROM curriculum_details cd
+                JOIN subjects s ON cd.subject_id = s.id
+                JOIN curriculum_goals cg ON cg.subject = s.name AND cg.grade_level = cd.grade_level
+                JOIN goal_kcs gkc ON gkc.goal_id = cg.id
+                LEFT JOIN goal_prerequisites gp ON gp.goal_id = cg.id
+                GROUP BY
+                    cd.curriculum_id, cd.subject_id, s.name, s.category, cd.grade_level,
+                    cg.id, cg.goal_code, cg.title, cg.description,
+                    gkc.kc_code, gkc.kc_name, gkc.description
+                ORDER BY cd.grade_level, s.name, cg.goal_code, gkc.kc_code;
+            """))
+            db.session.commit()
+            print("✅ grade_subject_goals_v view created successfully")
+        except Exception as view_error:
+            print(f"⚠️ Error creating grade_subject_goals_v view: {view_error}")
             db.session.rollback()
         
         # Load Cambridge Primary 2025 curriculum data
@@ -1654,6 +1696,7 @@ def reset_database():
         # Process goals data if available
         goals_count = 0
         kcs_count = 0
+        prerequisites_count = 0
         
         if goals_data and 'goals' in goals_data:
             print(f"📖 Processing {len(goals_data['goals'])} curriculum goals...")
@@ -1694,9 +1737,49 @@ def reset_database():
                     print(f"⚠️ Error creating goal {goal_data.get('goal_code', 'unknown')}: {goal_error}")
                     continue
             
-            # Commit goals and KCs
+            # Commit goals and KCs first
             db.session.commit()
             print(f"✅ Successfully created {goals_count} goals and {kcs_count} knowledge components")
+            
+            # Process prerequisites after all goals and KCs are created
+            print("📚 Processing goal prerequisites...")
+            
+            for goal_data in goals_data['goals']:
+                try:
+                    if 'prerequisites' in goal_data and goal_data['prerequisites']:
+                        # Find the goal in the database
+                        goal = db.session.query(CurriculumGoal).filter_by(goal_code=goal_data['goal_code']).first()
+                        if not goal:
+                            print(f"⚠️ Goal {goal_data['goal_code']} not found for prerequisites")
+                            continue
+                        
+                        # Create prerequisite records for each prerequisite KC
+                        for prerequisite_kc_code in goal_data['prerequisites']:
+                            # Find the goal that contains this prerequisite KC
+                            prerequisite_goal = db.session.query(CurriculumGoal)\
+                                .join(GoalKC, CurriculumGoal.id == GoalKC.goal_id)\
+                                .filter(GoalKC.kc_code == prerequisite_kc_code)\
+                                .first()
+                            
+                            # Create the prerequisite record
+                            prerequisite = GoalPrerequisite(
+                                goal_id=goal.id,
+                                prerequisite_kc_code=prerequisite_kc_code,
+                                prerequisite_goal_id=prerequisite_goal.id if prerequisite_goal else None
+                            )
+                            
+                            db.session.add(prerequisite)
+                            prerequisites_count += 1
+                            
+                            print(f"  ➕ Added prerequisite: {goal.goal_code} requires {prerequisite_kc_code}")
+                
+                except Exception as prereq_error:
+                    print(f"⚠️ Error creating prerequisites for goal {goal_data.get('goal_code', 'unknown')}: {prereq_error}")
+                    continue
+            
+            # Commit prerequisites
+            db.session.commit()
+            print(f"✅ Successfully created {prerequisites_count} goal prerequisites")
         else:
             print("ℹ️ No goals data found or loaded, skipping goals seeding")
         
@@ -1704,25 +1787,29 @@ def reset_database():
                         curriculum_count=len(curriculum_details),
                         subjects_count=len(subjects_dict),
                         goals_count=goals_count,
-                        kcs_count=kcs_count)
+                        kcs_count=kcs_count,
+                        prerequisites_count=prerequisites_count)
         
         return jsonify({
             'success': True,
-            'message': f'Database reset successfully. Created {len(subjects_dict)} subjects, {len(curriculum_details)} curriculum entries, {goals_count} goals, and {kcs_count} knowledge components.',
+            'message': f'Database reset successfully. Created {len(subjects_dict)} subjects, {len(curriculum_details)} curriculum entries, {goals_count} goals, {kcs_count} knowledge components, and {prerequisites_count} prerequisites.',
             'curriculum_id': cambridge_curriculum.id,
             'subjects_count': len(subjects_dict),
             'curriculum_details_count': len(curriculum_details),
             'goals_count': goals_count,
             'kcs_count': kcs_count,
+            'prerequisites_count': prerequisites_count,
             'results': {
                 'tables_dropped': True,
                 'tables_created': True,
                 'curriculum_loaded': True,
                 'goals_loaded': goals_count > 0,
+                'prerequisites_loaded': prerequisites_count > 0,
                 'curriculum_details': len(curriculum_details),
                 'total_subjects': len(subjects_dict),
                 'total_goals': goals_count,
-                'total_knowledge_components': kcs_count
+                'total_knowledge_components': kcs_count,
+                'total_prerequisites': prerequisites_count
             }
         })
         
